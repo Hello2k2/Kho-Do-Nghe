@@ -230,7 +230,7 @@ Add-MiniBtn "WINPE CUU HO" "Yellow" 270 540 {
 
 # [A] ACTIVE WINDOWS
 Add-MiniBtn "ACTIVE WIN" "Magenta" 395 540 {
-    $Form.WindowState = "Minimized"; irm https://massgrave.dev/get | iex; $Form.WindowState = "Normal"
+    $Form.WindowState = "Minimized"; irm https://get.activated.win | iex; $Form.WindowState = "Normal"
 }
 
 $Form.ShowDialog() | Out-Null
