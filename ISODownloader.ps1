@@ -1,8 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# --- DANH SÁCH LINK TẢI (Sắp xếp thứ tự) ---
-# Sử dụng [ordered] để giữ đúng thứ tự hiển thị trong Menu
+# --- DANH SÁCH ISO ---
 $IsoList = [ordered]@{
     "1. Windows 11 24H2 (Moi nhat - Goc MS)"          = "https://archive.org/download/WIN11_24H2/Win11_24H2_EnglishInternational_x64.iso"
     "2. Windows 11 23H2 (On dinh - Goc MS)"           = "https://archive.org/download/win11-23h2-english-international-x-64v-2_202406/Win11_23H2_EnglishInternational_x64v2.iso"
@@ -19,7 +18,7 @@ $IsoList = [ordered]@{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "KHO ISO WINDOWS GOC - PHAT TAN PC"
+$Form.Text = "ISO DOWNLOADER - PHAT TAN PC"
 $Form.Size = New-Object System.Drawing.Size(650, 400)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -27,15 +26,13 @@ $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-# Header
 $Lbl = New-Object System.Windows.Forms.Label
-$Lbl.Text = "CHON PHIEN BAN WINDOWS CAN TAI (LINK GOC):"
+$Lbl.Text = "CHON PHIEN BAN WINDOWS / OFFICE CAN TAI:"
 $Lbl.AutoSize = $true; $Lbl.Location = New-Object System.Drawing.Point(20, 20)
 $Lbl.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
 $Lbl.ForeColor = "Cyan"
 $Form.Controls.Add($Lbl)
 
-# ComboBox
 $Combo = New-Object System.Windows.Forms.ComboBox
 $Combo.Location = New-Object System.Drawing.Point(20, 60); $Combo.Size = New-Object System.Drawing.Size(590, 35)
 $Combo.Font = New-Object System.Drawing.Font("Segoe UI", 11)
@@ -44,18 +41,15 @@ foreach ($Key in $IsoList.Keys) { $Combo.Items.Add($Key) }
 $Combo.SelectedIndex = 0
 $Form.Controls.Add($Combo)
 
-# Progress Bar
 $Bar = New-Object System.Windows.Forms.ProgressBar
 $Bar.Location = New-Object System.Drawing.Point(20, 180); $Bar.Size = New-Object System.Drawing.Size(590, 30)
 $Form.Controls.Add($Bar)
 
-# Status Label
 $Status = New-Object System.Windows.Forms.Label
-$Status.Text = "Server Archive.org: San sang tai toc do cao."
+$Status.Text = "Trang thai: San sang."
 $Status.AutoSize = $true; $Status.Location = New-Object System.Drawing.Point(20, 150); $Status.Font = "Segoe UI, 10"; $Status.ForeColor = "Yellow"
 $Form.Controls.Add($Status)
 
-# Nút Tải
 $Btn = New-Object System.Windows.Forms.Button
 $Btn.Text = "BAT DAU TAI (DIRECT LINK)"
 $Btn.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -66,9 +60,8 @@ $Btn.Add_Click({
     $SelectedName = $Combo.SelectedItem
     $Url = $IsoList[$SelectedName]
 
-    if ($Url -eq "") { [System.Windows.Forms.MessageBox]::Show("Vui long chon phien ban khac!", "Luu y"); return }
+    if ($Url -eq "" -or $Url -eq $null) { [System.Windows.Forms.MessageBox]::Show("Vui long chon muc khac!", "Luu y"); return }
     
-    # Tự động đặt tên file chuẩn dựa trên lựa chọn
     $DefaultName = "Windows.iso"
     if ($SelectedName -match "Win 11") { $DefaultName = "Windows11_Original.iso" }
     elseif ($SelectedName -match "Win 10") { $DefaultName = "Windows10_Original.iso" }
@@ -76,7 +69,6 @@ $Btn.Add_Click({
     elseif ($SelectedName -match "XP") { $DefaultName = "WindowsXP_SP3.iso" }
     elseif ($SelectedName -match "Office") { $DefaultName = "Office_Install.img" }
 
-    # Hộp thoại Lưu
     $SaveDlg = New-Object System.Windows.Forms.SaveFileDialog
     $SaveDlg.FileName = $DefaultName
     $SaveDlg.Filter = "ISO Image (*.iso)|*.iso|Disk Image (*.img)|*.img|All Files (*.*)|*.*"
@@ -85,13 +77,14 @@ $Btn.Add_Click({
         $LocalPath = $SaveDlg.FileName
         $Btn.Enabled = $false; $Combo.Enabled = $false
         
-        # --- LOGIC BITS TRANSFER (Tải ngầm siêu ổn định) ---
         try {
             Import-Module BitsTransfer
+            # Priority High để tải nhanh nhất
             $Job = Start-BitsTransfer -Source $Url -Destination $LocalPath -Asynchronous -DisplayName "PhatTanDownload" -Priority High
             
             while ($Job.JobState -eq "Transferring" -or $Job.JobState -eq "Connecting") {
-                $Job = Get-BitsTransfer -JobId $Job.JobId
+                # KHÔNG CẦN GET LẠI JOB, BIẾN $JOB TỰ CẬP NHẬT
+                
                 if ($Job.TotalBytes -gt 0) {
                     $Percent = [Math]::Round(($Job.BytesTransferred / $Job.TotalBytes) * 100)
                     $Bar.Value = $Percent
@@ -99,8 +92,10 @@ $Btn.Add_Click({
                     $DaTai = [Math]::Round($Job.BytesTransferred / 1MB, 2)
                     $Tong  = [Math]::Round($Job.TotalBytes / 1MB, 2)
                     $Status.Text = "Dang tai... $Percent% ($DaTai MB / $Tong MB)"
-                    $Form.Refresh()
+                } else {
+                    $Status.Text = "Dang ket noi... (Chua xac dinh dung luong)"
                 }
+                $Form.Refresh()
                 Start-Sleep -Milliseconds 500
             }
             
@@ -109,7 +104,6 @@ $Btn.Add_Click({
             $Status.Text = "Tai thanh cong! File luu tai: $LocalPath"
             [System.Windows.Forms.MessageBox]::Show("Da tai xong ISO goc!", "Phat Tan PC")
             
-            # Mở thư mục chứa file
             Invoke-Item (Split-Path $LocalPath)
             
         } catch {
