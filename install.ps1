@@ -11,7 +11,7 @@ Add-Type -AssemblyName System.Drawing
 
 # --- CẤU HÌNH NGUỒN TẢI ---
 $BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
-$RawUrl  = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/"
+$RawUrl  = "ttps://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/"
 $TempDir = "$env:TEMP\PhatTan_Tool"
 if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir | Out-Null }
 
