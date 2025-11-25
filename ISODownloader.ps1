@@ -79,18 +79,20 @@ $Btn.Add_Click({
         
         try {
             Import-Module BitsTransfer
-            # Priority High để tải nhanh nhất
+            # Bắt đầu tải (Asynchronous)
             $Job = Start-BitsTransfer -Source $Url -Destination $LocalPath -Asynchronous -DisplayName "PhatTanDownload" -Priority High
             
+            # Vòng lặp kiểm tra tiến độ
             while ($Job.JobState -eq "Transferring" -or $Job.JobState -eq "Connecting") {
-                # KHÔNG CẦN GET LẠI JOB, BIẾN $JOB TỰ CẬP NHẬT
+                $BytesTransferred = $Job.BytesTransferred
+                $BytesTotal = $Job.TotalBytes
                 
-                if ($Job.TotalBytes -gt 0) {
-                    $Percent = [Math]::Round(($Job.BytesTransferred / $Job.TotalBytes) * 100)
+                if ($BytesTotal -gt 0) {
+                    $Percent = [Math]::Round(($BytesTransferred / $BytesTotal) * 100)
                     $Bar.Value = $Percent
                     
-                    $DaTai = [Math]::Round($Job.BytesTransferred / 1MB, 2)
-                    $Tong  = [Math]::Round($Job.TotalBytes / 1MB, 2)
+                    $DaTai = [Math]::Round($BytesTransferred / 1MB, 2)
+                    $Tong  = [Math]::Round($BytesTotal / 1MB, 2)
                     $Status.Text = "Dang tai... $Percent% ($DaTai MB / $Tong MB)"
                 } else {
                     $Status.Text = "Dang ket noi... (Chua xac dinh dung luong)"
@@ -99,11 +101,13 @@ $Btn.Add_Click({
                 Start-Sleep -Milliseconds 500
             }
             
-            Complete-BitsTransfer -JobId $Job.JobId
+            # Hoàn tất
+            Complete-BitsTransfer -BitsJob $Job
             $Bar.Value = 100
             $Status.Text = "Tai thanh cong! File luu tai: $LocalPath"
             [System.Windows.Forms.MessageBox]::Show("Da tai xong ISO goc!", "Phat Tan PC")
             
+            # Mở thư mục chứa file
             Invoke-Item (Split-Path $LocalPath)
             
         } catch {
