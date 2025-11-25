@@ -1,21 +1,22 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 6.1 (Custom WinPE Update)
+    Version: 8.0 (Modular Launcher)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
 # --- KHỞI TẠO ---
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+$ErrorActionPreference = "SilentlyContinue"
 
-# --- CẤU HÌNH NGUỒN TẢI ---
+# --- CẤU HÌNH ---
 $BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
-$RawUrl  = "ttps://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/"
+$RawUrl  = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/"
 $TempDir = "$env:TEMP\PhatTan_Tool"
 if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir | Out-Null }
 
-# --- GIAO DIỆN HACKER (BLUR) ---
+# --- HACK GIAO DIỆN CONSOLE (BLUR) ---
 $ConsoleCode = @'
 using System; using System.Runtime.InteropServices;
 public class ConsoleEffects {
@@ -36,7 +37,7 @@ try { Add-Type -TypeDefinition $ConsoleCode; [ConsoleEffects]::EnableBlur() } ca
 $Host.UI.RawUI.WindowTitle = "PHAT TAN PC - LOG WINDOW (Zalo: 0823.883.028)"
 [Console]::BackgroundColor = "Black"; [Console]::ForegroundColor = "Cyan"; Clear-Host
 
-# --- LOGO ---
+# --- LOGO STARTUP ---
 Write-Host "
   _____  _           _   _______   _      
  |  __ \| |         | | |__   __| (_)     
@@ -60,7 +61,6 @@ function Tai-Va-Chay {
     param ([string]$TenFileTrenMang, [string]$TenFileLuu, [string]$Loai, [string]$NguonRieng = "")
     if ($NguonRieng -ne "") { $LinkTai = $NguonRieng } else { $LinkTai = "$BaseUrl$TenFileTrenMang" }
     $DuongDanLuu = "$TempDir\$TenFileLuu"
-
     Write-Host " [>] Dang tai: $TenFileLuu ..." -NoNewline -ForegroundColor Yellow
     try {
         (New-Object System.Net.WebClient).DownloadFile($LinkTai, $DuongDanLuu)
@@ -75,98 +75,64 @@ function Tai-Va-Chay {
     } catch { Log-Msg " [!] LOI TAI FILE: $($_.Exception.Message)" "Red" }
 }
 
+# --- HÀM TẢI MODULE ---
+function Load-Module ($ScriptName) {
+    $LocalPath = "$TempDir\$ScriptName"
+    Write-Host " [*] Dang tai Module: $ScriptName ..." -ForegroundColor Cyan
+    try {
+        Invoke-WebRequest -Uri "$RawUrl$ScriptName" -OutFile $LocalPath
+        Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$LocalPath`""
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai Module $ScriptName!", "Error") }
+}
+
 # --- HÀM DONATE ---
 function Hien-Donate {
-    $DonForm = New-Object System.Windows.Forms.Form
-    $DonForm.Text = "DONATE - PHAT TAN PC"
-    $DonForm.Size = New-Object System.Drawing.Size(400, 550)
-    $DonForm.StartPosition = "CenterScreen"
-    $DonForm.BackColor = [System.Drawing.Color]::White
-    $DonForm.FormBorderStyle = "FixedToolWindow"
-
-    $AccountNo = "1055835227"
-    $QRLink = "https://img.vietqr.io/image/970436-$AccountNo-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT"
-    
-    $PB = New-Object System.Windows.Forms.PictureBox
-    $PB.Size = New-Object System.Drawing.Size(350, 400); $PB.Location = New-Object System.Drawing.Point(15, 10); $PB.SizeMode = "Zoom"
-    try { $PB.Load($QRLink) } catch { }
-    $DonForm.Controls.Add($PB)
-
-    $LblSTK = New-Object System.Windows.Forms.Label
-    $LblSTK.Text = "STK: $AccountNo (VCB)"; $LblSTK.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-    $LblSTK.ForeColor = "Red"; $LblSTK.AutoSize = $true; $LblSTK.Location = New-Object System.Drawing.Point(90, 420)
-    $DonForm.Controls.Add($LblSTK)
-    
+    $DonForm = New-Object System.Windows.Forms.Form; $DonForm.Text = "DONATE - PHAT TAN PC"; $DonForm.Size = New-Object System.Drawing.Size(400, 550); $DonForm.StartPosition = "CenterScreen"; $DonForm.BackColor="White"; $DonForm.FormBorderStyle = "FixedToolWindow"
+    $PB = New-Object System.Windows.Forms.PictureBox; $PB.Size = New-Object System.Drawing.Size(350, 400); $PB.Location = New-Object System.Drawing.Point(15, 10); $PB.SizeMode = "Zoom"
+    try { $PB.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT") } catch {}; $DonForm.Controls.Add($PB)
+    $LblSTK = New-Object System.Windows.Forms.Label; $LblSTK.Text = "STK: 1055835227 (VCB)"; $LblSTK.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $LblSTK.ForeColor = "Red"; $LblSTK.AutoSize = $true; $LblSTK.Location = New-Object System.Drawing.Point(90, 420); $DonForm.Controls.Add($LblSTK)
     $DonForm.ShowDialog() | Out-Null
 }
 
 # --- GUI CHÍNH ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC - TOOLKIT V6.1"
-$Form.Size = New-Object System.Drawing.Size(650, 630)
+$Form.Text = "PHAT TAN PC - TOOLKIT V8.0"
+$Form.Size = New-Object System.Drawing.Size(750, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $Form.ForeColor = [System.Drawing.Color]::White
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-# Header & Donate Btn
-$LabelTitle = New-Object System.Windows.Forms.Label
-$LabelTitle.Text = "PHAT TAN PC TOOLKIT"
-$LabelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-$LabelTitle.ForeColor = [System.Drawing.Color]::Cyan
-$LabelTitle.AutoSize = $true; $LabelTitle.Location = New-Object System.Drawing.Point(20, 10); $Form.Controls.Add($LabelTitle)
-
-$LabelSub = New-Object System.Windows.Forms.Label
-$LabelSub.Text = "Zalo: 0823.883.028 | Credits: MMT - DONG599 - MAS"
-$LabelSub.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-$LabelSub.ForeColor = [System.Drawing.Color]::LightGray
-$LabelSub.AutoSize = $true; $LabelSub.Location = New-Object System.Drawing.Point(25, 45); $Form.Controls.Add($LabelSub)
-
-$BtnDonate = New-Object System.Windows.Forms.Button
-$BtnDonate.Text = "☕ DONATE"; $BtnDonate.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$BtnDonate.Size = New-Object System.Drawing.Size(100, 30); $BtnDonate.Location = New-Object System.Drawing.Point(510, 15)
-$BtnDonate.BackColor = "Gold"; $BtnDonate.ForeColor = "Black"; $BtnDonate.FlatStyle = "Flat"
-$BtnDonate.Add_Click({ Hien-Donate }); $Form.Controls.Add($BtnDonate)
+# Header & Donate
+$LabelTitle = New-Object System.Windows.Forms.Label; $LabelTitle.Text = "PHAT TAN PC TOOLKIT"; $LabelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LabelTitle.ForeColor = "Cyan"; $LabelTitle.AutoSize = $true; $LabelTitle.Location = New-Object System.Drawing.Point(20, 10); $Form.Controls.Add($LabelTitle)
+$LabelSub = New-Object System.Windows.Forms.Label; $LabelSub.Text = "Zalo: 0823.883.028 | Credits: MMT - DONG599 - MAS"; $LabelSub.Font = "Segoe UI, 10"; $LabelSub.ForeColor = "LightGray"; $LabelSub.AutoSize = $true; $LabelSub.Location = New-Object System.Drawing.Point(25, 45); $Form.Controls.Add($LabelSub)
+$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text = "☕ DONATE"; $BtnDonate.Location = New-Object System.Drawing.Point(600, 15); $BtnDonate.BackColor = "Gold"; $BtnDonate.ForeColor = "Black"; $BtnDonate.FlatStyle = "Flat"; $BtnDonate.Add_Click({ Hien-Donate }); $Form.Controls.Add($BtnDonate)
 
 # Tab Control
-$TabControl = New-Object System.Windows.Forms.TabControl
-$TabControl.Location = New-Object System.Drawing.Point(20, 80); $TabControl.Size = New-Object System.Drawing.Size(590, 380)
-$Form.Controls.Add($TabControl)
-
+$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = New-Object System.Drawing.Point(20, 80); $TabControl.Size = New-Object System.Drawing.Size(690, 380); $Form.Controls.Add($TabControl)
 function Make-Tab ($Name) { $P = New-Object System.Windows.Forms.TabPage; $P.Text = $Name; $P.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $TabControl.Controls.Add($P); return $P }
-function Add-Check ($Page, $Text, $Tag, $X, $Y) { $c = New-Object System.Windows.Forms.CheckBox; $c.Text = $Text; $c.Tag = $Tag; $c.Location = New-Object System.Drawing.Point($X, $Y); $c.AutoSize = $true; $c.Font = New-Object System.Drawing.Font("Segoe UI", 11); $Page.Controls.Add($c); return $c }
+function Add-Check ($Page, $Text, $Tag, $X, $Y) { $c = New-Object System.Windows.Forms.CheckBox; $c.Text = $Text; $c.Tag = $Tag; $c.Location = New-Object System.Drawing.Point($X, $Y); $c.AutoSize = $true; $c.Font = "Segoe UI, 11"; $Page.Controls.Add($c); return $c }
 
-# Tab 1
-$T1 = Make-Tab "He Thong & Driver"
-Add-Check $T1 "JUKI Tool (Auto Soft + Optimize)" "JUKI" 30 30
-Add-Check $T1 "Driver Mang (3DP Net)" "3DPNet" 30 70
-Add-Check $T1 "Driver Tong Hop (3DP Chip)" "3DPChip" 30 110
-Add-Check $T1 "Fix Loi Game (DirectX + Visual C++)" "FixGame" 30 150
-Add-Check $T1 "Hien thi file an (Registry Mod)" "ShowFile" 30 190
-
-# Tab 2
-$T2 = Make-Tab "Internet & Office"
-Add-Check $T2 "Google Chrome Enterprise" "Chrome" 30 30
-Add-Check $T2 "IDM Full Toolkit (Sieu toc)" "IDM" 30 70
-Add-Check $T2 "AnyDesk (Dieu khien tu xa)" "AnyDesk" 30 110
-Add-Check $T2 "Unikey / EVKey (Go Tieng Viet)" "EVKey" 30 150
-Add-Check $T2 "Foxit PDF Reader" "PDF" 30 190
-Add-Check $T2 "Notepad++ (Editor)" "NPP" 30 230
-
-# Tab 3
-$T3 = Make-Tab "Tien Ich"
-Add-Check $T3 "WinRAR Full (Giai nen)" "WinRAR" 30 30
-Add-Check $T3 "HiBit Uninstaller (Go sach)" "HiBit" 30 70
-Add-Check $T3 "FastStone Capture" "FSC" 30 110
-Add-Check $T3 "TeraCopy (Copy nhanh)" "Tera" 30 150
-Add-Check $T3 "Unlocker (Xoa file cung dau)" "Unlocker" 30 190
+# Tab 1: Hệ Thống
+$T1 = Make-Tab "He Thong & Driver"; Add-Check $T1 "JUKI Tool (Auto Soft + Optimize)" "JUKI" 30 30; Add-Check $T1 "Driver Mang (3DP Net)" "3DPNet" 30 70; Add-Check $T1 "Driver Tong Hop (3DP Chip)" "3DPChip" 30 110; Add-Check $T1 "Fix Loi Game (DirectX + Visual C++)" "FixGame" 30 150; Add-Check $T1 "Hien thi file an (Registry Mod)" "ShowFile" 30 190
+# Tab 2: Internet
+$T2 = Make-Tab "Internet & Office"; Add-Check $T2 "Google Chrome Enterprise" "Chrome" 30 30; Add-Check $T2 "IDM Full Toolkit (Sieu toc)" "IDM" 30 70; Add-Check $T2 "AnyDesk (Dieu khien tu xa)" "AnyDesk" 30 110; Add-Check $T2 "Unikey / EVKey (Go Tieng Viet)" "EVKey" 30 150; Add-Check $T2 "Foxit PDF Reader" "PDF" 30 190; Add-Check $T2 "Notepad++ (Editor)" "NPP" 30 230
+# Tab 3: Tien Ich
+$T3 = Make-Tab "Tien Ich"; Add-Check $T3 "WinRAR Full (Giai nen)" "WinRAR" 30 30; Add-Check $T3 "HiBit Uninstaller (Go sach)" "HiBit" 30 70; Add-Check $T3 "FastStone Capture" "FSC" 30 110; Add-Check $T3 "TeraCopy (Copy nhanh)" "Tera" 30 150; Add-Check $T3 "Unlocker (Xoa file cung dau)" "Unlocker" 30 190
+# Tab 4: Advanced (Modules)
+$T4 = Make-Tab "Advanced Tools"; 
+$B1 = New-Object System.Windows.Forms.Button; $B1.Text="SYSTEM SCAN (SFC/DISM)"; $B1.Location=New-Object System.Drawing.Point(30,30); $B1.Size=New-Object System.Drawing.Size(200,40); $B1.BackColor="Orange"; $B1.ForeColor="Black"; $B1.Add_Click({ Load-Module "SystemScan.ps1" }); $T4.Controls.Add($B1)
+$B2 = New-Object System.Windows.Forms.Button; $B2.Text="BACKUP & RESTORE"; $B2.Location=New-Object System.Drawing.Point(30,80); $B2.Size=New-Object System.Drawing.Size(200,40); $B2.BackColor="Cyan"; $B2.ForeColor="Black"; $B2.Add_Click({ Load-Module "BackupCenter.ps1" }); $T4.Controls.Add($B2)
+$B3 = New-Object System.Windows.Forms.Button; $B3.Text="APP STORE (WINGET)"; $B3.Location=New-Object System.Drawing.Point(250,30); $B3.Size=New-Object System.Drawing.Size(200,40); $B3.BackColor="LightGreen"; $B3.ForeColor="Black"; $B3.Add_Click({ Load-Module "AppStore.ps1" }); $T4.Controls.Add($B3)
+$B4 = New-Object System.Windows.Forms.Button; $B4.Text="ISO DOWNLOADER"; $B4.Location=New-Object System.Drawing.Point(250,80); $B4.Size=New-Object System.Drawing.Size(200,40); $B4.BackColor="Yellow"; $B4.ForeColor="Black"; $B4.Add_Click({ Load-Module "ISODownloader.ps1" }); $T4.Controls.Add($B4)
+$B5 = New-Object System.Windows.Forms.Button; $B5.Text="DATA RECOVERY (TOOL)"; $B5.Location=New-Object System.Drawing.Point(30,130); $B5.Size=New-Object System.Drawing.Size(200,40); $B5.BackColor="Red"; $B5.ForeColor="White"; $B5.Add_Click({ Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }); $T4.Controls.Add($B5)
 
 # Buttons Bottom
 $BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = New-Object System.Drawing.Point(20, 470); $BtnSelectAll.Size = New-Object System.Drawing.Size(80, 30); $BtnSelectAll.BackColor = "Gray"; $BtnSelectAll.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $true } } } }); $Form.Controls.Add($BtnSelectAll)
 $BtnUncheck = New-Object System.Windows.Forms.Button; $BtnUncheck.Text = "Bo Chon"; $BtnUncheck.Location = New-Object System.Drawing.Point(110, 470); $BtnUncheck.Size = New-Object System.Drawing.Size(80, 30); $BtnUncheck.BackColor = "Gray"; $BtnUncheck.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $false } } } }); $Form.Controls.Add($BtnUncheck)
 
-$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text = "CAI DAT DA CHON"; $BtnInstall.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $BtnInstall.Size = New-Object System.Drawing.Size(200, 60); $BtnInstall.Location = New-Object System.Drawing.Point(410, 470); $BtnInstall.BackColor = "LimeGreen"; $BtnInstall.ForeColor = "Black"; $BtnInstall.FlatStyle = "Flat"
+$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text = "CAI DAT DA CHON"; $BtnInstall.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $BtnInstall.Size = New-Object System.Drawing.Size(200, 60); $BtnInstall.Location = New-Object System.Drawing.Point(490, 470); $BtnInstall.BackColor = "LimeGreen"; $BtnInstall.ForeColor = "Black"; $BtnInstall.FlatStyle = "Flat"
 $BtnInstall.Add_Click({
     $BtnInstall.Enabled = $false; $BtnInstall.Text = "DANG CAI..."
     foreach ($P in $TabControl.TabPages) {
@@ -202,36 +168,13 @@ $Form.Controls.Add($BtnInstall)
 # --- MINI BUTTONS ---
 function Add-MiniBtn ($Txt, $Col, $X, $Y, $Act) { $b = New-Object System.Windows.Forms.Button; $b.Text = $Txt; $b.Location = New-Object System.Drawing.Point($X, $Y); $b.Size = New-Object System.Drawing.Size(115, 35); $b.BackColor = $Col; $b.ForeColor = "Black"; $b.FlatStyle = "Flat"; $b.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold); $b.Add_Click($Act); $Form.Controls.Add($b) }
 
-# [14] RAM BOOSTER (Troll)
-Add-MiniBtn "RAM BOOSTER" "Orange" 20 540 {
-    Log-Msg "[*] Dang tai RamBooster..." "Cyan"; $Form.WindowState = "Minimized"
-    $RamP = "$TempDir\RamBooster.ps1"; try { Invoke-WebRequest "$RawUrl/RamBooster.ps1" -OutFile $RamP; Start-Process powershell "-Ex Bypass -File `"$RamP`"" -Wait } catch {}
-    $Form.WindowState = "Normal"
-}
-
-# [15] BING WALLPAPER
-Add-MiniBtn "WALLPAPER" "Cyan" 145 540 {
-    try {
-        $Code = @'
+Add-MiniBtn "RAM BOOSTER" "Orange" 20 540 { Load-Module "RamBooster.ps1" }
+Add-MiniBtn "WALLPAPER" "Cyan" 145 540 { try { $Code = @'
 using System; using System.Runtime.InteropServices; public class W { [DllImport("user32.dll")] public static extern int SystemParametersInfo(int u, int v, string s, int f); }
 '@
-        Add-Type -TypeDefinition $Code -ErrorAction SilentlyContinue
-        $J = Invoke-RestMethod "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=en-US"; $Img = "$env:TEMP\bing.jpg"
-        Invoke-WebRequest ("https://www.bing.com" + $J.images[0].urlbase + "_1920x1080.jpg") -OutFile $Img
-        [W]::SystemParametersInfo(20, 0, $Img, 3); [System.Windows.Forms.MessageBox]::Show("Da doi hinh nen!", "Phat Tan PC")
-    } catch {}
-}
-
-# [16] WINPE HDD (FILE MỚI ĐỔI TÊN)
-Add-MiniBtn "WINPE CUU HO" "Yellow" 270 540 {
-    # Tải file WinPE_CuuHo.exe từ GitHub Releases
-    Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable"
-}
-
-# [A] ACTIVE WINDOWS
-Add-MiniBtn "ACTIVE WIN" "Magenta" 395 540 {
-    $Form.WindowState = "Minimized"; irm https://get.activated.win | iex; $Form.WindowState = "Normal"
-}
+Add-Type -TypeDefinition $Code -ErrorAction SilentlyContinue; $J = Invoke-RestMethod "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=en-US"; $Img = "$env:TEMP\bing.jpg"; Invoke-WebRequest ("https://www.bing.com" + $J.images[0].urlbase + "_1920x1080.jpg") -OutFile $Img; [W]::SystemParametersInfo(20, 0, $Img, 3); [System.Windows.Forms.MessageBox]::Show("Da doi hinh nen!", "Phat Tan PC") } catch {} }
+Add-MiniBtn "WINPE CUU HO" "Yellow" 270 540 { Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }
+Add-MiniBtn "ACTIVE WIN" "Magenta" 395 540 { $Form.WindowState = "Minimized"; irm https://get.activated.win | iex; $Form.WindowState = "Normal" }
 
 $Form.ShowDialog() | Out-Null
 Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
