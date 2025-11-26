@@ -8,12 +8,10 @@ $IsoList = [ordered]@{
     "3. Windows 10 22H2 (Consumer - Goc MS)"          = "https://archive.org/download/en-us_windows_10_consumer_editions_version_22h2_updated_feb_2023_x64_dvd_c29e4bb3/en-us_windows_10_consumer_editions_version_22h2_updated_feb_2023_x64_dvd_c29e4bb3.iso"
     "4. Windows 10 Enterprise LTSC 2021 (Sieu Nhe)"   = "https://archive.org/download/windows-10-enterprise-ltsc-2021_202111/Windows%2010%20Enterprise%20LTSC%202021.iso"
     "5. Windows 8.1 Pro x64 (Goc MS)"                 = "https://archive.org/download/win8.1_english_iso/Win8.1_EnglishInternational_x64.iso"
-    "6. Windows 8.1 Pro x32 (Cho may yeu)"            = "https://archive.org/download/win8.1_english_iso/Win8.1_EnglishInternational_x32.iso"
-    "7. Windows 7 Ultimate SP1 x64 (Goc 2013)"        = "https://archive.org/download/win7-sp1-x64-en-us-oct2013/Win7.SP1.x64.en-US.Oct2013.iso"
-    "8. Windows XP SP3 (Huyen thoai)"                 = "https://archive.org/download/win-xp-sp-unknown-0_202103/Win%20XP%20%28SP%20Unknown0.iso"
+    "6. Windows 7 Ultimate SP1 x64 (Goc 2013)"        = "https://archive.org/download/win7-sp1-x64-en-us-oct2013/Win7.SP1.x64.en-US.Oct2013.iso"
+    "7. Windows XP SP3 (Huyen thoai)"                 = "https://archive.org/download/win-xp-sp-unknown-0_202103/Win%20XP%20%28SP%20Unknown0.iso"
     "---------------------------------------"         = ""
-    "9. Office 2021 Pro Plus (Img Goc)"               = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2021Retail.img"
-    "10. Office 2019 Pro Plus (Img Goc)"              = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2019Retail.img"
+    "8. Office 2021 Pro Plus (Img Goc)"               = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2021Retail.img"
 }
 
 # --- GUI SETUP ---
@@ -51,16 +49,17 @@ $Status.AutoSize = $true; $Status.Location = New-Object System.Drawing.Point(20,
 $Form.Controls.Add($Status)
 
 $Btn = New-Object System.Windows.Forms.Button
-$Btn.Text = "BAT DAU TAI (BITS ENGINE)"
+$Btn.Text = "BAT DAU TAI (WEB CLIENT)"
 $Btn.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $Btn.Location = New-Object System.Drawing.Point(180, 240); $Btn.Size = New-Object System.Drawing.Size(280, 50)
 $Btn.BackColor = "LimeGreen"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"
 
+# --- LOGIC TẢI (WEBCLIENT ASYNC) ---
 $Btn.Add_Click({
     $SelectedName = $Combo.SelectedItem
     $Url = $IsoList[$SelectedName]
     if ($Url -eq "" -or $Url -eq $null) { return }
-
+    
     $DefaultName = "Windows.iso"
     if ($SelectedName -match "Win 11") { $DefaultName = "Windows11.iso" }
     elseif ($SelectedName -match "Win 10") { $DefaultName = "Windows10.iso" }
@@ -74,46 +73,35 @@ $Btn.Add_Click({
     if ($SaveDlg.ShowDialog() -eq "OK") {
         $LocalPath = $SaveDlg.FileName
         $Btn.Enabled = $false; $Combo.Enabled = $false
-        $Status.Text = "Dang ket noi Server... (Vui long doi 5-10s)"
-        $Bar.Style = "Marquee"; $Bar.MarqueeAnimationSpeed = 30
-        $Form.Refresh()
         
         try {
-            Import-Module BitsTransfer
-            # Start-BitsTransfer trả về Object Job ngay lập tức
-            $Job = Start-BitsTransfer -Source $Url -Destination $LocalPath -Asynchronous -Priority High -DisplayName "PhatTan_ISO"
+            $WebClient = New-Object System.Net.WebClient
             
-            while ($Job.JobState -eq "Transferring" -or $Job.JobState -eq "Connecting") {
-                # Lấy thông tin mới nhất của Job
-                $CurrentJob = Get-BitsTransfer -Name "PhatTan_ISO" -ErrorAction SilentlyContinue
-                
-                if ($CurrentJob -and $CurrentJob.TotalBytes -gt 0) {
-                    if ($Bar.Style -ne "Blocks") { $Bar.Style = "Blocks" }
-                    
-                    $Percent = [Math]::Round(($CurrentJob.BytesTransferred / $CurrentJob.TotalBytes) * 100)
-                    $Bar.Value = $Percent
-                    
-                    $DaTai = [Math]::Round($CurrentJob.BytesTransferred / 1MB, 2)
-                    $Tong  = [Math]::Round($CurrentJob.TotalBytes / 1MB, 2)
-                    $Status.Text = "Dang tai... $Percent% ($DaTai MB / $Tong MB)"
-                }
-                $Form.Refresh()
-                Start-Sleep -Milliseconds 500
-            }
+            # Sự kiện khi thanh % thay đổi
+            $WebClient.Add_DownloadProgressChanged({
+                $Percent = $_.ProgressPercentage
+                $Bar.Value = $Percent
+                $DaTai = [Math]::Round($_.BytesReceived / 1MB, 2)
+                $Tong  = [Math]::Round($_.TotalBytesToReceive / 1MB, 2)
+                $Status.Text = "Dang tai... $Percent% ($DaTai MB / $Tong MB)"
+            })
             
-            # Hoàn tất
-            Get-BitsTransfer -Name "PhatTan_ISO" | Complete-BitsTransfer
+            # Sự kiện khi tải xong
+            $WebClient.Add_DownloadFileCompleted({
+                $Bar.Value = 100
+                $Status.Text = "Tai thanh cong! Luu tai: $LocalPath"
+                $Btn.Enabled = $true; $Combo.Enabled = $true
+                [System.Windows.Forms.MessageBox]::Show("Da tai xong!", "Phat Tan PC")
+                Invoke-Item (Split-Path $LocalPath)
+            })
             
-            $Bar.Style = "Blocks"; $Bar.Value = 100
-            $Status.Text = "Tai thanh cong! Luu tai: $LocalPath"
-            [System.Windows.Forms.MessageBox]::Show("Tai xong ISO roi ong oi!", "Phat Tan PC")
-            Invoke-Item (Split-Path $LocalPath)
+            $Status.Text = "Dang ket noi Server..."
+            $WebClient.DownloadFileAsync($Url, $LocalPath)
             
         } catch {
             $Status.Text = "Loi: $($_.Exception.Message)"
-            [System.Windows.Forms.MessageBox]::Show("Loi tai file. Hay thu lai!", "Error")
+            $Btn.Enabled = $true; $Combo.Enabled = $true
         }
-        $Btn.Enabled = $true; $Combo.Enabled = $true
     }
 })
 
