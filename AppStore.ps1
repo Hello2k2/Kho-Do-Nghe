@@ -155,3 +155,6 @@ $Btn.Add_Click({
 
 $Form.Controls.Add($Btn)
 $Form.ShowDialog() | Out-Null
+# --- GIỮ CỬA SỔ KHÔNG TẮT ---
+Write-Host "DA XAY RA LOI HOAC CHUONG TRINH KET THUC." -ForegroundColor Yellow
+Read-Host "Nhan Enter de thoat..."
