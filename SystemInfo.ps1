@@ -1,15 +1,15 @@
 <#
     SYSTEM INFO PRO MAX - PHAT TAN PC
-    Version: 6.0 (Split Tabs + White Theme + Peripherals)
+    Version: 7.0 (Added Network Detail)
 #>
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- GUI SETUP (WHITE THEME) ---
+# --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CHI TIET CAU HINH - PHAT TAN PC (V6.0)"
+$Form.Text = "CHI TIET CAU HINH - PHAT TAN PC (V7.0)"
 $Form.Size = New-Object System.Drawing.Size(950, 650)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = "White"
@@ -73,20 +73,17 @@ function Load-Summary {
     Add-Item $LvSum "Kien truc" $OS.OSArchitecture
     Add-Item $LvSum "Ngay cai dat" $OS.InstallDate
     Add-Item $LvSum "Nguoi dung" $env:USERNAME
-    Add-Item $LvSum "Mui gio" $TZ.Caption
     
     Add-Item $LvSum "" ""
     Add-Item $LvSum "[HE THONG]" ""
-    Add-Item $LvSum "Ten May (Hostname)" $CS.Name
+    Add-Item $LvSum "Ten May" $CS.Name
     Add-Item $LvSum "Hang San Xuat" $CS.Manufacturer
     Add-Item $LvSum "Model" $CS.Model
-    Add-Item $LvSum "Loai He Thong" $CS.SystemType
     
     Add-Item $LvSum "" ""
-    Add-Item $LvSum "[MAINBOARD & BIOS]" ""
-    Add-Item $LvSum "Mainboard" "$($BB.Manufacturer) - $($BB.Product) (Ver: $($BB.Version))"
-    Add-Item $LvSum "Serial Number" $Bios.SerialNumber
-    Add-Item $LvSum "BIOS Version" "$($Bios.SMBIOSBIOSVersion) (Date: $($Bios.ReleaseDate))"
+    Add-Item $LvSum "[MAINBOARD]" ""
+    Add-Item $LvSum "Mainboard" "$($BB.Manufacturer) - $($BB.Product)"
+    Add-Item $LvSum "BIOS Ver" "$($Bios.SMBIOSBIOSVersion) ($($Bios.ReleaseDate))"
     
     $BiosMode = "Legacy"; if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { $BiosMode = "UEFI" }
     Add-Item $LvSum "BIOS Mode" $BiosMode
@@ -101,37 +98,24 @@ $LvCpu.Columns.Add("Thong So", 250); $LvCpu.Columns.Add("Gia Tri", 600)
 
 function Load-CpuRam {
     $LvCpu.Items.Clear()
-    
-    # CPU
     $CPU = Get-CimInstance Win32_Processor
-    Add-Item $LvCpu "[VI XU LY - CPU]" $CPU.Name
+    Add-Item $LvCpu "[CPU]" $CPU.Name
     Add-Item $LvCpu "Socket" $CPU.SocketDesignation
-    Add-Item $LvCpu "So Nhan (Cores)" $CPU.NumberOfCores
-    Add-Item $LvCpu "So Luong (Threads)" $CPU.NumberOfLogicalProcessors
-    Add-Item $LvCpu "Toc Do Co Ban" "$($CPU.MaxClockSpeed) MHz"
-    Add-Item $LvCpu "Ao Hoa (Virtualization)" $(if($CPU.VirtualizationFirmwareEnabled){"Da Bat"}else{"Dang Tat"})
+    Add-Item $LvCpu "So Nhan/Luong" "$($CPU.NumberOfCores) Cores / $($CPU.NumberOfLogicalProcessors) Threads"
+    Add-Item $LvCpu "Toc Do" "$($CPU.MaxClockSpeed) MHz"
     
     Add-Item $LvCpu "" ""
-    
-    # RAM
-    $Rams = Get-CimInstance Win32_PhysicalMemory
-    $TotalRAM = 0
-    Add-Item $LvCpu "[BO NHO TRONG - RAM]" "Chi tiet tung thanh:"
-    
+    $Rams = Get-CimInstance Win32_PhysicalMemory; $TotalRAM = 0
+    Add-Item $LvCpu "[RAM]" "Chi tiet:"
     foreach ($R in $Rams) {
-        $SizeGB = [Math]::Round($R.Capacity / 1GB, 1)
-        $TotalRAM += $R.Capacity
-        $Speed = $R.Speed
-        $Maker = $R.Manufacturer
-        $Part = $R.PartNumber
-        $Loc = $R.DeviceLocator
-        Add-Item $LvCpu "  + Slot $Loc" "$SizeGB GB - $Speed MHz - $Maker ($Part)"
+        $SizeGB = [Math]::Round($R.Capacity / 1GB, 1); $TotalRAM += $R.Capacity
+        Add-Item $LvCpu "  Slot $($R.DeviceLocator)" "$SizeGB GB - $($R.Speed) MHz - $($R.Manufacturer)"
     }
-    Add-Item $LvCpu "--- TONG CONG ---" "$([Math]::Round($TotalRAM / 1GB, 1)) GB"
+    Add-Item $LvCpu "--- TONG RAM ---" "$([Math]::Round($TotalRAM / 1GB, 1)) GB"
 }
 
 # ==========================================
-# TAB 3: O CUNG (DISK)
+# TAB 3: DISK
 # ==========================================
 $TabDisk = Make-Tab "Luu Tru (Disk)"
 $GridDisk = Make-Grid $TabDisk
@@ -146,7 +130,32 @@ function Load-Storage {
 }
 
 # ==========================================
-# TAB 4: DO HOA (GPU)
+# TAB 4: MANG (NETWORK) - NEW!!!
+# ==========================================
+$TabNet = Make-Tab "Mang (Network)"
+$LvNet = Make-ListView $TabNet
+$LvNet.Columns.Add("Thong So", 200); $LvNet.Columns.Add("Gia Tri", 650)
+
+function Load-Network {
+    $LvNet.Items.Clear()
+    # Chỉ lấy card đang có IP (Đang kết nối)
+    $Nets = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object {$_.IPEnabled -eq $true}
+    
+    foreach ($N in $Nets) {
+        Add-Item $LvNet "[CARD MANG]" $N.Description
+        Add-Item $LvNet "MAC Address" $N.MACAddress
+        Add-Item $LvNet "IPv4 Address" $N.IPAddress[0]
+        if ($N.IPAddress.Count -gt 1) { Add-Item $LvNet "IPv6 Address" $N.IPAddress[1] }
+        Add-Item $LvNet "Subnet Mask" $N.IPSubnet[0]
+        Add-Item $LvNet "Default Gateway" $N.DefaultIPGateway[0]
+        Add-Item $LvNet "DHCP Enabled" $(if($N.DHCPEnabled){"Yes (Server: $($N.DHCPServer))"}else{"No (Static IP)"})
+        Add-Item $LvNet "DNS Servers" ($N.DNSServerSearchOrder -join ", ")
+        Add-Item $LvNet "---" "---"
+    }
+}
+
+# ==========================================
+# TAB 5: GPU
 # ==========================================
 $TabGpu = Make-Tab "Card Man Hinh (GPU)"
 $LvGpu = Make-ListView $TabGpu
@@ -159,50 +168,30 @@ function Load-GPU {
         Add-Item $LvGpu "[GPU]" $G.Name
         $VRAM = [Math]::Round($G.AdapterRAM / 1MB, 0); if ($VRAM -gt 0) { Add-Item $LvGpu "VRAM" "$VRAM MB" }
         Add-Item $LvGpu "Driver Version" $G.DriverVersion
-        try { $Date = [DateTime]::ParseExact($G.DriverDate.Substring(0,8), "yyyyMMdd", $null).ToString("yyyy-MM-dd"); Add-Item $LvGpu "Driver Date" $Date } catch {}
         Add-Item $LvGpu "Do Phan Giai" "$($G.CurrentHorizontalResolution) x $($G.CurrentVerticalResolution) @ $($G.CurrentRefreshRate)Hz"
         Add-Item $LvGpu "---" "---"
     }
 }
 
 # ==========================================
-# TAB 5: NGOAI VI (PERIPHERALS) - MỚI
+# TAB 6: NGOAI VI (PERIPHERALS)
 # ==========================================
-$TabPeri = Make-Tab "Ngoai Vi (Peripherals)"
+$TabPeri = Make-Tab "Ngoai Vi"
 $LvPeri = Make-ListView $TabPeri
-$LvPeri.Columns.Add("Loai Thiet Bi", 200); $LvPeri.Columns.Add("Ten Thiet Bi", 650)
+$LvPeri.Columns.Add("Loai", 200); $LvPeri.Columns.Add("Ten Thiet Bi", 650)
 
 function Load-Peripherals {
     $LvPeri.Items.Clear()
-
-    # 1. Ban Phim
-    $Kbds = Get-CimInstance Win32_Keyboard
-    foreach ($K in $Kbds) { Add-Item $LvPeri "Ban Phim" $K.Description }
-
-    # 2. Chuot
-    $Mice = Get-CimInstance Win32_PointingDevice
-    foreach ($M in $Mice) { Add-Item $LvPeri "Chuot / Touchpad" "$($M.Description) - $($M.Manufacturer)" }
-
-    # 3. May In
-    $Printers = Get-CimInstance Win32_Printer
-    foreach ($P in $Printers) { 
-        $Status = if ($P.Default) { "(Mac Dinh)" } else { "" }
-        Add-Item $LvPeri "May In" "$($P.Name) $Status" 
-    }
-
-    # 4. Am Thanh (Loa/Mic)
-    $Sounds = Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }
-    foreach ($S in $Sounds) { Add-Item $LvPeri "Am Thanh" $S.Name }
-
-    # 5. Webcam (PnP)
-    $Cams = Get-PnpDevice -Class Camera,Image -Status OK -ErrorAction SilentlyContinue
-    foreach ($C in $Cams) { Add-Item $LvPeri "Webcam / Camera" $C.FriendlyName }
+    $Kbds = Get-CimInstance Win32_Keyboard; foreach ($K in $Kbds) { Add-Item $LvPeri "Ban Phim" $K.Description }
+    $Mice = Get-CimInstance Win32_PointingDevice; foreach ($M in $Mice) { Add-Item $LvPeri "Chuot" "$($M.Description) - $($M.Manufacturer)" }
+    $Printers = Get-CimInstance Win32_Printer; foreach ($P in $Printers) { Add-Item $LvPeri "May In" "$($P.Name)" }
+    $Sounds = Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }; foreach ($S in $Sounds) { Add-Item $LvPeri "Am Thanh" $S.Name }
 }
 
 # ==========================================
-# TAB 6: DRIVERS
+# TAB 7: DRIVERS
 # ==========================================
-$TabDrivers = Make-Tab "Drivers"
+$TabDrivers = Make-Tab "Tat Ca Driver"
 $GridDrv = Make-Grid $TabDrivers
 $GridDrv.Columns.Add("Name", "Thiet Bi"); $GridDrv.Columns.Add("Version", "Phien Ban"); $GridDrv.Columns.Add("Date", "Ngay")
 
@@ -217,27 +206,21 @@ function Load-AllDrivers {
 # ==========================================
 # BUTTONS
 # ==========================================
-$BtnReload = New-Object System.Windows.Forms.Button; $BtnReload.Text = "LAM MOI DU LIEU"; $BtnReload.Location = "10,560"; $BtnReload.Size = "150,40"; $BtnReload.BackColor = "LightBlue"
+$BtnReload = New-Object System.Windows.Forms.Button; $BtnReload.Text = "LAM MOI"; $BtnReload.Location = "10,560"; $BtnReload.Size = "150,40"; $BtnReload.BackColor = "LightBlue"
 $BtnReload.Add_Click({ Run-All-Checks })
 $Form.Controls.Add($BtnReload)
 
 $BtnHTML = New-Object System.Windows.Forms.Button; $BtnHTML.Text = "XUAT HTML"; $BtnHTML.Location = "170,560"; $BtnHTML.Size = "150,40"; $BtnHTML.BackColor = "Orange"
 $BtnHTML.Add_Click({
     $Path = "$env:USERPROFILE\Desktop\PC_Info.html"
-    $H = "<h1>BAO CAO - PHAT TAN PC</h1><hr>"
-    $H += "<h2>HE THONG</h2>" + ($env:COMPUTERNAME) + "<br>" + ($env:USERNAME)
+    $H = "<h1>BAO CAO - PHAT TAN PC</h1><hr><h2>HE THONG</h2>$($env:COMPUTERNAME)<br>$($env:USERNAME)"
     $H | Out-File $Path; Invoke-Item $Path
 })
 $Form.Controls.Add($BtnHTML)
 
 # --- RUN ALL ---
 function Run-All-Checks {
-    Load-Summary
-    Load-CpuRam
-    Load-Storage
-    Load-GPU
-    Load-Peripherals
-    Load-AllDrivers
+    Load-Summary; Load-CpuRam; Load-Storage; Load-Network; Load-GPU; Load-Peripherals; Load-AllDrivers
 }
 $Form.Add_Shown({ Run-All-Checks })
 $Form.ShowDialog() | Out-Null
