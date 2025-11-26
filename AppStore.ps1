@@ -8,57 +8,96 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- HÀM CÀI ĐẶT MÔI TRƯỜNG (Chỉ chạy khi bấm nút FIX) ---
+# --- CẤU HÌNH LOGGING ---
+$LogDir = "$env:TEMP\PhatTan_Log"
+if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
+$EnvLogFile = "$LogDir\Environment_Install.log"
+
+# Hàm ghi Log (Vừa hiện Console, Vừa ghi File)
+function Write-Log {
+    param($Message, $Type="INFO")
+    $Time = Get-Date -Format "HH:mm:ss"
+    $LogLine = "[$Time] [$Type] $Message"
+    
+    # 1. Ghi ra Console (Nếu đang chạy CLI)
+    if ($Type -eq "ERROR") { Write-Host $LogLine -ForegroundColor Red }
+    elseif ($Type -eq "SUCCESS") { Write-Host $LogLine -ForegroundColor Green }
+    else { Write-Host $LogLine -ForegroundColor Cyan }
+
+    # 2. Ghi vào File
+    $LogLine | Out-File -FilePath $EnvLogFile -Append -Encoding UTF8
+}
+
+# --- HÀM CÀI ĐẶT MÔI TRƯỜNG ---
 function Install-Environment {
     param($StatusLabel, $Form)
     
-    $StatusLabel.Text = "Dang xu ly moi truong (Vui long doi)..."
+    $StatusLabel.Text = "Dang xu ly... (Xem log de biet chi tiet)"
     $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
     
-    # Cấu hình bảo mật
+    # Xóa log cũ
+    "=== BAT DAU CAI DAT MOI TRUONG ===" | Out-File -FilePath $EnvLogFile -Encoding UTF8
+    
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 
-    # 1. WINGET (Offline)
+    # 1. WINGET
     if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-        $StatusLabel.Text = "Dang cai Winget..."
-        $Form.Refresh()
+        Write-Log "Bat dau cai Winget (Offline MSIX)..."
         try {
             $U = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
             $P = "$env:TEMP\winget.msixbundle"
+            Write-Log "Dang tai file: $U"
             (New-Object System.Net.WebClient).DownloadFile($U, $P)
-            Add-AppxPackage -Path $P; Remove-Item $P -Force
-        } catch {}
-    }
+            
+            Write-Log "Dang chay Add-AppxPackage..."
+            Add-AppxPackage -Path $P -ErrorAction Stop
+            Remove-Item $P -Force
+            Write-Log "Cai Winget THANH CONG." "SUCCESS"
+        } catch {
+            Write-Log "Loi cai Winget: $($_.Exception.Message)" "ERROR"
+        }
+    } else { Write-Log "Winget da duoc cai dat." "INFO" }
 
     # 2. CHOCOLATEY
     if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
-        $StatusLabel.Text = "Dang cai Chocolatey..."
-        $Form.Refresh()
+        Write-Log "Bat dau cai Chocolatey..."
         try {
             Set-ExecutionPolicy Bypass -Scope Process -Force
-            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+            Write-Log "Dang tai Script Choco..."
+            $ChocoScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+            
+            Write-Log "Dang thuc thi Script Choco..."
+            # Chạy lệnh và bắt toàn bộ output (kể cả lỗi) ghi vào log
+            Invoke-Expression $ChocoScript | Out-File -FilePath $EnvLogFile -Append
+            
             $env:Path += ";$env:ProgramData\chocolatey\bin"
-        } catch {}
-    }
+            Write-Log "Da chay xong Script Choco." "SUCCESS"
+        } catch { Write-Log "Loi cai Choco: $($_.Exception.Message)" "ERROR" }
+    } else { Write-Log "Chocolatey da duoc cai dat." "INFO" }
 
     # 3. SCOOP
     if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
-        $StatusLabel.Text = "Dang cai Scoop..."
-        $Form.Refresh()
+        Write-Log "Bat dau cai Scoop..."
         try {
             Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-            irm get.scoop.sh | iex
+            Write-Log "Dang tai va cai Scoop..."
+            
+            # Chạy lệnh và bắt output
+            irm get.scoop.sh | iex | Out-File -FilePath $EnvLogFile -Append
+            
             $env:Path += ";$env:USERPROFILE\scoop\shims"
-        } catch {}
-    }
+            Write-Log "Da chay xong Script Scoop." "SUCCESS"
+        } catch { Write-Log "Loi cai Scoop: $($_.Exception.Message)" "ERROR" }
+    } else { Write-Log "Scoop da duoc cai dat." "INFO" }
     
-    $StatusLabel.Text = "Moi truong da san sang! Hay tim kiem."
+    $StatusLabel.Text = "Hoan tat. Kiem tra log!"
     $StatusLabel.ForeColor = "Lime"
+    Write-Log "=== KET THUC ==="
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "APP STORE - PHAT TAN PC (V8.0)"
+$Form.Text = "APP STORE - PHAT TAN PC (V9.0 LOGGING)"
 $Form.Size = New-Object System.Drawing.Size(1000, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -75,8 +114,11 @@ $CbSource = New-Object System.Windows.Forms.ComboBox; $CbSource.Location="380,40
 $CbStatus = New-Object System.Windows.Forms.ComboBox; $CbStatus.Location="510,40"; $CbStatus.Size="120,30"; $CbStatus.DropDownStyle="DropDownList"; $CbStatus.Items.AddRange(@("Trang thai: All", "Chua cai", "Da cai")); $CbStatus.SelectedIndex=0; $Form.Controls.Add($CbStatus)
 
 # Buttons
-$BtnSearch = New-Object System.Windows.Forms.Button; $BtnSearch.Text="TIM KIEM"; $BtnSearch.Location="640,38"; $BtnSearch.Size="100,32"; $BtnSearch.BackColor="Cyan"; $BtnSearch.ForeColor="Black"; $Form.Controls.Add($BtnSearch)
-$BtnFix = New-Object System.Windows.Forms.Button; $BtnFix.Text="FIX MOI TRUONG"; $BtnFix.Location="750,38"; $BtnFix.Size="150,32"; $BtnFix.BackColor="Orange"; $BtnFix.ForeColor="Black"; $Form.Controls.Add($BtnFix)
+$BtnSearch = New-Object System.Windows.Forms.Button; $BtnSearch.Text="TIM KIEM"; $BtnSearch.Location="640,38"; $BtnSearch.Size="80,32"; $BtnSearch.BackColor="Cyan"; $BtnSearch.ForeColor="Black"; $Form.Controls.Add($BtnSearch)
+$BtnFix = New-Object System.Windows.Forms.Button; $BtnFix.Text="FIX MOI TRUONG"; $BtnFix.Location="730,38"; $BtnFix.Size="120,32"; $BtnFix.BackColor="Orange"; $BtnFix.ForeColor="Black"; $Form.Controls.Add($BtnFix)
+
+# Nút Xem Log
+$BtnLog = New-Object System.Windows.Forms.Button; $BtnLog.Text="LOG"; $BtnLog.Location="860,38"; $BtnLog.Size="50,32"; $BtnLog.BackColor="Gray"; $BtnLog.ForeColor="White"; $Form.Controls.Add($BtnLog)
 
 # Grid
 $Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,90"; $Grid.Size = "950,380"; $Grid.BackgroundColor = [System.Drawing.Color]::FromArgb(40,40,40); $Grid.ForeColor="Black"; $Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.ReadOnly=$false; $Grid.AutoSizeColumnsMode="Fill"
@@ -92,66 +134,50 @@ $Form.Controls.Add($Grid)
 $BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="CAI DAT CAC APP DA CHON"; $BtnInstall.Location="300,490"; $BtnInstall.Size="400,50"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.Font="Segoe UI, 12, Bold"; $BtnInstall.Enabled=$false; $Form.Controls.Add($BtnInstall)
 $StatusLbl = New-Object System.Windows.Forms.Label; $StatusLbl.Text="San sang."; $StatusLbl.Location="15,550"; $StatusLbl.AutoSize=$true; $StatusLbl.ForeColor="Yellow"; $Form.Controls.Add($StatusLbl)
 
-# --- LOGIC XỬ LÝ ---
+# --- EVENT HANDLERS ---
 
-# 1. Nút FIX (Chỉ chạy khi bấm)
+$BtnLog.Add_Click({
+    if (Test-Path $EnvLogFile) { Invoke-Item $EnvLogFile } 
+    else { [System.Windows.Forms.MessageBox]::Show("Chua co log. Hay chay Fix truoc!", "Phat Tan PC") }
+})
+
 $BtnFix.Add_Click({ 
     $BtnFix.Enabled=$false
     Install-Environment $StatusLbl $Form
     $BtnFix.Enabled=$true
-    [System.Windows.Forms.MessageBox]::Show("Da cai dat xong moi truong!", "Phat Tan PC") 
+    [System.Windows.Forms.MessageBox]::Show("Da chay xong! Bam nut 'LOG' de xem ket qua.", "Phat Tan PC") 
 })
 
-# 2. Nút TÌM KIẾM (Không tự cài nữa)
 $BtnSearch.Add_Click({
-    $Kw = $TxtSearch.Text; if ([string]::IsNullOrWhiteSpace($Kw)) { return }
-    
+    $Kw = $TxtSearch.Text; if (!$Kw) { return }
     $Grid.Rows.Clear(); $BtnSearch.Text="..."; $StatusLbl.Text="Dang tim..."; $Form.Refresh()
     $SrcFilter = $CbSource.SelectedItem; $StatFilter = $CbStatus.SelectedItem
 
-    # Kiểm tra công cụ có sẵn không trước khi tìm
-    $HasChoco = (Get-Command choco -ErrorAction SilentlyContinue)
-    $HasScoop = (Get-Command scoop -ErrorAction SilentlyContinue)
-
-    # --- TÌM CHOCOLATEY ---
-    if (($SrcFilter -match "All|Choco")) {
-        if ($HasChoco) {
-            $Raw = choco search "$Kw" --limit-output --order-by-popularity
-            foreach ($L in $Raw) {
-                if ($L -match "^(.*?)\|(.*?)$") { 
-                    $P = $L -split "\|"; $Stat = "Chua cai"
-                    if (Test-Path "$env:ChocolateyInstall\lib\$($P[0])") { $Stat = "Da cai" }
-                    if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Choco", $P[0], $P[0], $P[1], $Stat) | Out-Null }
-                }
+    # CHOCO
+    if (($SrcFilter -match "All|Choco") -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        $Raw = choco search "$Kw" --limit-output --order-by-popularity
+        foreach ($L in $Raw) {
+            if ($L -match "^(.*?)\|(.*?)$") { 
+                $P = $L -split "\|"; $Stat = "Chua cai"
+                if (Test-Path "$env:ChocolateyInstall\lib\$($P[0])") { $Stat = "Da cai" }
+                if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Choco", $P[0], $P[0], $P[1], $Stat) | Out-Null }
             }
-        } else {
-            $StatusLbl.Text = "Chua cai Chocolatey (Bam nut Fix de cai)"
         }
     }
-
-    # --- TÌM SCOOP ---
-    if (($SrcFilter -match "All|Scoop")) {
-        if ($HasScoop) {
-            $RawS = scoop search "$Kw"; $RawList = $RawS -split "`r`n"
-            foreach ($Line in $RawList) {
-                if ($Line -match "^(\S+)\s+(\S+)\s+(\S+)") {
-                   $Parts = $Line -split "\s+"; $Stat = "Chua cai"
-                   if ($Parts -contains "*global*") { $Stat = "Da cai" }
-                   if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Scoop", $Parts[0], $Parts[0], $Parts[1], $Stat) | Out-Null }
-                }
+    # SCOOP
+    if (($SrcFilter -match "All|Scoop") -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        $RawS = scoop search "$Kw"; $RawList = $RawS -split "`r`n"
+        foreach ($Line in $RawList) {
+            if ($Line -match "^(\S+)\s+(\S+)\s+(\S+)") {
+               $Parts = $Line -split "\s+"; $Stat = "Chua cai"
+               if ($Parts -contains "*global*") { $Stat = "Da cai" }
+               if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Scoop", $Parts[0], $Parts[0], $Parts[1], $Stat) | Out-Null }
             }
-        } else {
-             # Nếu chọn All thì không báo lỗi, chỉ báo nếu chọn riêng Scoop
-             if ($SrcFilter -eq "Scoop") { $StatusLbl.Text = "Chua cai Scoop (Bam nut Fix de cai)" }
         }
     }
-    
-    $BtnSearch.Text="TIM KIEM"; 
-    if ($Grid.Rows.Count -eq 0) { $StatusLbl.Text = "Khong tim thay ket qua (Hoac chua cai moi truong)." }
-    else { $StatusLbl.Text="Tim thay $($Grid.Rows.Count) ket qua."; $BtnInstall.Enabled=$true }
+    $BtnSearch.Text="TIM KIEM"; $StatusLbl.Text="Tim thay $($Grid.Rows.Count) ket qua."; if ($Grid.Rows.Count -gt 0) { $BtnInstall.Enabled=$true }
 })
 
-# 3. Nút CÀI ĐẶT (Hàng loạt)
 $BtnInstall.Add_Click({
     $Tasks = @(); foreach ($Row in $Grid.Rows) { if ($Row.Cells[0].Value -eq $true) { $Tasks += @{ Src=$Row.Cells[1].Value; ID=$Row.Cells[3].Value; Name=$Row.Cells[2].Value } } }
     if ($Tasks.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon it nhat 1 app!", "Luu y"); return }
@@ -167,7 +193,6 @@ $BtnInstall.Add_Click({
     Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$Encoded"
 })
 
-# Context Menu
 $CtxMenu = New-Object System.Windows.Forms.ContextMenuStrip
 $Grid.ContextMenuStrip = $CtxMenu; $Grid.Add_CellMouseDown({ param($s, $e) if ($e.Button -eq 'Right' -and $e.RowIndex -ge 0) { $Grid.ClearSelection(); $Grid.Rows[$e.RowIndex].Selected = $true } })
 $CtxMenu.Items.Add("Copy ID").Add_Click({ if ($Grid.SelectedRows.Count -gt 0) { [System.Windows.Forms.Clipboard]::SetText($Grid.SelectedRows[0].Cells[3].Value) } })
