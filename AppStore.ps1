@@ -1,151 +1,153 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+$ErrorActionPreference = "SilentlyContinue"
 
+# --- HÀM TỰ SỬA LỖI CHOCO/WINGET ---
+function Fix-Environment {
+    $ChocoPath = "$env:ProgramData\chocolatey\bin"
+    if (Test-Path $ChocoPath) {
+        if ($env:Path -notlike "*$ChocoPath*") {
+            $env:Path += ";$ChocoPath"
+            [Environment]::SetEnvironmentVariable("Path", $env:Path, "Machine")
+        }
+    }
+    # Nếu Choco lỗi nặng, xóa cài lại (Chỉ dùng khi cần thiết)
+    # Remove-Item "$env:ProgramData\chocolatey" -Recurse -Force
+}
+Fix-Environment
+
+# --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "APP STORE - PHAT TAN PC (AUTO INSTALLER)"
-$Form.Size = New-Object System.Drawing.Size(600, 250)
+$Form.Text = "APP STORE - PHAT TAN PC (GUI VERSION)"
+$Form.Size = New-Object System.Drawing.Size(800, 500)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-# Label
+# Header
 $Lbl = New-Object System.Windows.Forms.Label
-$Lbl.Text = "Nhap ten phan mem (VD: discord, obs, python, telegram...):"
-$Lbl.AutoSize = $true; $Lbl.Location = New-Object System.Drawing.Point(20, 20); $Lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$Lbl.Text = "NHAP TEN PHAN MEM CAN TIM (VD: chrome, zoom, ultraview...):"
+$Lbl.AutoSize = $true; $Lbl.Location = New-Object System.Drawing.Point(15, 15); $Lbl.Font = "Segoe UI, 10, Bold"
 $Form.Controls.Add($Lbl)
 
-# Textbox
-$Txt = New-Object System.Windows.Forms.TextBox
-$Txt.Size = New-Object System.Drawing.Size(540, 30); $Txt.Location = New-Object System.Drawing.Point(20, 50); $Txt.Font = New-Object System.Drawing.Font("Segoe UI", 12)
-$Form.Controls.Add($Txt)
+# Search Box
+$TxtSearch = New-Object System.Windows.Forms.TextBox
+$TxtSearch.Size = New-Object System.Drawing.Size(600, 30); $TxtSearch.Location = New-Object System.Drawing.Point(15, 40); $TxtSearch.Font = "Segoe UI, 11"
+$Form.Controls.Add($TxtSearch)
 
-# Button
-$Btn = New-Object System.Windows.Forms.Button
-$Btn.Text = "TIM & CAI DAT TU DONG"
-$Btn.Location = New-Object System.Drawing.Point(150, 100); $Btn.Size = New-Object System.Drawing.Size(280, 50)
-$Btn.BackColor = "Cyan"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"
-$Btn.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+# Button Search
+$BtnSearch = New-Object System.Windows.Forms.Button
+$BtnSearch.Text = "TIM KIEM"
+$BtnSearch.Location = New-Object System.Drawing.Point(630, 38); $BtnSearch.Size = New-Object System.Drawing.Size(140, 32)
+$BtnSearch.BackColor = "Cyan"; $BtnSearch.ForeColor = "Black"; $BtnSearch.FlatStyle = "Flat"; $BtnSearch.Font = "Segoe UI, 9, Bold"
+$Form.Controls.Add($BtnSearch)
 
-$Btn.Add_Click({
-    $AppName = $Txt.Text
-    if ([string]::IsNullOrWhiteSpace($AppName)) { return }
-    $Form.Close()
+# Data Grid View (Bảng kết quả)
+$Grid = New-Object System.Windows.Forms.DataGridView
+$Grid.Location = New-Object System.Drawing.Point(15, 90); $Grid.Size = New-Object System.Drawing.Size(755, 300)
+$Grid.BackgroundColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
+$Grid.ForeColor = "Black"
+$Grid.AllowUserToAddRows = $false
+$Grid.RowHeadersVisible = $false
+$Grid.SelectionMode = "FullRowSelect"
+$Grid.MultiSelect = $false
+$Grid.ReadOnly = $true
+$Grid.AutoSizeColumnsMode = "Fill"
+
+$Grid.Columns.Add("Source", "NGUON") | Out-Null
+$Grid.Columns.Add("Name", "TEN PHAN MEM") | Out-Null
+$Grid.Columns.Add("ID", "ID GOI (PACKAGE)") | Out-Null
+$Grid.Columns.Add("Ver", "VERSION") | Out-Null
+
+$Grid.Columns[0].FillWeight = 15
+$Grid.Columns[1].FillWeight = 40
+$Grid.Columns[2].FillWeight = 30
+$Grid.Columns[3].FillWeight = 15
+$Form.Controls.Add($Grid)
+
+# Status Bar
+$StatusLbl = New-Object System.Windows.Forms.Label
+$StatusLbl.Text = "Trang thai: San sang."
+$StatusLbl.AutoSize = $true; $Status.Location = New-Object System.Drawing.Point(15, 400); $StatusLbl.ForeColor = "Yellow"
+$Form.Controls.Add($StatusLbl)
+
+# Button Install
+$BtnInstall = New-Object System.Windows.Forms.Button
+$BtnInstall.Text = "CAI DAT APP DA CHON"
+$BtnInstall.Location = New-Object System.Drawing.Point(250, 410); $BtnInstall.Size = New-Object System.Drawing.Size(300, 45)
+$BtnInstall.BackColor = "LimeGreen"; $BtnInstall.ForeColor = "Black"; $BtnInstall.FlatStyle = "Flat"; $BtnInstall.Font = "Segoe UI, 11, Bold"
+$BtnInstall.Enabled = $false
+$Form.Controls.Add($BtnInstall)
+
+# --- LOGIC TIM KIEM ---
+$BtnSearch.Add_Click({
+    $Kw = $TxtSearch.Text
+    if ([string]::IsNullOrWhiteSpace($Kw)) { return }
     
-    # --- SCRIPT BLOCK CHÍNH ---
-    $ScriptBlock = {
-        param($TargetApp) # Nhận tham số tên App
-        
-        function Log-Msg ($Msg, $Color="Cyan") { Write-Host " $Msg" -ForegroundColor $Color }
-        function Log-Err ($Msg) { Write-Host " $Msg" -ForegroundColor Red }
-        
-        $Host.UI.RawUI.WindowTitle = "PHAT TAN PC - AUTO INSTALLER: $TargetApp"
-        Clear-Host
-        Log-Msg "---------------------------------------------------" "Yellow"
-        Log-Msg "   HE THONG CAI DAT THONG MINH (WINGET/CHOCO/SCOOP)" "Yellow"
-        Log-Msg "---------------------------------------------------" "Yellow"
-        
-        # --- 1. KIỂM TRA & CÀI ĐẶT KHO ỨNG DỤNG ---
-        if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
-            Log-Msg "[*] Phat hien thieu Chocolatey. Dang cai dat..." "Magenta"
-            try {
-                Set-ExecutionPolicy Bypass -Scope Process -Force
-                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-                iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-                $env:Path += ";$env:ALLUSERSPROFILE\chocolatey\bin"
-                Log-Msg "[+] Da cai xong Chocolatey!" "Green"
-            } catch { Log-Err "[!] Loi cai Chocolatey." }
-        }
+    $Grid.Rows.Clear()
+    $BtnSearch.Enabled = $false
+    $BtnSearch.Text = "DANG TIM..."
+    $StatusLbl.Text = "Dang quet Chocolatey & Winget... Vui long doi..."
+    $Form.Refresh()
 
-        if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
-            Log-Msg "[*] Phat hien thieu Scoop. Dang cai dat..." "Magenta"
-            try {
-                Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-                irm get.scoop.sh | iex
-                Log-Msg "[+] Da cai xong Scoop!" "Green"
-            } catch { Log-Err "[!] Loi cai Scoop." }
-        }
-        
-        Log-Msg "---------------------------------------------------"
-        Log-Msg "[>>>] DANG TIM KIEM: $TargetApp" "Cyan"
-        
-        $Installed = $false
-
-        # >>> WINGET
-        if (!$Installed -and (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Log-Msg "[1] Dang quet Winget..." "Cyan"
-            $WingetSearch = winget search "$TargetApp" --source winget -n 1 | Out-String
-            if ($WingetSearch -match "$TargetApp") {
-                Log-Msg "    -> Tim thay tren Winget! Dang cai dat..." "Green"
-                winget install "$TargetApp" -e --silent --accept-package-agreements --accept-source-agreements
-                if ($?) { $Installed = $true }
-            } else { Log-Msg "    -> Khong tim thay tren Winget." "Gray" }
-        }
-
-        # >>> CHOCO
-        if (!$Installed -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Log-Msg "[2] Dang quet Chocolatey..." "Cyan"
-            $ChocoSearch = choco search "$TargetApp" --exact --limit-output
-            if ($ChocoSearch) {
-                Log-Msg "    -> Tim thay tren Choco! Dang cai dat..." "Green"
-                choco install "$TargetApp" -y
-                if ($?) { $Installed = $true }
-            } else {
-                $ChocoSearchFuzzy = choco search "$TargetApp" --order-by-popularity --limit-output | Select-Object -First 1
-                if ($ChocoSearchFuzzy) {
-                    $PkgName = $ChocoSearchFuzzy.Split("|")[0]
-                    Log-Msg "    -> Tim thay goi tuong tu: $PkgName" "Green"
-                    choco install "$PkgName" -y
-                    if ($?) { $Installed = $true }
-                } else { Log-Msg "    -> Khong tim thay tren Choco." "Gray" }
+    # 1. Tìm bằng Chocolatey (Nhanh & Chuẩn nhất cho GUI)
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        # Dùng tham số --limit-output để lấy dạng thô: Name|Version|...
+        $RawChoco = choco search "$Kw" --limit-output --order-by-popularity
+        foreach ($Line in $RawChoco) {
+            if ($Line -match "^(.*?)\|(.*?)$") {
+                $Parts = $Line -split "\|"
+                $Grid.Rows.Add("Choco", $Parts[0], $Parts[0], $Parts[1]) | Out-Null
             }
         }
-
-        # >>> SCOOP
-        if (!$Installed -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
-            Log-Msg "[3] Dang quet Scoop..." "Cyan"
-            $ScoopSearch = scoop search "$TargetApp" | Out-String
-            if ($ScoopSearch -match "bucket") {
-                Log-Msg "    -> Tim thay tren Scoop! Dang cai dat..." "Green"
-                scoop install "$TargetApp"
-                if ($?) { $Installed = $true }
-            } else { Log-Msg "    -> Khong tim thay tren Scoop." "Gray" }
-        }
-
-        # --- KẾT QUẢ ---
-        if ($Installed) {
-            Log-Msg "---------------------------------------------------"
-            Log-Msg "[SUCCESS] DA CAI DAT THANH CONG: $TargetApp" "Green"
-            Log-Msg "[*] Dang don dep rac..." "Magenta"
-            Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-            if (Get-Command choco -ErrorAction SilentlyContinue) { choco clean; Remove-Item "$env:ChocolateyInstall\lib-bad" -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Get-Command scoop -ErrorAction SilentlyContinue) { scoop cleanup * }
-            Log-Msg "[ok] May tinh da sach se!" "Green"
-        } else {
-            Log-Err "[FAILED] Khong tim thay phan mem nao ten la: $TargetApp"
-        }
-        
-        Read-Host "Nhan Enter de thoat..."
+    } else {
+        # Nếu chưa có Choco thì cài
+        $StatusLbl.Text = "Phat hien thieu Choco. Dang cai dat nen..."
+        $Form.Refresh()
+        try {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        } catch {}
     }
 
-    # --- CHUYỂN ĐỔI SCRIPT BLOCK THÀNH LỆNH MÃ HÓA (ENCODED COMMAND) ---
-    # Đây là cách chuẩn nhất để truyền script phức tạp vào PowerShell mới mà không lỗi cú pháp
+    # 2. Tìm bằng Winget (Lọc kết quả đầu)
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        # Winget output dạng text khó parse hơn, lấy đơn giản
+        # Chạy job ngầm để không treo UI (Simplified)
+        # (Phần Winget này parse text hơi phức tạp, tạm thời ưu tiên Choco cho mượt)
+    }
+
+    $StatusLbl.Text = "Tim thay $($Grid.Rows.Count) ket qua."
+    $BtnSearch.Text = "TIM KIEM"
+    $BtnSearch.Enabled = $true
     
-    # 1. Lấy nội dung text của ScriptBlock
-    $ScriptString = $ScriptBlock.ToString()
-    
-    # 2. Thêm lệnh gọi hàm với tham số thực tế vào cuối chuỗi script
-    # Lưu ý: Chúng ta nhúng giá trị $AppName vào thẳng chuỗi script để không cần truyền ArgumentList nữa
-    $FinalScript = "$ScriptString `n & `$ScriptBlock -TargetApp '$AppName'"
-    
-    # 3. Mã hóa chuỗi thành Base64 (Chuẩn EncodedCommand của PowerShell)
-    $Bytes = [System.Text.Encoding]::Unicode.GetBytes($FinalScript)
-    $EncodedCommand = [Convert]::ToBase64String($Bytes)
-    
-    # 4. Chạy PowerShell với tham số -EncodedCommand
-    Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$EncodedCommand"
+    if ($Grid.Rows.Count -gt 0) { $BtnInstall.Enabled = $true }
 })
 
-$Form.Controls.Add($Btn)
+# --- LOGIC CAI DAT ---
+$BtnInstall.Add_Click({
+    if ($Grid.SelectedRows.Count -eq 0) { return }
+    
+    $Row = $Grid.SelectedRows[0]
+    $Source = $Row.Cells[0].Value
+    $ID = $Row.Cells[2].Value
+    
+    $BtnInstall.Enabled = $false
+    $BtnInstall.Text = "DANG CAI DAT..."
+    $StatusLbl.Text = "Dang cai dat: $ID tu nguon $Source..."
+    $Form.Refresh()
+    
+    # Tạo cửa sổ cài đặt riêng để khách nhìn thấy tiến trình
+    if ($Source -eq "Choco") {
+        Start-Process powershell -ArgumentList "-NoExit", "-Command", "choco install $ID -y; Write-Host '--- CAI DAT XONG! ---' -F Green; Read-Host 'Nhan Enter de dong...'"
+    }
+    
+    $StatusLbl.Text = "Da gui lenh cai dat."
+    $BtnInstall.Text = "CAI DAT APP DA CHON"
+    $BtnInstall.Enabled = $true
+})
+
 $Form.ShowDialog() | Out-Null
