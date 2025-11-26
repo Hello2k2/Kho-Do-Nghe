@@ -33,14 +33,14 @@ $Btn.Add_Click({
     if ([string]::IsNullOrWhiteSpace($AppName)) { return }
     $Form.Close()
     
-    # --- SCRIPT LOGIC CHÍNH (Chuyển thành chuỗi để truyền vào CMD mới) ---
-    $ScriptContent = {
-        param($App)
+    # --- SCRIPT BLOCK CHÍNH ---
+    $ScriptBlock = {
+        param($TargetApp) # Nhận tham số tên App
         
         function Log-Msg ($Msg, $Color="Cyan") { Write-Host " $Msg" -ForegroundColor $Color }
         function Log-Err ($Msg) { Write-Host " $Msg" -ForegroundColor Red }
         
-        $Host.UI.RawUI.WindowTitle = "PHAT TAN PC - AUTO INSTALLER: $App"
+        $Host.UI.RawUI.WindowTitle = "PHAT TAN PC - AUTO INSTALLER: $TargetApp"
         Clear-Host
         Log-Msg "---------------------------------------------------" "Yellow"
         Log-Msg "   HE THONG CAI DAT THONG MINH (WINGET/CHOCO/SCOOP)" "Yellow"
@@ -68,17 +68,17 @@ $Btn.Add_Click({
         }
         
         Log-Msg "---------------------------------------------------"
-        Log-Msg "[>>>] DANG TIM KIEM: $App" "Cyan"
+        Log-Msg "[>>>] DANG TIM KIEM: $TargetApp" "Cyan"
         
         $Installed = $false
 
         # >>> WINGET
         if (!$Installed -and (Get-Command winget -ErrorAction SilentlyContinue)) {
             Log-Msg "[1] Dang quet Winget..." "Cyan"
-            $WingetSearch = winget search "$App" --source winget -n 1 | Out-String
-            if ($WingetSearch -match "$App") {
+            $WingetSearch = winget search "$TargetApp" --source winget -n 1 | Out-String
+            if ($WingetSearch -match "$TargetApp") {
                 Log-Msg "    -> Tim thay tren Winget! Dang cai dat..." "Green"
-                winget install "$App" -e --silent --accept-package-agreements --accept-source-agreements
+                winget install "$TargetApp" -e --silent --accept-package-agreements --accept-source-agreements
                 if ($?) { $Installed = $true }
             } else { Log-Msg "    -> Khong tim thay tren Winget." "Gray" }
         }
@@ -86,13 +86,13 @@ $Btn.Add_Click({
         # >>> CHOCO
         if (!$Installed -and (Get-Command choco -ErrorAction SilentlyContinue)) {
             Log-Msg "[2] Dang quet Chocolatey..." "Cyan"
-            $ChocoSearch = choco search "$App" --exact --limit-output
+            $ChocoSearch = choco search "$TargetApp" --exact --limit-output
             if ($ChocoSearch) {
                 Log-Msg "    -> Tim thay tren Choco! Dang cai dat..." "Green"
-                choco install "$App" -y
+                choco install "$TargetApp" -y
                 if ($?) { $Installed = $true }
             } else {
-                $ChocoSearchFuzzy = choco search "$App" --order-by-popularity --limit-output | Select-Object -First 1
+                $ChocoSearchFuzzy = choco search "$TargetApp" --order-by-popularity --limit-output | Select-Object -First 1
                 if ($ChocoSearchFuzzy) {
                     $PkgName = $ChocoSearchFuzzy.Split("|")[0]
                     Log-Msg "    -> Tim thay goi tuong tu: $PkgName" "Green"
@@ -105,10 +105,10 @@ $Btn.Add_Click({
         # >>> SCOOP
         if (!$Installed -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
             Log-Msg "[3] Dang quet Scoop..." "Cyan"
-            $ScoopSearch = scoop search "$App" | Out-String
+            $ScoopSearch = scoop search "$TargetApp" | Out-String
             if ($ScoopSearch -match "bucket") {
                 Log-Msg "    -> Tim thay tren Scoop! Dang cai dat..." "Green"
-                scoop install "$App"
+                scoop install "$TargetApp"
                 if ($?) { $Installed = $true }
             } else { Log-Msg "    -> Khong tim thay tren Scoop." "Gray" }
         }
@@ -116,25 +116,35 @@ $Btn.Add_Click({
         # --- KẾT QUẢ ---
         if ($Installed) {
             Log-Msg "---------------------------------------------------"
-            Log-Msg "[SUCCESS] DA CAI DAT THANH CONG: $App" "Green"
+            Log-Msg "[SUCCESS] DA CAI DAT THANH CONG: $TargetApp" "Green"
             Log-Msg "[*] Dang don dep rac..." "Magenta"
             Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
             if (Get-Command choco -ErrorAction SilentlyContinue) { choco clean; Remove-Item "$env:ChocolateyInstall\lib-bad" -Recurse -Force -ErrorAction SilentlyContinue }
             if (Get-Command scoop -ErrorAction SilentlyContinue) { scoop cleanup * }
             Log-Msg "[ok] May tinh da sach se!" "Green"
         } else {
-            Log-Err "[FAILED] Khong tim thay phan mem nao ten la: $App"
+            Log-Err "[FAILED] Khong tim thay phan mem nao ten la: $TargetApp"
         }
         
         Read-Host "Nhan Enter de thoat..."
     }
 
-    # Chuyển ScriptBlock thành chuỗi và gọi trong process mới
-    # Đây là cách FIX LỖI ArgumentList
-    $EncodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ScriptContent.ToString() + "`n" + "param(`$App)`n" + "`$App = '$AppName'"))
+    # --- CHUYỂN ĐỔI SCRIPT BLOCK THÀNH LỆNH MÃ HÓA (ENCODED COMMAND) ---
+    # Đây là cách chuẩn nhất để truyền script phức tạp vào PowerShell mới mà không lỗi cú pháp
     
-    # Chạy trực tiếp lệnh (cách đơn giản nhất để truyền biến)
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "& { $ScriptContent } -App '$AppName'"
+    # 1. Lấy nội dung text của ScriptBlock
+    $ScriptString = $ScriptBlock.ToString()
+    
+    # 2. Thêm lệnh gọi hàm với tham số thực tế vào cuối chuỗi script
+    # Lưu ý: Chúng ta nhúng giá trị $AppName vào thẳng chuỗi script để không cần truyền ArgumentList nữa
+    $FinalScript = "$ScriptString `n & `$ScriptBlock -TargetApp '$AppName'"
+    
+    # 3. Mã hóa chuỗi thành Base64 (Chuẩn EncodedCommand của PowerShell)
+    $Bytes = [System.Text.Encoding]::Unicode.GetBytes($FinalScript)
+    $EncodedCommand = [Convert]::ToBase64String($Bytes)
+    
+    # 4. Chạy PowerShell với tham số -EncodedCommand
+    Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$EncodedCommand"
 })
 
 $Form.Controls.Add($Btn)
