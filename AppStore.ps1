@@ -25,7 +25,7 @@ $Form.Controls.Add($Txt)
 $Btn = New-Object System.Windows.Forms.Button
 $Btn.Text = "TIM & CAI DAT TU DONG"
 $Btn.Location = New-Object System.Drawing.Point(150, 100); $Btn.Size = New-Object System.Drawing.Size(280, 50)
-$Btn.BackColor = "Cyan"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"; $Btn.Font = "Segoe UI, 10, Bold"
+$Btn.BackColor = "Cyan"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"; $Btn.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 
 $Btn.Add_Click({
     $AppName = $Txt.Text
