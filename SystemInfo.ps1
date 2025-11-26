@@ -1,13 +1,13 @@
 <#
     SYSTEM INFO PRO MAX - PHAT TAN PC
-    Version: 6.0 (Added Peripherals)
+    Version: 6.0 (Split Tabs + White Theme + Peripherals)
 #>
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- GUI SETUP ---
+# --- GUI SETUP (WHITE THEME) ---
 $Form = New-Object System.Windows.Forms.Form
 $Form.Text = "CHI TIET CAU HINH - PHAT TAN PC (V6.0)"
 $Form.Size = New-Object System.Drawing.Size(950, 650)
@@ -101,6 +101,8 @@ $LvCpu.Columns.Add("Thong So", 250); $LvCpu.Columns.Add("Gia Tri", 600)
 
 function Load-CpuRam {
     $LvCpu.Items.Clear()
+    
+    # CPU
     $CPU = Get-CimInstance Win32_Processor
     Add-Item $LvCpu "[VI XU LY - CPU]" $CPU.Name
     Add-Item $LvCpu "Socket" $CPU.SocketDesignation
@@ -108,18 +110,28 @@ function Load-CpuRam {
     Add-Item $LvCpu "So Luong (Threads)" $CPU.NumberOfLogicalProcessors
     Add-Item $LvCpu "Toc Do Co Ban" "$($CPU.MaxClockSpeed) MHz"
     Add-Item $LvCpu "Ao Hoa (Virtualization)" $(if($CPU.VirtualizationFirmwareEnabled){"Da Bat"}else{"Dang Tat"})
+    
     Add-Item $LvCpu "" ""
-    $Rams = Get-CimInstance Win32_PhysicalMemory; $TotalRAM = 0
+    
+    # RAM
+    $Rams = Get-CimInstance Win32_PhysicalMemory
+    $TotalRAM = 0
     Add-Item $LvCpu "[BO NHO TRONG - RAM]" "Chi tiet tung thanh:"
+    
     foreach ($R in $Rams) {
-        $SizeGB = [Math]::Round($R.Capacity / 1GB, 1); $TotalRAM += $R.Capacity
-        Add-Item $LvCpu "  + Slot $($R.DeviceLocator)" "$SizeGB GB - $($R.Speed) MHz - $($R.Manufacturer) ($($R.PartNumber))"
+        $SizeGB = [Math]::Round($R.Capacity / 1GB, 1)
+        $TotalRAM += $R.Capacity
+        $Speed = $R.Speed
+        $Maker = $R.Manufacturer
+        $Part = $R.PartNumber
+        $Loc = $R.DeviceLocator
+        Add-Item $LvCpu "  + Slot $Loc" "$SizeGB GB - $Speed MHz - $Maker ($Part)"
     }
     Add-Item $LvCpu "--- TONG CONG ---" "$([Math]::Round($TotalRAM / 1GB, 1)) GB"
 }
 
 # ==========================================
-# TAB 3: DISK
+# TAB 3: O CUNG (DISK)
 # ==========================================
 $TabDisk = Make-Tab "Luu Tru (Disk)"
 $GridDisk = Make-Grid $TabDisk
@@ -134,7 +146,7 @@ function Load-Storage {
 }
 
 # ==========================================
-# TAB 4: GPU
+# TAB 4: DO HOA (GPU)
 # ==========================================
 $TabGpu = Make-Tab "Card Man Hinh (GPU)"
 $LvGpu = Make-ListView $TabGpu
