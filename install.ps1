@@ -127,7 +127,14 @@ $B2 = New-Object System.Windows.Forms.Button; $B2.Text="BACKUP & RESTORE"; $B2.L
 $B3 = New-Object System.Windows.Forms.Button; $B3.Text="APP STORE (WINGET)"; $B3.Location=New-Object System.Drawing.Point(250,30); $B3.Size=New-Object System.Drawing.Size(200,40); $B3.BackColor="LightGreen"; $B3.ForeColor="Black"; $B3.Add_Click({ Load-Module "AppStore.ps1" }); $T4.Controls.Add($B3)
 $B4 = New-Object System.Windows.Forms.Button; $B4.Text="ISO DOWNLOADER"; $B4.Location=New-Object System.Drawing.Point(250,80); $B4.Size=New-Object System.Drawing.Size(200,40); $B4.BackColor="Yellow"; $B4.ForeColor="Black"; $B4.Add_Click({ Load-Module "ISODownloader.ps1" }); $T4.Controls.Add($B4)
 $B5 = New-Object System.Windows.Forms.Button; $B5.Text="DATA RECOVERY (TOOL)"; $B5.Location=New-Object System.Drawing.Point(30,130); $B5.Size=New-Object System.Drawing.Size(200,40); $B5.BackColor="Red"; $B5.ForeColor="White"; $B5.Add_Click({ Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }); $T4.Controls.Add($B5)
-
+$B6 = New-Object System.Windows.Forms.Button
+$B6.Text = "CHECK THONG TIN MAY & DRIVER"
+$B6.Location = New-Object System.Drawing.Point(250, 130)
+$B6.Size = New-Object System.Drawing.Size(200, 40)
+$B6.BackColor = "Purple"
+$B6.ForeColor = "White"
+$B6.Add_Click({ Load-Module "SystemInfo.ps1" })
+$T4.Controls.Add($B6)
 # Buttons Bottom
 $BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = New-Object System.Drawing.Point(20, 470); $BtnSelectAll.Size = New-Object System.Drawing.Size(80, 30); $BtnSelectAll.BackColor = "Gray"; $BtnSelectAll.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $true } } } }); $Form.Controls.Add($BtnSelectAll)
 $BtnUncheck = New-Object System.Windows.Forms.Button; $BtnUncheck.Text = "Bo Chon"; $BtnUncheck.Location = New-Object System.Drawing.Point(110, 470); $BtnUncheck.Size = New-Object System.Drawing.Size(80, 30); $BtnUncheck.BackColor = "Gray"; $BtnUncheck.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $false } } } }); $Form.Controls.Add($BtnUncheck)
