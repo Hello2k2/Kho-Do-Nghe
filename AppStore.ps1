@@ -1,10 +1,20 @@
+# --- TU DONG YEU CAU QUYEN ADMIN ---
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    Exit
+}
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- HÀM CÀI ĐẶT MÔI TRƯỜNG (Silent & Auto) ---
-function Auto-Fix-Environment {
-    # 1. WINGET (Offline)
+# --- HÀM CÀI ĐẶT MÔI TRƯỜNG ---
+function Install-Environment {
+    param($StatusLabel, $Form)
+    $StatusLabel.Text = "Dang xu ly moi truong..."
+    $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
+    
+    # WINGET (Offline)
     if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
         try {
             $Url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
@@ -13,29 +23,27 @@ function Auto-Fix-Environment {
             Add-AppxPackage -Path $Path; Remove-Item $Path -Force
         } catch {}
     }
-    # 2. CHOCOLATEY
+    # CHOCOLATEY
     if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
         try {
             Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
             iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-            # Refresh Path ngay lập tức
             $env:Path += ";$env:ProgramData\chocolatey\bin"
         } catch {}
     }
-    # 3. SCOOP
+    # SCOOP (User Scope nhung chay Admin van OK)
     if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
         try {
             Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-            irm get.scoop.sh | iex
-            # Refresh Path ngay lập tức
-            $env:Path += ";$env:USERPROFILE\scoop\shims"
+            irm get.scoop.sh | iex; $env:Path += ";$env:USERPROFILE\scoop\shims"
         } catch {}
     }
+    $StatusLabel.Text = "Moi truong OK!"; $StatusLabel.ForeColor = "Lime"
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "APP STORE - PHAT TAN PC (V7.1 FIXED)"
+$Form.Text = "APP STORE - PHAT TAN PC (V7.0 PRO ADMIN)"
 $Form.Size = New-Object System.Drawing.Size(1000, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -59,15 +67,12 @@ $BtnFix = New-Object System.Windows.Forms.Button; $BtnFix.Text="FIX MOI TRUONG";
 # DataGridView
 $Grid = New-Object System.Windows.Forms.DataGridView
 $Grid.Location = "15,90"; $Grid.Size = "950,380"; $Grid.BackgroundColor = [System.Drawing.Color]::FromArgb(40,40,40); $Grid.ForeColor="Black"
-$Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.ReadOnly=$false
+$Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.ReadOnly=$false 
 $Grid.AutoSizeColumnsMode="Fill"
 
-# --- FIX CỘT CHECKBOX (Chiều rộng cố định) ---
-$ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name="Select"; $ColChk.HeaderText="[X]"; 
-$ColChk.Width = 30; $ColChk.AutoSizeMode = "None"; # <--- FIX Ở ĐÂY (Không cho Fill)
-$Grid.Columns.Add($ColChk) | Out-Null
-
-# Các cột khác (Vẫn Fill)
+# Cột Checkbox
+$ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name="Select"; $ColChk.HeaderText="[X]"; $ColChk.Width=40; $ColChk.AutoSizeMode="None"; $Grid.Columns.Add($ColChk) | Out-Null
+# Các cột khác
 $Grid.Columns.Add("Source", "NGUON"); $Grid.Columns["Source"].ReadOnly=$true; $Grid.Columns["Source"].FillWeight=15
 $Grid.Columns.Add("Name", "TEN PHAN MEM"); $Grid.Columns["Name"].ReadOnly=$true; $Grid.Columns["Name"].FillWeight=35
 $Grid.Columns.Add("ID", "ID GOI"); $Grid.Columns["ID"].ReadOnly=$true; $Grid.Columns["ID"].FillWeight=25
@@ -87,19 +92,11 @@ $MenuCopyID = $CtxMenu.Items.Add("Copy ID")
 
 # --- LOGIC ---
 
-$BtnFix.Add_Click({ $BtnFix.Enabled=$false; Auto-Fix-Environment; $StatusLbl.Text="Moi truong OK!"; $BtnFix.Enabled=$true; [System.Windows.Forms.MessageBox]::Show("Da Fix Moi Truong!", "Phat Tan PC") })
+$BtnFix.Add_Click({ $BtnFix.Enabled=$false; Install-Environment $StatusLbl $Form; $BtnFix.Enabled=$true })
 
-# Logic Tìm Kiếm (Có Auto Fix)
+# Logic Tìm Kiếm
 $BtnSearch.Add_Click({
     $Kw = $TxtSearch.Text; if (!$Kw) { return }
-    
-    # Tự động kiểm tra và cài đặt môi trường nếu thiếu (Auto Fix)
-    if (!(Get-Command choco -ErrorAction SilentlyContinue) -or !(Get-Command scoop -ErrorAction SilentlyContinue)) {
-        $StatusLbl.Text = "Phat hien thieu cong cu. Dang tu dong cai dat..."
-        $Form.Refresh()
-        Auto-Fix-Environment
-    }
-
     $Grid.Rows.Clear(); $BtnSearch.Text="..."; $StatusLbl.Text="Dang tim..."; $Form.Refresh()
     
     $SrcFilter = $CbSource.SelectedItem
@@ -150,8 +147,12 @@ $BtnInstall.Add_Click({
 
     $ScriptBody = "param(`$ListApps)`n`$Host.UI.RawUI.WindowTitle = 'PHAT TAN PC - BATCH INSTALLER'`n"
     $ScriptBody += "function Log(`$m) { Write-Host `"`$m`" -F Cyan }`n"
+    
     foreach ($Task in $Tasks) {
-        $Cmd = ""; if ($Task.Src -eq "Choco") { $Cmd = "choco install $($Task.ID) -y" } elseif ($Task.Src -eq "Scoop") { $Cmd = "scoop install $($Task.ID)" }
+        $Cmd = ""
+        if ($Task.Src -eq "Choco") { $Cmd = "choco install $($Task.ID) -y" }
+        elseif ($Task.Src -eq "Scoop") { $Cmd = "scoop install $($Task.ID)" }
+        
         $ScriptBody += "Log '>>> Dang cai dat: $($Task.Name)'; $Cmd; Log '--- XONG ---'; Start-Sleep -s 2;`n"
     }
     $ScriptBody += "Write-Host 'DA CAI XONG TAT CA!' -F Green; Read-Host 'An Enter de thoat...'"
@@ -161,7 +162,7 @@ $BtnInstall.Add_Click({
     Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$Encoded"
 })
 
-# Context Menu Logic
+# Logic Context Menu
 $Grid.ContextMenuStrip = $CtxMenu
 $Grid.Add_CellMouseDown({ param($s, $e) if ($e.Button -eq 'Right' -and $e.RowIndex -ge 0) { $Grid.ClearSelection(); $Grid.Rows[$e.RowIndex].Selected = $true } })
 $MenuCopyID.Add_Click({ if ($Grid.SelectedRows.Count -gt 0) { [System.Windows.Forms.Clipboard]::SetText($Grid.SelectedRows[0].Cells[3].Value) } })
