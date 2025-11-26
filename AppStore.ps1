@@ -1,54 +1,83 @@
-# --- TU DONG YEU CAU QUYEN ADMIN ---
+# --- 1. TU DONG YEU CAU QUYEN ADMIN (BAT BUOC) ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     Exit
 }
 
+# --- KHỞI TẠO ---
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- HÀM CÀI ĐẶT MÔI TRƯỜNG ---
+# --- 2. HÀM CÀI ĐẶT MÔI TRƯỜNG (Fix All) ---
 function Install-Environment {
     param($StatusLabel, $Form)
-    $StatusLabel.Text = "Dang xu ly moi truong..."
-    $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
     
-    # WINGET (Offline)
-    if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-        try {
-            $Url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-            $Path = "$env:TEMP\winget.msixbundle"
-            (New-Object System.Net.WebClient).DownloadFile($Url, $Path)
-            Add-AppxPackage -Path $Path; Remove-Item $Path -Force
-        } catch {}
-    }
-    # CHOCOLATEY
+    # Cấu hình bảo mật để tải file
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    
+    # --- A. CHOCOLATEY ---
     if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
+        $StatusLabel.Text = "Dang cai Chocolatey..."
+        $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
         try {
-            Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-            $env:Path += ";$env:ProgramData\chocolatey\bin"
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            $ChocoScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+            Invoke-Expression $ChocoScript
+            $env:Path += ";$env:ProgramData\chocolatey\bin" # Refresh Path
         } catch {}
     }
-    # SCOOP (User Scope nhung chay Admin van OK)
+
+    # --- B. SCOOP ---
     if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
+        $StatusLabel.Text = "Dang cai Scoop..."
+        $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
         try {
             Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-            irm get.scoop.sh | iex; $env:Path += ";$env:USERPROFILE\scoop\shims"
+            Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+            $env:Path += ";$env:USERPROFILE\scoop\shims" # Refresh Path
         } catch {}
     }
-    $StatusLabel.Text = "Moi truong OK!"; $StatusLabel.ForeColor = "Lime"
+
+    # --- C. WINGET (OFFLINE INSTALL) ---
+    if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+        $StatusLabel.Text = "Dang tai & cai Winget (Offline)..."
+        $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
+        try {
+            $WorkDir = "$env:TEMP\Winget_Install"
+            New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+            
+            # 1. Tải UI.Xaml (Dependency)
+            $UrlXaml = "https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx"
+            (New-Object Net.WebClient).DownloadFile($UrlXaml, "$WorkDir\UI.Xaml.appx")
+            Add-AppxPackage -Path "$WorkDir\UI.Xaml.appx"
+
+            # 2. Tải VCLibs (Dependency)
+            $UrlVCLibs = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
+            (New-Object Net.WebClient).DownloadFile($UrlVCLibs, "$WorkDir\VCLibs.appx")
+            Add-AppxPackage -Path "$WorkDir\VCLibs.appx"
+
+            # 3. Tải Winget Core
+            $UrlWinget = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+            (New-Object Net.WebClient).DownloadFile($UrlWinget, "$WorkDir\Winget.msixbundle")
+            Add-AppxPackage -Path "$WorkDir\Winget.msixbundle"
+            
+            Remove-Item $WorkDir -Recurse -Force
+        } catch {}
+    }
+    
+    $StatusLabel.Text = "Moi truong da san sang! (Winget/Choco/Scoop)"
+    $StatusLabel.ForeColor = "Lime"
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "APP STORE - PHAT TAN PC (V7.0 PRO ADMIN)"
+$Form.Text = "APP STORE - PHAT TAN PC (ADMIN MODE)"
 $Form.Size = New-Object System.Drawing.Size(1000, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
 
-# Header Controls
+# Header
 $Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "TEN PHAN MEM:"; $Lbl.Location = "15,15"; $Lbl.AutoSize=$true; $Form.Controls.Add($Lbl)
 $TxtSearch = New-Object System.Windows.Forms.TextBox; $TxtSearch.Size = "350,30"; $TxtSearch.Location = "15,40"; $TxtSearch.Font="Segoe UI, 11"; $Form.Controls.Add($TxtSearch)
 
@@ -64,15 +93,14 @@ $CbStatus.Items.AddRange(@("Trang thai: All", "Chua cai", "Da cai")); $CbStatus.
 $BtnSearch = New-Object System.Windows.Forms.Button; $BtnSearch.Text="TIM KIEM"; $BtnSearch.Location="640,38"; $BtnSearch.Size="100,32"; $BtnSearch.BackColor="Cyan"; $BtnSearch.ForeColor="Black"; $Form.Controls.Add($BtnSearch)
 $BtnFix = New-Object System.Windows.Forms.Button; $BtnFix.Text="FIX MOI TRUONG"; $BtnFix.Location="750,38"; $BtnFix.Size="150,32"; $BtnFix.BackColor="Orange"; $BtnFix.ForeColor="Black"; $Form.Controls.Add($BtnFix)
 
-# DataGridView
+# Grid
 $Grid = New-Object System.Windows.Forms.DataGridView
 $Grid.Location = "15,90"; $Grid.Size = "950,380"; $Grid.BackgroundColor = [System.Drawing.Color]::FromArgb(40,40,40); $Grid.ForeColor="Black"
-$Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.ReadOnly=$false 
+$Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.ReadOnly=$false
 $Grid.AutoSizeColumnsMode="Fill"
 
-# Cột Checkbox
+# Columns
 $ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name="Select"; $ColChk.HeaderText="[X]"; $ColChk.Width=40; $ColChk.AutoSizeMode="None"; $Grid.Columns.Add($ColChk) | Out-Null
-# Các cột khác
 $Grid.Columns.Add("Source", "NGUON"); $Grid.Columns["Source"].ReadOnly=$true; $Grid.Columns["Source"].FillWeight=15
 $Grid.Columns.Add("Name", "TEN PHAN MEM"); $Grid.Columns["Name"].ReadOnly=$true; $Grid.Columns["Name"].FillWeight=35
 $Grid.Columns.Add("ID", "ID GOI"); $Grid.Columns["ID"].ReadOnly=$true; $Grid.Columns["ID"].FillWeight=25
@@ -86,87 +114,66 @@ $StatusLbl = New-Object System.Windows.Forms.Label; $StatusLbl.Text="San sang.";
 
 # --- CONTEXT MENU ---
 $CtxMenu = New-Object System.Windows.Forms.ContextMenuStrip
-$MenuInstallVer = $CtxMenu.Items.Add("Cai dat phien ban cu the (Version)...")
-$MenuUninstall = $CtxMenu.Items.Add("Go cai dat (Uninstall)")
+$MenuInstallVer = $CtxMenu.Items.Add("Cai dat phien ban cu the...")
+$MenuUninstall = $CtxMenu.Items.Add("Go cai dat")
 $MenuCopyID = $CtxMenu.Items.Add("Copy ID")
 
 # --- LOGIC ---
+$BtnFix.Add_Click({ 
+    $BtnFix.Enabled=$false
+    Install-Environment $StatusLbl $Form
+    $BtnFix.Enabled=$true
+    [System.Windows.Forms.MessageBox]::Show("Da cai xong Winget, Choco, Scoop!", "Phat Tan PC") 
+})
 
-$BtnFix.Add_Click({ $BtnFix.Enabled=$false; Install-Environment $StatusLbl $Form; $BtnFix.Enabled=$true })
-
-# Logic Tìm Kiếm
 $BtnSearch.Add_Click({
     $Kw = $TxtSearch.Text; if (!$Kw) { return }
     $Grid.Rows.Clear(); $BtnSearch.Text="..."; $StatusLbl.Text="Dang tim..."; $Form.Refresh()
-    
-    $SrcFilter = $CbSource.SelectedItem
-    $StatFilter = $CbStatus.SelectedItem
+    $SrcFilter = $CbSource.SelectedItem; $StatFilter = $CbStatus.SelectedItem
 
-    # 1. Choco Search
+    # 1. CHOCO
     if (($SrcFilter -match "All|Choco") -and (Get-Command choco -ErrorAction SilentlyContinue)) {
         $Raw = choco search "$Kw" --limit-output --order-by-popularity
         foreach ($L in $Raw) {
             if ($L -match "^(.*?)\|(.*?)$") { 
                 $P = $L -split "\|"; $Stat = "Chua cai"
                 if (Test-Path "$env:ChocolateyInstall\lib\$($P[0])") { $Stat = "Da cai" }
-                if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) {
-                    $Grid.Rows.Add($false, "Choco", $P[0], $P[0], $P[1], $Stat) | Out-Null
-                }
+                if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Choco", $P[0], $P[0], $P[1], $Stat) | Out-Null }
             }
         }
     }
-
-    # 2. Scoop Search
+    # 2. SCOOP
     if (($SrcFilter -match "All|Scoop") -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
         $RawS = scoop search "$Kw"; $RawList = $RawS -split "`r`n"
         foreach ($Line in $RawList) {
             if ($Line -match "^(\S+)\s+(\S+)\s+(\S+)") {
                $Parts = $Line -split "\s+"; $Stat = "Chua cai"
                if ($Parts -contains "*global*") { $Stat = "Da cai" }
-               if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) {
-                   $Grid.Rows.Add($false, "Scoop", $Parts[0], $Parts[0], $Parts[1], $Stat) | Out-Null
-               }
+               if ($StatFilter -eq "Trang thai: All" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Scoop", $Parts[0], $Parts[0], $Parts[1], $Stat) | Out-Null }
             }
         }
     }
-    
-    $BtnSearch.Text="TIM KIEM"; $StatusLbl.Text="Tim thay $($Grid.Rows.Count) ket qua."; 
-    if ($Grid.Rows.Count -gt 0) { $BtnInstall.Enabled=$true }
+    $BtnSearch.Text="TIM KIEM"; $StatusLbl.Text="Tim thay $($Grid.Rows.Count) ket qua."; if ($Grid.Rows.Count -gt 0) { $BtnInstall.Enabled=$true }
 })
 
-# Logic Cài Đặt (Hàng Loạt)
 $BtnInstall.Add_Click({
-    $Tasks = @()
-    foreach ($Row in $Grid.Rows) {
-        if ($Row.Cells[0].Value -eq $true) {
-            $Tasks += @{ Src=$Row.Cells[1].Value; ID=$Row.Cells[3].Value; Name=$Row.Cells[2].Value }
-        }
-    }
+    $Tasks = @(); foreach ($Row in $Grid.Rows) { if ($Row.Cells[0].Value -eq $true) { $Tasks += @{ Src=$Row.Cells[1].Value; ID=$Row.Cells[3].Value; Name=$Row.Cells[2].Value } } }
+    if ($Tasks.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon it nhat 1 app!", "Luu y"); return }
     
-    if ($Tasks.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui long tich chon it nhat 1 phan mem!", "Luu y"); return }
-
-    $ScriptBody = "param(`$ListApps)`n`$Host.UI.RawUI.WindowTitle = 'PHAT TAN PC - BATCH INSTALLER'`n"
-    $ScriptBody += "function Log(`$m) { Write-Host `"`$m`" -F Cyan }`n"
-    
+    $ScriptBody = "param(`$ListApps)`n`$Host.UI.RawUI.WindowTitle = 'PHAT TAN PC - BATCH INSTALLER'`nfunction Log(`$m) { Write-Host `"`$m`" -F Cyan }`n"
     foreach ($Task in $Tasks) {
-        $Cmd = ""
-        if ($Task.Src -eq "Choco") { $Cmd = "choco install $($Task.ID) -y" }
-        elseif ($Task.Src -eq "Scoop") { $Cmd = "scoop install $($Task.ID)" }
-        
+        $Cmd = ""; if ($Task.Src -eq "Choco") { $Cmd = "choco install $($Task.ID) -y" } elseif ($Task.Src -eq "Scoop") { $Cmd = "scoop install $($Task.ID)" }
         $ScriptBody += "Log '>>> Dang cai dat: $($Task.Name)'; $Cmd; Log '--- XONG ---'; Start-Sleep -s 2;`n"
     }
     $ScriptBody += "Write-Host 'DA CAI XONG TAT CA!' -F Green; Read-Host 'An Enter de thoat...'"
-
-    $Bytes = [System.Text.Encoding]::Unicode.GetBytes($ScriptBody)
-    $Encoded = [Convert]::ToBase64String($Bytes)
+    $Bytes = [System.Text.Encoding]::Unicode.GetBytes($ScriptBody); $Encoded = [Convert]::ToBase64String($Bytes)
     Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$Encoded"
 })
 
-# Logic Context Menu
+# Context Menu Logic
 $Grid.ContextMenuStrip = $CtxMenu
 $Grid.Add_CellMouseDown({ param($s, $e) if ($e.Button -eq 'Right' -and $e.RowIndex -ge 0) { $Grid.ClearSelection(); $Grid.Rows[$e.RowIndex].Selected = $true } })
 $MenuCopyID.Add_Click({ if ($Grid.SelectedRows.Count -gt 0) { [System.Windows.Forms.Clipboard]::SetText($Grid.SelectedRows[0].Cells[3].Value) } })
-$MenuInstallVer.Add_Click({ if ($Grid.SelectedRows.Count -eq 0) { return }; $Row = $Grid.SelectedRows[0]; $ID = $Row.Cells[3].Value; $Src = $Row.Cells[1].Value; $Ver = [Microsoft.VisualBasic.Interaction]::InputBox("Nhap phien ban muon cai (VD: 1.0.0):", "Version Select", ""); if ($Ver) { $Cmd = ""; if ($Src -eq "Choco") { $Cmd = "choco install $ID --version $Ver -y" }; if ($Cmd) { Start-Process powershell -ArgumentList "-NoExit", "-Command", "$Cmd; Read-Host" } } })
 $MenuUninstall.Add_Click({ if ($Grid.SelectedRows.Count -eq 0) { return }; $Row = $Grid.SelectedRows[0]; $ID = $Row.Cells[3].Value; $Src = $Row.Cells[1].Value; $Cmd = ""; if ($Src -eq "Choco") { $Cmd = "choco uninstall $ID -y" } elseif ($Src -eq "Scoop") { $Cmd = "scoop uninstall $ID" }; if ($Cmd) { Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'DANG GO CAI DAT: $ID' -F Red; $Cmd; Read-Host 'Xong...'" } })
 
 Add-Type -AssemblyName Microsoft.VisualBasic
