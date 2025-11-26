@@ -6,44 +6,67 @@ $ErrorActionPreference = "SilentlyContinue"
 function Install-Environment {
     param($StatusLabel)
     
-    $StatusLabel.Text = "Dang xu ly..."
+    $StatusLabel.Text = "Dang kiem tra moi truong..."
     $StatusLabel.ForeColor = "Yellow"
     $Form.Refresh()
     
-    # 1. WINGET (Cài thủ công từ GitHub MS - Không cần Store)
-    if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-        $StatusLabel.Text = "Dang tai & cai Winget (MSIX)..."
-        $Form.Refresh()
-        try {
-            $WingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-            $SavePath = "$env:TEMP\winget.msixbundle"
-            (New-Object System.Net.WebClient).DownloadFile($WingetUrl, $SavePath)
-            Add-AppxPackage -Path $SavePath
-            Remove-Item $SavePath -Force
-        } catch {}
-    }
-
-    # 2. CHOCOLATEY
+    # 1. XU LY CHOCOLATEY
     if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
         $StatusLabel.Text = "Dang cai Chocolatey..."
         $Form.Refresh()
         try {
             Set-ExecutionPolicy Bypass -Scope Process -Force
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+            $ChocoScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+            Invoke-Expression $ChocoScript
             $env:Path += ";$env:ProgramData\chocolatey\bin"
         } catch {}
     }
 
-    # 3. SCOOP
+    # 2. XU LY SCOOP
     if (!(Get-Command scoop -ErrorAction SilentlyContinue)) {
         $StatusLabel.Text = "Dang cai Scoop..."
         $Form.Refresh()
         try {
             Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-            irm get.scoop.sh | iex
+            Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
             $env:Path += ";$env:USERPROFILE\scoop\shims"
         } catch {}
+    }
+
+    # 3. XU LY WINGET (Fix cho LTSC/Lite - Cài full dependencies)
+    if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+        $StatusLabel.Text = "Dang tai & cai Winget (LTSC Mode)..."
+        $Form.Refresh()
+        try {
+            $WebClient = New-Object System.Net.WebClient
+            
+            # Tạo thư mục tạm
+            $WGDir = "$env:TEMP\Winget_Install"
+            if (!(Test-Path $WGDir)) { New-Item -ItemType Directory -Path $WGDir | Out-Null }
+
+            # Link tải các gói cần thiết (Lấy từ GitHub Microsoft)
+            # 1. UI.Xaml (Dependency)
+            $UrlXaml = "https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx"
+            $WebClient.DownloadFile($UrlXaml, "$WGDir\UI.Xaml.appx")
+            Add-AppxPackage -Path "$WGDir\UI.Xaml.appx"
+
+            # 2. VCLibs (Dependency)
+            $UrlVCLibs = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
+            $WebClient.DownloadFile($UrlVCLibs, "$WGDir\VCLibs.appx")
+            Add-AppxPackage -Path "$WGDir\VCLibs.appx"
+
+            # 3. Desktop App Installer (Winget Core)
+            $UrlWinget = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+            $WebClient.DownloadFile($UrlWinget, "$WGDir\Winget.msixbundle")
+            Add-AppxPackage -Path "$WGDir\Winget.msixbundle"
+
+            # Dọn dẹp
+            Remove-Item $WGDir -Recurse -Force
+            
+        } catch {
+             # Nếu lỗi thì bỏ qua, dùng Choco thay thế
+        }
     }
     
     $StatusLabel.Text = "Moi truong da san sang! Hay tim kiem."
@@ -52,7 +75,7 @@ function Install-Environment {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "APP STORE - PHAT TAN PC (V6.0)"
+$Form.Text = "APP STORE - PHAT TAN PC (LTSC SUPPORT)"
 $Form.Size = New-Object System.Drawing.Size(850, 580)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -71,7 +94,7 @@ $TxtSearch = New-Object System.Windows.Forms.TextBox
 $TxtSearch.Size = New-Object System.Drawing.Size(400, 30); $TxtSearch.Location = New-Object System.Drawing.Point(15, 40); $TxtSearch.Font = New-Object System.Drawing.Font("Segoe UI", 11)
 $Form.Controls.Add($TxtSearch)
 
-# Filter ComboBox (Bộ lọc nguồn)
+# Filter ComboBox
 $CbSource = New-Object System.Windows.Forms.ComboBox
 $CbSource.Location = New-Object System.Drawing.Point(425, 40); $CbSource.Size = New-Object System.Drawing.Size(120, 30); $CbSource.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $CbSource.DropDownStyle = "DropDownList"
@@ -122,12 +145,11 @@ $BtnInstall.Enabled = $false
 $Form.Controls.Add($BtnInstall)
 
 # --- SỰ KIỆN ---
-
 $BtnFix.Add_Click({
     $BtnFix.Enabled = $false
     Install-Environment -StatusLabel $LblStatus
     $BtnFix.Enabled = $true
-    [System.Windows.Forms.MessageBox]::Show("Da kiem tra va cai dat xong moi truong!", "Phat Tan PC")
+    [System.Windows.Forms.MessageBox]::Show("Da cai dat xong moi truong! Hay thu tim kiem.", "Phat Tan PC")
 })
 
 $BtnSearch.Add_Click({
@@ -140,7 +162,7 @@ $BtnSearch.Add_Click({
     $LblStatus.Text = "Dang tim kiem tren: $SourceFilter ..."
     $Form.Refresh()
 
-    # 1. CHOCOLATEY
+    # 1. CHOCOLATEY (Luôn ưu tiên vì dễ dùng nhất trên LTSC)
     if (($SourceFilter -like "*Tat ca*" -or $SourceFilter -like "*Chocolatey*") -and (Get-Command choco -ErrorAction SilentlyContinue)) {
         $Raw = choco search "$Kw" --limit-output --order-by-popularity
         foreach ($L in $Raw) {
@@ -148,21 +170,15 @@ $BtnSearch.Add_Click({
         }
     }
     
-    # 2. WINGET (Parse text co ban)
+    # 2. WINGET
     if (($SourceFilter -like "*Tat ca*" -or $SourceFilter -like "*Winget*") -and (Get-Command winget -ErrorAction SilentlyContinue)) {
-        # Winget search tra ve text table, ta lay don gian ID va Name
-        # (Code nay parse don gian, lay 5 ket qua dau de tranh lag)
-        # Logic: Winget rat kho parse trong PS 5.1 neu khong dung JSON module, nen ta bo qua hien thi chi tiet
-        # Chi hien thi thong bao neu muon dung Winget thi nen dung che do cai thu cong
+        # Logic Winget đơn giản hóa để tránh lỗi trên PS cũ
     }
 
     # 3. SCOOP
     if (($SourceFilter -like "*Tat ca*" -or $SourceFilter -like "*Scoop*") -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
-        $RawS = scoop search "$Kw" 
-        # Parse Scoop output (Don gian)
-        if ($RawS -match "bucket") {
-             $Grid.Rows.Add("Scoop", "$Kw (Scoop)", "$Kw", "Latest")
-        }
+        $RawS = scoop search "$Kw"
+        if ($RawS -match "bucket") { $Grid.Rows.Add("Scoop", "$Kw (Scoop)", "$Kw", "Latest") }
     }
 
     $LblStatus.Text = "Tim thay $($Grid.Rows.Count) ket qua."
@@ -174,6 +190,7 @@ $BtnInstall.Add_Click({
     if ($Grid.SelectedRows.Count -eq 0) { return }
     $Row = $Grid.SelectedRows[0]
     $Src = $Row.Cells[0].Value; $ID = $Row.Cells[2].Value
+    $AppName = $Row.Cells[1].Value # Lấy tên App để truyền vào
     
     $BtnInstall.Enabled = $false; $BtnInstall.Text = "DANG CAI..."
     
@@ -184,8 +201,21 @@ $BtnInstall.Add_Click({
     elseif ($Src -eq "Winget") { $Cmd = "winget install $ID -e --accept-package-agreements --accept-source-agreements" }
     
     if ($Cmd -ne "") {
-        # Fix lỗi ArgumentList bằng cách dùng EncodedCommand hoặc gọi trực tiếp
-        Start-Process powershell -ArgumentList "-NoExit", "-Command", "& { Write-Host 'DANG CAI DAT: $ID' -F Cyan; $Cmd; Write-Host '--- XONG! ---' -F Green; Read-Host 'Enter de dong...' }"
+        # SCRIPT BLOCK ĐỂ CHẠY TIẾN TRÌNH MỚI (Fix lỗi ArgumentList)
+        $ScriptContent = {
+            param($TargetCmd, $TargetName)
+            $Host.UI.RawUI.WindowTitle = "PHAT TAN PC - INSTALLER: $TargetName"
+            Write-Host "Dang cai dat: $TargetName" -ForegroundColor Cyan
+            Invoke-Expression $TargetCmd
+            Write-Host "--- XONG! Nhan Enter de dong... ---" -ForegroundColor Green
+            Read-Host
+        }
+        
+        # Mã hóa Script Block
+        $Encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ScriptContent.ToString() + "`n" + "& `$ScriptBlock -TargetCmd '$Cmd' -TargetName '$AppName'"))
+        
+        # Chạy
+        Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$Encoded"
     }
     
     $BtnInstall.Enabled = $true; $BtnInstall.Text = "CAI DAT APP DA CHON"
