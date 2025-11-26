@@ -43,7 +43,6 @@ $Form.Controls.Add($Combo)
 
 $Bar = New-Object System.Windows.Forms.ProgressBar
 $Bar.Location = New-Object System.Drawing.Point(20, 180); $Bar.Size = New-Object System.Drawing.Size(590, 30)
-$Bar.Style = "Blocks"
 $Form.Controls.Add($Bar)
 
 $Status = New-Object System.Windows.Forms.Label
@@ -52,7 +51,7 @@ $Status.AutoSize = $true; $Status.Location = New-Object System.Drawing.Point(20,
 $Form.Controls.Add($Status)
 
 $Btn = New-Object System.Windows.Forms.Button
-$Btn.Text = "BAT DAU TAI (DIRECT LINK)"
+$Btn.Text = "BAT DAU TAI (BITS ENGINE)"
 $Btn.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $Btn.Location = New-Object System.Drawing.Point(180, 240); $Btn.Size = New-Object System.Drawing.Size(280, 50)
 $Btn.BackColor = "LimeGreen"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"
@@ -60,73 +59,60 @@ $Btn.BackColor = "LimeGreen"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"
 $Btn.Add_Click({
     $SelectedName = $Combo.SelectedItem
     $Url = $IsoList[$SelectedName]
+    if ($Url -eq "" -or $Url -eq $null) { return }
 
-    if ($Url -eq "" -or $Url -eq $null) { [System.Windows.Forms.MessageBox]::Show("Vui long chon muc khac!", "Luu y"); return }
-    
     $DefaultName = "Windows.iso"
-    if ($SelectedName -match "Win 11") { $DefaultName = "Windows11_Original.iso" }
-    elseif ($SelectedName -match "Win 10") { $DefaultName = "Windows10_Original.iso" }
-    elseif ($SelectedName -match "Win 7") { $DefaultName = "Windows7_SP1.iso" }
-    elseif ($SelectedName -match "XP") { $DefaultName = "WindowsXP_SP3.iso" }
-    elseif ($SelectedName -match "Office") { $DefaultName = "Office_Install.img" }
+    if ($SelectedName -match "Win 11") { $DefaultName = "Windows11.iso" }
+    elseif ($SelectedName -match "Win 10") { $DefaultName = "Windows10.iso" }
+    elseif ($SelectedName -match "Win 7") { $DefaultName = "Windows7.iso" }
+    elseif ($SelectedName -match "XP") { $DefaultName = "WindowsXP.iso" }
 
     $SaveDlg = New-Object System.Windows.Forms.SaveFileDialog
     $SaveDlg.FileName = $DefaultName
-    $SaveDlg.Filter = "ISO Image (*.iso)|*.iso|Disk Image (*.img)|*.img|All Files (*.*)|*.*"
+    $SaveDlg.Filter = "ISO Image (*.iso)|*.iso|All Files (*.*)|*.*"
     
     if ($SaveDlg.ShowDialog() -eq "OK") {
         $LocalPath = $SaveDlg.FileName
         $Btn.Enabled = $false; $Combo.Enabled = $false
-        
-        # Bật chế độ Marquee khi chờ kết nối
-        $Bar.Style = "Marquee"
-        $Bar.MarqueeAnimationSpeed = 30
-        $Status.Text = "Dang ket noi Server... (BITS)"
+        $Status.Text = "Dang ket noi Server... (Vui long doi 5-10s)"
+        $Bar.Style = "Marquee"; $Bar.MarqueeAnimationSpeed = 30
         $Form.Refresh()
-
+        
         try {
             Import-Module BitsTransfer
-            # Bắt đầu Job
-            $Job = Start-BitsTransfer -Source $Url -Destination $LocalPath -Asynchronous -DisplayName "PhatTanDownload" -Priority High
+            # Start-BitsTransfer trả về Object Job ngay lập tức
+            $Job = Start-BitsTransfer -Source $Url -Destination $LocalPath -Asynchronous -Priority High -DisplayName "PhatTan_ISO"
             
             while ($Job.JobState -eq "Transferring" -or $Job.JobState -eq "Connecting") {
-                # Truy cập trực tiếp thuộc tính của $Job (Không dùng Get-BitsTransfer nữa)
-                $Bytes = $Job.BytesTransferred
-                $Total = $Job.TotalBytes
+                # Lấy thông tin mới nhất của Job
+                $CurrentJob = Get-BitsTransfer -Name "PhatTan_ISO" -ErrorAction SilentlyContinue
                 
-                if ($Total -gt 0) {
-                    # Có dung lượng -> Chuyển sang thanh %
+                if ($CurrentJob -and $CurrentJob.TotalBytes -gt 0) {
                     if ($Bar.Style -ne "Blocks") { $Bar.Style = "Blocks" }
                     
-                    $Percent = [Math]::Round(($Bytes / $Total) * 100)
+                    $Percent = [Math]::Round(($CurrentJob.BytesTransferred / $CurrentJob.TotalBytes) * 100)
                     $Bar.Value = $Percent
                     
-                    $DaTai = [Math]::Round($Bytes / 1MB, 2)
-                    $Tong  = [Math]::Round($Total / 1MB, 2)
+                    $DaTai = [Math]::Round($CurrentJob.BytesTransferred / 1MB, 2)
+                    $Tong  = [Math]::Round($CurrentJob.TotalBytes / 1MB, 2)
                     $Status.Text = "Dang tai... $Percent% ($DaTai MB / $Tong MB)"
-                } else {
-                    $Status.Text = "Dang tim file... (Server Archive.org hoi cham)"
                 }
                 $Form.Refresh()
                 Start-Sleep -Milliseconds 500
             }
             
-            # Hoàn tất (Truyền thẳng biến $Job vào)
-            Complete-BitsTransfer -BitsJob $Job
+            # Hoàn tất
+            Get-BitsTransfer -Name "PhatTan_ISO" | Complete-BitsTransfer
             
-            $Bar.Style = "Blocks"
-            $Bar.Value = 100
-            $Status.Text = "Tai thanh cong! File luu tai: $LocalPath"
-            [System.Windows.Forms.MessageBox]::Show("Da tai xong ISO goc!", "Phat Tan PC")
-            
+            $Bar.Style = "Blocks"; $Bar.Value = 100
+            $Status.Text = "Tai thanh cong! Luu tai: $LocalPath"
+            [System.Windows.Forms.MessageBox]::Show("Tai xong ISO roi ong oi!", "Phat Tan PC")
             Invoke-Item (Split-Path $LocalPath)
             
         } catch {
-            $Bar.Style = "Blocks"; $Bar.Value = 0
-            $Status.Text = "Loi ket noi. Server ban hoac mang yeu."
-            [System.Windows.Forms.MessageBox]::Show("Loi: $($_.Exception.Message)", "Error")
+            $Status.Text = "Loi: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show("Loi tai file. Hay thu lai!", "Error")
         }
-        
         $Btn.Enabled = $true; $Combo.Enabled = $true
     }
 })
