@@ -20,63 +20,77 @@ function Write-Log {
     $LogLine | Out-File -FilePath $EnvLogFile -Append -Encoding UTF8
 }
 
-# --- HÀM CÀI ĐẶT MÔI TRƯỜNG (STABLE FIX) ---
+# --- HÀM CÀI ĐẶT MÔI TRƯỜNG (SMART CHECK) ---
 function Install-Environment {
     param($StatusLabel, $Form)
-    $StatusLabel.Text = "Dang xu ly... (Phien ban Stable)"; $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
-    "=== BAT DAU CAI DAT (V14.0 STABLE) ===" | Out-File -FilePath $EnvLogFile -Encoding UTF8
+    $StatusLabel.Text = "Dang xu ly... (Smart Check)"; $StatusLabel.ForeColor = "Yellow"; $Form.Refresh()
+    "=== BAT DAU CAI DAT (V15.0 SMART) ===" | Out-File -FilePath $EnvLogFile -Encoding UTF8
     [System.Net.ServicePointManager]::SecurityProtocol = 3072
 
     # ==========================================
-    # 1. FIX CHOCOLATEY (NUKE & REINSTALL)
+    # 1. CHOCOLATEY (FIX CLEAN)
     # ==========================================
     if (Get-Command choco -ErrorAction SilentlyContinue) { 
         Write-Log "Choco da co." "OK" 
     } else {
-        Write-Log "Phat hien Choco loi/thieu. Dang don dep..."
-        # Xóa sạch thư mục cũ để tránh lỗi "Files found"
-        if (Test-Path "$env:ProgramData\chocolatey") {
-            Remove-Item "$env:ProgramData\chocolatey" -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Log "Da xoa thu muc Choco cu."
+        if (Test-Path "$env:ProgramData\chocolatey\bin\choco.exe") {
+            $env:Path += ";$env:ProgramData\chocolatey\bin"; Write-Log "Fix Path Choco."
+        } else {
+            # Xóa sạch thư mục cũ nếu lỗi
+            if (Test-Path "$env:ProgramData\chocolatey") { Remove-Item "$env:ProgramData\chocolatey" -Recurse -Force; Write-Log "Cleaned Choco folder." }
+            
+            Write-Log "Dang cai Chocolatey..."
+            try {
+                Set-ExecutionPolicy Bypass -Scope Process -Force
+                iex ((New-Object Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+                $env:Path += ";$env:ProgramData\chocolatey\bin"
+                Write-Log "Cai Choco THANH CONG." "SUCCESS"
+            } catch { Write-Log "LOI CHOCO: $($_.Exception.Message)" "ERROR" }
         }
-
-        Write-Log "Dang cai lai Chocolatey..."
-        try {
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            $Script = (New-Object Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
-            Invoke-Expression $Script | Out-File -FilePath $EnvLogFile -Append
-            $env:Path += ";$env:ProgramData\chocolatey\bin"
-            Write-Log "Cai Choco THANH CONG." "SUCCESS"
-        } catch { Write-Log "LOI CHOCO: $($_.Exception.Message)" "ERROR" }
     }
 
     # ==========================================
-    # 2. FIX WINGET (DOWNGRADE TO V1.7)
+    # 2. WINGET (SMART DEPENDENCY CHECK)
     # ==========================================
     if (Get-Command winget -ErrorAction SilentlyContinue) { 
         Write-Log "Winget da co." "OK" 
     } else {
-        Write-Log "Dang cai Winget v1.7 (Ban on dinh cho LTSC)..."
+        Write-Log "Kiem tra Winget Dependencies..."
         try {
             $WorkDir = "C:\Winget_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
             $WC = New-Object Net.WebClient
             
-            # A. Cài VCLibs (Bắt buộc)
-            Write-Log "Tai VCLibs..."
-            $WC.DownloadFile("https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx", "$WorkDir\VCLibs.appx")
-            Add-AppxPackage -Path "$WorkDir\VCLibs.appx" -ErrorAction SilentlyContinue
+            # A. CHECK WINDOWS APP SDK
+            if (Get-AppxPackage *Microsoft.WindowsAppRuntime*) {
+                Write-Log "Windows App SDK da co. Bo qua." "SKIP"
+            } else {
+                Write-Log "Thieu Windows App SDK. Dang tai..."
+                $WC.DownloadFile("https://aka.ms/windowsappsdk/latest/1.6-stable/windowsappruntimeinstall-x64.exe", "$WorkDir\WinAppSDK.exe")
+                Start-Process -FilePath "$WorkDir\WinAppSDK.exe" -ArgumentList "--quiet" -Wait
+                Write-Log "Cai SDK xong."
+            }
 
-            # B. Cài UI.Xaml 2.7 (Bản cũ ổn định hơn cho Winget 1.7)
-            Write-Log "Tai UI.Xaml 2.7..."
-            $WC.DownloadFile("https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.7.3/Microsoft.UI.Xaml.2.7.x64.appx", "$WorkDir\UI.Xaml.appx")
-            Add-AppxPackage -Path "$WorkDir\UI.Xaml.appx" -ErrorAction SilentlyContinue
+            # B. CHECK UI.XAML
+            if (Get-AppxPackage *Microsoft.UI.Xaml.2.8*) {
+                Write-Log "UI.Xaml 2.8 da co. Bo qua." "SKIP"
+            } else {
+                Write-Log "Thieu UI.Xaml. Dang tai..."
+                $WC.DownloadFile("https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx", "$WorkDir\UI.Xaml.appx")
+                Add-AppxPackage -Path "$WorkDir\UI.Xaml.appx" -ErrorAction SilentlyContinue
+            }
 
-            # C. Cài Winget v1.7.11261 (Không đòi Runtime 1.8)
-            Write-Log "Tai Winget Core v1.7..."
-            $UrlWinget = "https://github.com/microsoft/winget-cli/releases/download/v1.7.11261/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-            $WC.DownloadFile($UrlWinget, "$WorkDir\Winget.msixbundle")
-            
-            Write-Log "Dang cai dat Winget..."
+            # C. CHECK VCLIBS
+            if (Get-AppxPackage *Microsoft.VCLibs.140.00.UWPDesktop*) {
+                Write-Log "VCLibs da co. Bo qua." "SKIP"
+            } else {
+                Write-Log "Thieu VCLibs. Dang tai..."
+                $WC.DownloadFile("https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx", "$WorkDir\VCLibs.appx")
+                Add-AppxPackage -Path "$WorkDir\VCLibs.appx" -ErrorAction SilentlyContinue
+            }
+
+            # D. CAI WINGET CORE (LUÔN CÀI NẾU CHƯA CÓ LỆNH)
+            Write-Log "Dang tai Winget Core..."
+            $WC.DownloadFile("https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle", "$WorkDir\Winget.msixbundle")
             Add-AppxPackage -Path "$WorkDir\Winget.msixbundle" -ForceUpdateFromAnyVersion -ErrorAction Stop
             
             Write-Log "Cai Winget THANH CONG." "SUCCESS"
@@ -85,19 +99,23 @@ function Install-Environment {
     }
 
     # ==========================================
-    # 3. SCOOP (FORCE POLICY)
+    # 3. SCOOP (Smart Check)
     # ==========================================
     if (Get-Command scoop -ErrorAction SilentlyContinue) { 
         Write-Log "Scoop da co." "OK" 
     } else {
-        Write-Log "Dang cai Scoop..."
-        try {
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            # Chạy lệnh rút gọn, bỏ qua check policy
-            Invoke-Expression "& {$(irm get.scoop.sh)} -RunAsAdmin" 2>&1 | Out-File -FilePath $EnvLogFile -Append
-            $env:Path += ";$env:USERPROFILE\scoop\shims"
-            Write-Log "Cai Scoop THANH CONG." "SUCCESS"
-        } catch { Write-Log "LOI SCOOP: $($_.Exception.Message)" "ERROR" }
+        if (Test-Path "$env:USERPROFILE\scoop\shims\scoop.cmd") {
+            $env:Path += ";$env:USERPROFILE\scoop\shims"; Write-Log "Fix Path Scoop."
+        } else {
+            Write-Log "Dang cai Scoop..."
+            try {
+                Set-ExecutionPolicy Bypass -Scope Process -Force
+                # One-liner chuẩn, bypass policy
+                Invoke-Expression "& {$(irm get.scoop.sh)} -RunAsAdmin" 2>&1 | Out-File -FilePath $EnvLogFile -Append
+                $env:Path += ";$env:USERPROFILE\scoop\shims"
+                Write-Log "Cai Scoop THANH CONG." "SUCCESS"
+            } catch { Write-Log "LOI SCOOP: $($_.Exception.Message)" "ERROR" }
+        }
     }
     
     $StatusLabel.Text = "Hoan tat. Kiem tra log!"
@@ -107,7 +125,7 @@ function Install-Environment {
 
 # --- GUI SETUP (GIỮ NGUYÊN) ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "APP STORE - PHAT TAN PC (V14.0 STABLE)"
+$Form.Text = "APP STORE - PHAT TAN PC (V15.0 SMART CHECK)"
 $Form.Size = New-Object System.Drawing.Size(1000, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
