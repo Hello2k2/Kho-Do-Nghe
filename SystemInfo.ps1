@@ -1,14 +1,15 @@
 <#
-    SYSTEM INFO & DRIVER AUDIT - PHAT TAN PC
-    Version: 2.0 (GUI Tabs + Export)
+    SYSTEM INFO PRO - PHAT TAN PC
+    Version: 3.0 (GUI Tabs & Grids)
 #>
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+$ErrorActionPreference = "SilentlyContinue"
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "MAY SOI PHAN CUNG - PHAT TAN PC"
+$Form.Text = "MAY SOI CAU HINH - PHAT TAN PC"
 $Form.Size = New-Object System.Drawing.Size(900, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -22,153 +23,141 @@ $TabControl.Location = New-Object System.Drawing.Point(10, 10)
 $TabControl.Size = New-Object System.Drawing.Size(865, 480)
 $Form.Controls.Add($TabControl)
 
-# Hàm tạo Tab
+# Hàm hỗ trợ tạo Tab và Grid
 function Make-Tab ($Title) {
     $Page = New-Object System.Windows.Forms.TabPage
     $Page.Text = $Title
     $Page.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
-    $Page.ForeColor = "Black" # Fix lỗi hiển thị text trên một số máy
+    $Page.ForeColor = "Black" 
     $TabControl.Controls.Add($Page)
     return $Page
 }
 
-# --- TAB 1: TỔNG QUAN (SYSTEM) ---
-$TabSys = Make-Tab "Tong Quan He Thong"
-$TxtSys = New-Object System.Windows.Forms.TextBox
-$TxtSys.Multiline = $true; $TxtSys.ScrollBars = "Vertical"
-$TxtSys.Size = New-Object System.Drawing.Size(840, 440); $TxtSys.Location = New-Object System.Drawing.Point(10, 10)
-$TxtSys.BackColor = "Black"; $TxtSys.ForeColor = "Lime"; $TxtSys.Font = "Consolas, 10"
-$TxtSys.ReadOnly = $true
-$TabSys.Controls.Add($TxtSys)
+function Make-Grid ($ParentTab) {
+    $G = New-Object System.Windows.Forms.DataGridView
+    $G.Size = New-Object System.Drawing.Size(855, 450); $G.Location = New-Object System.Drawing.Point(0, 0)
+    $G.BackgroundColor = "Black"; $G.ForeColor = "Black"
+    $G.AllowUserToAddRows = $false; $G.RowHeadersVisible = $false
+    $G.AutoSizeColumnsMode = "Fill"; $G.SelectionMode = "FullRowSelect"; $G.ReadOnly = $true
+    $ParentTab.Controls.Add($G)
+    return $G
+}
 
-# --- TAB 2: DRIVERS (GRID VIEW) ---
-$TabDrv = Make-Tab "Chi Tiet Driver"
-$GridDrv = New-Object System.Windows.Forms.DataGridView
-$GridDrv.Size = New-Object System.Drawing.Size(840, 440); $GridDrv.Location = New-Object System.Drawing.Point(10, 10)
-$GridDrv.BackgroundColor = "Black"; $GridDrv.ForeColor = "Black"
-$GridDrv.AllowUserToAddRows = $false; $GridDrv.RowHeadersVisible = $false
-$GridDrv.AutoSizeColumnsMode = "Fill"
-$GridDrv.SelectionMode = "FullRowSelect"; $GridDrv.ReadOnly = $true
-$TabDrv.Controls.Add($GridDrv)
+function Make-Label ($Parent, $Text, $X, $Y, $FontData="10") {
+    $L = New-Object System.Windows.Forms.Label
+    $L.Text = $Text; $L.Location = New-Object System.Drawing.Point($X, $Y); $L.AutoSize = $true
+    $L.Font = New-Object System.Drawing.Font("Segoe UI", $FontData); $L.ForeColor = "Lime"
+    $Parent.Controls.Add($L)
+    return $L
+}
 
-# --- LOGIC LẤY THÔNG TIN (WMI/CIM) ---
-function Get-FullSystemInfo {
-    $TxtSys.Text = "Dang quet phan cung... Vui long doi..."
-    $Form.Refresh()
+# ==========================================
+# TAB 1: TỔNG QUAN (DASHBOARD)
+# ==========================================
+$Tab1 = Make-Tab "Tong Quan"
+$Tab1.BackColor = "Black" # Tab này dùng Label nên để nền đen
 
-    # 1. OS INFO
-    $OS = Get-CimInstance Win32_OperatingSystem
-    $CS = Get-CimInstance Win32_ComputerSystem
-    $Bios = Get-CimInstance Win32_BIOS
+$OS = Get-CimInstance Win32_OperatingSystem
+$CS = Get-CimInstance Win32_ComputerSystem
+$Bios = Get-CimInstance Win32_BIOS
+$CPU = Get-CimInstance Win32_Processor
 
-    # 2. CPU & RAM
-    $CPU = Get-CimInstance Win32_Processor
-    $RAM_GB = [Math]::Round($CS.TotalPhysicalMemory / 1GB, 1)
-    
-    # 3. GPU (Lấy tất cả card)
-    $GPUs = Get-CimInstance Win32_VideoController
-    $GpuStr = ""
-    foreach ($G in $GPUs) { $GpuStr += "  + $($G.Name) ($($G.DriverVersion))`r`n" }
+Make-Label $Tab1 "HE THONG:" 20 20 "12"
+Make-Label $Tab1 "  + HDH:       $($OS.Caption) ($($OS.OSArchitecture))" 20 50
+Make-Label $Tab1 "  + Phien ban: $($OS.Version) (Build $($OS.BuildNumber))" 20 80
+Make-Label $Tab1 "  + May tinh:  $($CS.Name) (User: $($env:USERNAME))" 20 110
+Make-Label $Tab1 "  + Ngay cai:  $($OS.InstallDate)" 20 140
 
-    # 4. NETWORK (Lấy IP & MAC)
-    $Nets = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object {$_.IPEnabled -eq $true}
-    $NetStr = ""
-    foreach ($N in $Nets) { $NetStr += "  + $($N.Description)`r`n    IP: $($N.IPAddress[0]) | MAC: $($N.MACAddress)`r`n" }
+Make-Label $Tab1 "PHAN CUNG:" 20 190 "12"
+Make-Label $Tab1 "  + Mainboard: $($CS.Manufacturer) - $($CS.Model)" 20 220
+Make-Label $Tab1 "  + BIOS:      $($Bios.SMBIOSBIOSVersion) ($($Bios.ReleaseDate))" 20 250
+Make-Label $Tab1 "  + CPU:       $($CPU.Name)" 20 280
+# Fix lỗi RAM hiển thị
+$RamGB = [Math]::Round($CS.TotalPhysicalMemory / 1GB, 2)
+Make-Label $Tab1 "  + RAM:       $RamGB GB" 20 310
 
-    # 5. STORAGE
+# ==========================================
+# TAB 2: O CUNG (DISK) - DẠNG BẢNG
+# ==========================================
+$Tab2 = Make-Tab "O Cung (Disk)"
+$GridDisk = Make-Grid $Tab2
+$GridDisk.Columns.Add("Disk", "Disk #"); $GridDisk.Columns.Add("Model", "Ten O Cung")
+$GridDisk.Columns.Add("Size", "Dung Luong (GB)"); $GridDisk.Columns.Add("Type", "Chuan (GPT/MBR)")
+$GridDisk.Columns.Add("Status", "Trang Thai")
+
+function Load-Disks {
     $Disks = Get-Disk
-    $DiskStr = ""
-    foreach ($D in $Disks) { 
-        $Type = if ($D.MediaType) { $D.MediaType } else { "Unspecified" }
-        $DiskStr += "  + Disk $($D.Number): $($D.Model) - $([Math]::Round($D.Size/1GB)) GB ($Type) - $($D.PartitionStyle)`r`n" 
+    foreach ($D in $Disks) {
+        $Size = [Math]::Round($D.Size / 1GB, 1)
+        $GridDisk.Rows.Add($D.Number, $D.Model, $Size, $D.PartitionStyle, $D.HealthStatus) | Out-Null
     }
-
-    # FORMAT TEXT OUTPUT
-    $Report = @"
-======================================================
-             BAO CAO CHI TIET HE THONG
-             May: $($CS.Name) | User: $($env:USERNAME)
-======================================================
-
-[HE DIEU HANH]
-  Ten:          $($OS.Caption)
-  Phien ban:    $($OS.Version) (Build $($OS.BuildNumber))
-  Kien truc:    $($OS.OSArchitecture)
-  Ngay cai:     $($OS.InstallDate)
-  Trang thai:   $(if($OS.SerialNumber){"Da kich hoat"}else{"Chua ro"})
-
-[BO MACH CHU (MAINBOARD)]
-  Hang:         $($CS.Manufacturer)
-  Model:        $($CS.Model)
-  BIOS Ver:     $($Bios.SMBIOSBIOSVersion) (Date: $($Bios.ReleaseDate))
-  Serial:       $($Bios.SerialNumber)
-
-[VI XU LY (CPU)]
-  Ten:          $($CPU.Name)
-  So nhan/luong:$($CPU.NumberOfCores) Cores / $($CPU.NumberOfLogicalProcessors) Threads
-  Toc do:       $($CPU.MaxClockSpeed) MHz
-
-[BO NHO TRONG (RAM)]
-  Tong dung luong: $RAM GB
-
-[DO HOA (GPU)]
-$GpuStr
-[LUU TRU (DISK)]
-$DiskStr
-[MANG (NETWORK)]
-$NetStr
-======================================================
-Report generated by PHAT TAN PC TOOLKIT
-"@
-    $TxtSys.Text = $Report
 }
 
-function Get-DriverList {
-    # Lấy danh sách Driver đang chạy (Signed)
-    $Drivers = Get-WmiObject Win32_PnPSignedDriver | Where-Object { $_.DeviceName -ne $null } | Select-Object DeviceName, Manufacturer, DriverVersion, DriverDate, InfName
+# ==========================================
+# TAB 3: MANG (NETWORK) - DẠNG BẢNG
+# ==========================================
+$Tab3 = Make-Tab "Mang (Network)"
+$GridNet = Make-Grid $Tab3
+$GridNet.Columns.Add("Name", "Ten Card"); $GridNet.Columns.Add("IP", "IP Address")
+$GridNet.Columns.Add("MAC", "MAC Address"); $GridNet.Columns.Add("DHCP", "DHCP")
 
-    $DT = New-Object System.Data.DataTable
-    $DT.Columns.Add("Ten Thiet Bi"); $DT.Columns.Add("Hang SX"); $DT.Columns.Add("Phien Ban"); $DT.Columns.Add("Ngay"); $DT.Columns.Add("File INF")
-    
+function Load-Network {
+    $Nets = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object {$_.IPEnabled -eq $true}
+    foreach ($N in $Nets) {
+        $GridNet.Rows.Add($N.Description, $N.IPAddress[0], $N.MACAddress, $N.DHCPEnabled) | Out-Null
+    }
+}
+
+# ==========================================
+# TAB 4: DRIVERS (DẠNG BẢNG CHI TIẾT)
+# ==========================================
+$Tab4 = Make-Tab "Drivers"
+$GridDrv = Make-Grid $Tab4
+$GridDrv.Columns.Add("Name", "Thiet Bi"); $GridDrv.Columns.Add("Provider", "Nha Cung Cap")
+$GridDrv.Columns.Add("Version", "Phien Ban"); $GridDrv.Columns.Add("Date", "Ngay")
+
+function Load-Drivers {
+    $Drivers = Get-WmiObject Win32_PnPSignedDriver | Where-Object { $_.DeviceName -ne $null } | Select-Object DeviceName, Manufacturer, DriverVersion, DriverDate
     foreach ($D in $Drivers) {
-        $R = $DT.NewRow()
-        $R["Ten Thiet Bi"] = $D.DeviceName
-        $R["Hang SX"] = $D.Manufacturer
-        $R["Phien Ban"] = $D.DriverVersion
-        # Fix format ngày
-        try { $DateObj = [DateTime]::ParseExact($D.DriverDate.Substring(0,8), "yyyyMMdd", $null); $R["Ngay"] = $DateObj.ToString("yyyy-MM-dd") } catch { $R["Ngay"] = $D.DriverDate }
-        $R["File INF"] = $D.InfName
-        $DT.Rows.Add($R)
+        try { $Date = [DateTime]::ParseExact($D.DriverDate.Substring(0,8), "yyyyMMdd", $null).ToString("yyyy-MM-dd") } catch { $Date = "" }
+        $GridDrv.Rows.Add($D.DeviceName, $D.Manufacturer, $D.DriverVersion, $Date) | Out-Null
     }
-    $GridDrv.DataSource = $DT
 }
 
-# --- BUTTONS ---
-$BtnExportTXT = New-Object System.Windows.Forms.Button
-$BtnExportTXT.Text = "XUAT REPORT (TXT)"
-$BtnExportTXT.Location = "20,510"; $BtnExportTXT.Size = "180,40"; $BtnExportTXT.BackColor = "Cyan"; $BtnExportTXT.ForeColor = "Black"
-$BtnExportTXT.Add_Click({
-    $Path = "$env:USERPROFILE\Desktop\System_Info.txt"
-    $TxtSys.Text | Out-File $Path
-    [System.Windows.Forms.MessageBox]::Show("Da xuat file TXT ra Desktop!", "Thanh Cong")
+# ==========================================
+# BUTTONS & LOAD
+# ==========================================
+$BtnRefresh = New-Object System.Windows.Forms.Button
+$BtnRefresh.Text = "LAM MOI DU LIEU"; $BtnRefresh.Location = "20,500"; $BtnRefresh.Size = "150,40"
+$BtnRefresh.BackColor = "Cyan"; $BtnRefresh.ForeColor = "Black"; $BtnRefresh.FlatStyle = "Flat"
+$BtnRefresh.Add_Click({
+    $GridDisk.Rows.Clear(); Load-Disks
+    $GridNet.Rows.Clear(); Load-Network
+    $GridDrv.Rows.Clear(); Load-Drivers
+    [System.Windows.Forms.MessageBox]::Show("Da cap nhat thong tin!", "Phat Tan PC")
 })
-$Form.Controls.Add($BtnExportTXT)
+$Form.Controls.Add($BtnRefresh)
 
-$BtnExportHTML = New-Object System.Windows.Forms.Button
-$BtnExportHTML.Text = "XUAT DRIVER (HTML)"
-$BtnExportHTML.Location = "220,510"; $BtnExportHTML.Size = "180,40"; $BtnExportHTML.BackColor = "Orange"; $BtnExportHTML.ForeColor = "Black"
-$BtnExportHTML.Add_Click({
-    $Path = "$env:USERPROFILE\Desktop\Driver_Report.html"
-    $Header = "<style>table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background-color:#4CAF50;color:white}</style><h2>DRIVER REPORT - PHAT TAN PC</h2>"
-    $Body = $GridDrv.DataSource | ConvertTo-Html -Fragment
-    "$Header $Body" | Out-File $Path
-    [System.Windows.Forms.MessageBox]::Show("Da xuat file HTML ra Desktop!", "Thanh Cong")
+$BtnExport = New-Object System.Windows.Forms.Button
+$BtnExport.Text = "XUAT FILE HTML"; $BtnExport.Location = "200,500"; $BtnExport.Size = "150,40"
+$BtnExport.BackColor = "Orange"; $BtnExport.ForeColor = "Black"; $BtnExport.FlatStyle = "Flat"
+$BtnExport.Add_Click({
+    $Path = "$env:USERPROFILE\Desktop\System_Report.html"
+    $H = "<h1>BAO CAO HE THONG - PHAT TAN PC</h1><hr>"
+    $H += "<h3>TONG QUAN</h3><p>OS: $($OS.Caption)</p><p>CPU: $($CPU.Name)</p><p>RAM: $RamGB GB</p>"
+    $H += "<h3>DRIVER</h3>" + ($GridDrv.DataSource | ConvertTo-Html -Fragment) # Demo đơn giản
+    $H | Out-File $Path
     Invoke-Item $Path
 })
-$Form.Controls.Add($BtnExportHTML)
+$Form.Controls.Add($BtnExport)
 
-# --- AUTO RUN ---
-Get-FullSystemInfo
-Get-DriverList
+# --- RUN ---
+Load-Disks
+Load-Network
+# Load Drivers chạy ngầm để không đơ lúc mở
+$Form.Add_Shown({ 
+    $Form.Refresh()
+    Load-Drivers 
+})
 
 $Form.ShowDialog() | Out-Null
