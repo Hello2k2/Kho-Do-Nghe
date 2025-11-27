@@ -34,7 +34,7 @@ public class ConsoleEffects {
 }
 '@
 try { Add-Type -TypeDefinition $ConsoleCode; [ConsoleEffects]::EnableBlur() } catch {}
-$Host.UI.RawUI.WindowTitle = "PHAT TAN PC - LOG WINDOW (Zalo: 0823.883.028)"
+$Host.UI.RawUI.WindowTitle = "PHÁT TẤN - LOG WINDOW (Zalo: 0823.883.028)"
 [Console]::BackgroundColor = "Black"; [Console]::ForegroundColor = "Cyan"; Clear-Host
 
 # --- LOGO STARTUP ---
@@ -47,10 +47,10 @@ Write-Host "
  |_|    |_| |_|\__,_|\__|  |_|\__,_|_| |_|
                                           
     " -ForegroundColor Cyan
-Write-Host "    ---  CUU HO MAY TINH ONLINE ---" -ForegroundColor Yellow
+Write-Host "    ---  CỨU HỘ MÁY TÍNH ONLINE ---" -ForegroundColor Yellow
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
-Write-Host " [*] Author:      Phat Tan (Zalo: 0823.883.028)" -ForegroundColor White
-Write-Host " [*] Credits:     Vu Kim Dong, MMT, MAS" -ForegroundColor DarkGray
+Write-Host " [*] Author:      PHÁT TẤN (Zalo: 0823.883.028)" -ForegroundColor White
+Write-Host " [*] Credits:     VŨ KIM ĐỒNG, MMT, MAS" -ForegroundColor DarkGray
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 Write-Host ""
 
@@ -87,7 +87,7 @@ function Load-Module ($ScriptName) {
 
 # --- HÀM DONATE ---
 function Hien-Donate {
-    $DonForm = New-Object System.Windows.Forms.Form; $DonForm.Text = "DONATE - PHAT TAN PC"; $DonForm.Size = New-Object System.Drawing.Size(400, 550); $DonForm.StartPosition = "CenterScreen"; $DonForm.BackColor="White"; $DonForm.FormBorderStyle = "FixedToolWindow"
+    $DonForm = New-Object System.Windows.Forms.Form; $DonForm.Text = "DONATE - PHÁT TẤN PC"; $DonForm.Size = New-Object System.Drawing.Size(400, 550); $DonForm.StartPosition = "CenterScreen"; $DonForm.BackColor="White"; $DonForm.FormBorderStyle = "FixedToolWindow"
     $PB = New-Object System.Windows.Forms.PictureBox; $PB.Size = New-Object System.Drawing.Size(350, 400); $PB.Location = New-Object System.Drawing.Point(15, 10); $PB.SizeMode = "Zoom"
     try { $PB.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT") } catch {}; $DonForm.Controls.Add($PB)
     $LblSTK = New-Object System.Windows.Forms.Label; $LblSTK.Text = "STK: 1055835227 (VCB)"; $LblSTK.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $LblSTK.ForeColor = "Red"; $LblSTK.AutoSize = $true; $LblSTK.Location = New-Object System.Drawing.Point(90, 420); $DonForm.Controls.Add($LblSTK)
@@ -96,7 +96,7 @@ function Hien-Donate {
 
 # --- GUI CHÍNH ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC - TOOLKIT V8.0"
+$Form.Text = "PHÁT TẤN PC - TOOLKIT V8.0"
 $Form.Size = New-Object System.Drawing.Size(750, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -115,11 +115,26 @@ function Make-Tab ($Name) { $P = New-Object System.Windows.Forms.TabPage; $P.Tex
 function Add-Check ($Page, $Text, $Tag, $X, $Y) { $c = New-Object System.Windows.Forms.CheckBox; $c.Text = $Text; $c.Tag = $Tag; $c.Location = New-Object System.Drawing.Point($X, $Y); $c.AutoSize = $true; $c.Font = "Segoe UI, 11"; $Page.Controls.Add($c); return $c }
 
 # Tab 1: Hệ Thống
-$T1 = Make-Tab "He Thong & Driver"; Add-Check $T1 "JUKI Tool (Auto Soft + Optimize)" "JUKI" 30 30; Add-Check $T1 "Driver Mang (3DP Net)" "3DPNet" 30 70; Add-Check $T1 "Driver Tong Hop (3DP Chip)" "3DPChip" 30 110; Add-Check $T1 "Fix Loi Game (DirectX + Visual C++)" "FixGame" 30 150; Add-Check $T1 "Hien thi file an (Registry Mod)" "ShowFile" 30 190
+$T1 = Make-Tab "HỆ THỐNG & Driver"; 
+Add-Check $T1 "JUKI Tool (Auto Soft + Optimize)" "JUKI" 30 30; 
+Add-Check $T1 "Driver Mang (3DP Net)" "3DPNet" 30 70; 
+Add-Check $T1 "Driver Tong Hop (3DP Chip)" "3DPChip" 30 110; 
+Add-Check $T1 "Fix Loi Game (DirectX + Visual C++)" "FixGame" 30 150;
+Add-Check $T1 "Hien thi file an (Registry Mod)" "ShowFile" 30 190
 # Tab 2: Internet
-$T2 = Make-Tab "Internet & Office"; Add-Check $T2 "Google Chrome Enterprise" "Chrome" 30 30; Add-Check $T2 "IDM Full Toolkit (Sieu toc)" "IDM" 30 70; Add-Check $T2 "AnyDesk (Dieu khien tu xa)" "AnyDesk" 30 110; Add-Check $T2 "Unikey / EVKey (Go Tieng Viet)" "EVKey" 30 150; Add-Check $T2 "Foxit PDF Reader" "PDF" 30 190; Add-Check $T2 "Notepad++ (Editor)" "NPP" 30 230
+$T2 = Make-Tab "Internet & Office"; 
+Add-Check $T2 "Google Chrome Enterprise" "Chrome" 30 30; 
+Add-Check $T2 "IDM Full Toolkit (SIÊU TỐC)" "IDM" 30 70; 
+Add-Check $T2 "AnyDesk (Điều Khiển Từ Xa)" "AnyDesk" 30 110; 
+Add-Check $T2 "Unikey / EVKey (Gõ Tiếng Việt)" "EVKey" 30 150; 
+Add-Check $T2 "Foxit PDF Reader" "PDF" 30 190; Add-Check $T2 "Notepad++ (Editor)" "NPP" 30 230
 # Tab 3: Tien Ich
-$T3 = Make-Tab "Tien Ich"; Add-Check $T3 "WinRAR Full (Giai nen)" "WinRAR" 30 30; Add-Check $T3 "HiBit Uninstaller (Go sach)" "HiBit" 30 70; Add-Check $T3 "FastStone Capture" "FSC" 30 110; Add-Check $T3 "TeraCopy (Copy nhanh)" "Tera" 30 150; Add-Check $T3 "Unlocker (Xoa file cung dau)" "Unlocker" 30 190
+$T3 = Make-Tab "Tien Ich"; 
+Add-Check $T3 "WinRAR Full (Giải nén)" "WinRAR" 30 30; 
+Add-Check $T3 "HiBit Uninstaller (Gở Sạch)" "HiBit" 30 70; 
+Add-Check $T3 "FastStone Capture" "FSC" 30 110; 
+Add-Check $T3 "TeraCopy (Copy nhanh)" "Tera" 30 150; 
+Add-Check $T3 "Unlocker (Xóa file Cứng Đầu)" "Unlocker" 30 190
 # Tab 4: Advanced (Modules)
 $T4 = Make-Tab "Advanced Tools"; 
 $B1 = New-Object System.Windows.Forms.Button; $B1.Text="SYSTEM SCAN (SFC/DISM)"; $B1.Location=New-Object System.Drawing.Point(30,30); $B1.Size=New-Object System.Drawing.Size(200,40); $B1.BackColor="Orange"; $B1.ForeColor="Black"; $B1.Add_Click({ Load-Module "SystemScan.ps1" }); $T4.Controls.Add($B1)
