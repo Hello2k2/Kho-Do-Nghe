@@ -19,40 +19,56 @@ function Dismount-All {
 }
 
 function Get-BiosMode {
-    if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { return "UEFI" }
+    # Cách check BIOS Mode chuẩn nhất qua bcdedit
+    $Info = bcdedit /enum | Out-String
+    if ($Info -match "winload.efi") { return "UEFI" }
     return "Legacy"
 }
 
+# --- HÀM TẠO MENU BOOT (FIXED 0xc000000f) ---
 function Create-Boot-Entry ($WimPath) {
     try {
         $Name = "CAI WIN TAM THOI (Phat Tan PC)"
         $Mode = Get-BiosMode
+        $Drive = $env:SystemDrive # Lấy ổ cài Win hiện tại (thường là C:)
         
+        # 1. Xóa Ramdisk Options cũ nếu có để tránh xung đột
+        cmd /c "bcdedit /delete {ramdiskoptions} /f"
+        
+        # 2. Tạo Ramdisk Options mới chuẩn
         cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`""
-        cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=C:"
+        cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"
         cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \boot.sdi"
         
+        # 3. Tạo Entry Boot
         $Output = cmd /c "bcdedit /create /d `"$Name`" /application osloader"
         if ($Output -match '{([a-f0-9\-]+)}') { $ID = $matches[0] } else { return $false }
         
-        cmd /c "bcdedit /set $ID device ramdisk=[C:]$WimPath,{ramdiskoptions}"
-        cmd /c "bcdedit /set $ID osdevice ramdisk=[C:]$WimPath,{ramdiskoptions}"
+        # 4. Cấu hình Entry (Quan trọng: Dùng [$Drive] thay vì [C:])
+        cmd /c "bcdedit /set $ID device ramdisk=[$Drive]$WimPath,{ramdiskoptions}"
+        cmd /c "bcdedit /set $ID osdevice ramdisk=[$Drive]$WimPath,{ramdiskoptions}"
         cmd /c "bcdedit /set $ID systemroot \windows"
         cmd /c "bcdedit /set $ID detecthal yes"
         cmd /c "bcdedit /set $ID winpe yes"
         
-        if ($Mode -eq "UEFI") { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.efi" }
-        else { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.exe" }
+        # 5. Chỉnh Bootloader theo BIOS Mode chuẩn xác
+        if ($Mode -eq "UEFI") { 
+            cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.efi"
+        } else { 
+            cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.exe" 
+        }
 
+        # 6. Đưa lên đầu và Set Boot 1 lần
         cmd /c "bcdedit /displayorder $ID /addlast"
         cmd /c "bcdedit /bootsequence $ID"
+        
         return $true
     } catch { return $false }
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V8.0)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V9.0)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -78,13 +94,10 @@ $BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "TIM ISO"
 
 # Driver Options
 $GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "TUY CHON DRIVER"; $GBOpt.Location = "20,100"; $GBOpt.Size = "690,200"; $GBOpt.ForeColor = "Yellow"; $TabInstall.Controls.Add($GBOpt)
-
 $LblVerInfo = New-Object System.Windows.Forms.Label; $LblVerInfo.Text = "Trang thai: Chua chon ISO..."; $LblVerInfo.Location = "20,30"; $LblVerInfo.AutoSize=$true; $LblVerInfo.ForeColor="LightGray"; $GBOpt.Controls.Add($LblVerInfo)
-
 $CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai (Pnputil)"; $CkBackup.Location = "20,60"; $CkBackup.AutoSize=$true; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
 $Ck3DP = New-Object System.Windows.Forms.CheckBox; $Ck3DP.Text = "Tai 3DP Net (Cuu mang)"; $Ck3DP.Location = "20,90"; $Ck3DP.AutoSize=$true; $Ck3DP.Checked=$true; $GBOpt.Controls.Add($Ck3DP)
 $CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script Auto-Install Driver (1-Click)"; $CkInject.Location = "20,120"; $CkInject.AutoSize=$true; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
-
 $LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text = "Noi luu:"; $LblPath.Location = "40,155"; $LblPath.AutoSize=$true; $GBOpt.Controls.Add($LblPath)
 $TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = $Global:DriverPath; $TxtPath.Location = "100,152"; $TxtPath.Size = "480,25"; $GBOpt.Controls.Add($TxtPath)
 $BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text = "..."; $BtnPath.Location = "590,151"; $BtnPath.Size = "40,27"; $BtnPath.BackColor="Gray"; $BtnPath.ForeColor="White"; $BtnPath.Add_Click({ $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { $TxtPath.Text = $FBD.SelectedPath; $Global:DriverPath = $FBD.SelectedPath } }); $GBOpt.Controls.Add($BtnPath)
@@ -123,7 +136,7 @@ $BtnGenXML.Add_Click({ Generate-XML }); $TabConfig.Controls.Add($BtnGenXML)
 # --- HÀM GENERATE XML ---
 function Generate-XML {
     $User = $TxtUser.Text; $Pass = $TxtPass.Text; $PC = $TxtPCName.Text; $Key = $TxtKey.Text
-    $XMLPath = "C:\autounattend.xml"
+    $XMLPath = "$env:SystemDrive\autounattend.xml"
     
     try { 
         (New-Object Net.WebClient).DownloadFile($XML_Url, $XMLPath) 
@@ -136,14 +149,13 @@ function Generate-XML {
         
         if ($RadioWipe.Checked) {
             $Content = $Content -replace "%WIPEDISK%", "true"
-            # Partition mặc định Win 10/11 UEFI (Giản lược)
             $PartLayout = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition>"
             $Content = $Content -replace "%CREATEPARTITIONS%", $PartLayout
             $Content = $Content -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>1</PartitionID>"
         } else {
             $Content = $Content -replace "%WIPEDISK%", "false"
             $Content = $Content -replace "%CREATEPARTITIONS%", ""
-            $Content = $Content -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>3</PartitionID>" # Partition 3 thuong la vung trong sau khi shrink
+            $Content = $Content -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>3</PartitionID>"
         }
 
         $Content | Set-Content $XMLPath
@@ -190,7 +202,7 @@ function Show-SubMenu-Upgrade {
     
     $BtnB = New-Object System.Windows.Forms.Button; $BtnB.Text = "2. TAO BOOT TAM (Dung XML)"; $BtnB.Location = "20,110"; $BtnB.Size = "490,40"; $BtnB.BackColor = "Magenta"; $BtnB.ForeColor = "White"
     $BtnB.Add_Click({ 
-        if (!(Test-Path "C:\autounattend.xml")) { 
+        if (!(Test-Path "$env:SystemDrive\autounattend.xml")) { 
             $Ask = [System.Windows.Forms.MessageBox]::Show("Chua co file XML! Ban muon tao file cau hinh tu dong khong?`nBam 'Yes' de sang Tab cau hinh.", "Canh Bao", "YesNo", "Warning")
             if ($Ask -eq "Yes") { $SubForm.Close(); $TabControl.SelectedTab = $TabConfig; return }
         }
@@ -225,10 +237,10 @@ function Start-Install ($Mode) {
     if ($Mode -eq "Direct") { Start-Process "$Drive\setup.exe"; $Form.Close() }
     elseif ($Mode -eq "BootTmp") {
         $Form.Text = "DANG TAO BOOT TAM..."
-        $FreeC = (Get-PSDrive C).Free / 1GB; if ($FreeC -lt 2) { [System.Windows.Forms.MessageBox]::Show("O C: day qua!", "Loi"); return }
+        $SysDrive = $env:SystemDrive
         
-        Copy-Item "$Drive\sources\boot.wim" "C:\WinInstall_Boot.wim" -Force
-        Copy-Item "$Drive\boot\boot.sdi" "C:\boot.sdi" -Force
+        Copy-Item "$Drive\sources\boot.wim" "$SysDrive\WinInstall_Boot.wim" -Force
+        Copy-Item "$Drive\boot\boot.sdi" "$SysDrive\boot.sdi" -Force
         if (Create-Boot-Entry "\WinInstall_Boot.wim") {
             if ([System.Windows.Forms.MessageBox]::Show("Da tao Boot Tam! Restart ngay?", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force }
         }
@@ -240,6 +252,11 @@ function Start-Install ($Mode) {
 }
 
 # --- AUTO SCAN ---
-$Form.Add_Shown({ $ScanPaths = @("$env:USERPROFILE\Downloads", "$env:USERPROFILE\Desktop", "D:", "E:"); foreach ($P in $ScanPaths) { if (Test-Path $P) { Get-ChildItem $P -Filter "*.iso" -Recurse -Depth 1 | Where {$_.Length -gt 500MB} | ForEach { $CmbISO.Items.Add($_.FullName) } } }; if ($CmbISO.Items.Count -gt 0) { $CmbISO.SelectedIndex = 0; Check-Version } })
+$Form.Add_Shown({
+    $Form.Refresh(); $LblScan.Text = "Dang quet ISO..."
+    $Paths = @("$env:USERPROFILE\Downloads", "$env:USERPROFILE\Desktop", "D:", "E:")
+    foreach ($P in $Paths) { if (Test-Path $P) { Get-ChildItem $P -Filter "*.iso" -Recurse -Depth 1 | Where {$_.Length -gt 500MB} | ForEach { $CmbISO.Items.Add($_.FullName) } } }
+    if ($CmbISO.Items.Count -gt 0) { $CmbISO.SelectedIndex = 0; Check-Version } else { $LblScan.Text = "Khong thay ISO." }
+})
 
 $Form.ShowDialog() | Out-Null
