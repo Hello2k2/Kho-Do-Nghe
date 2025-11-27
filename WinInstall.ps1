@@ -9,141 +9,161 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- CAU HINH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
-# Mặc định vẫn là D:\Drivers_Backup_Auto nếu không chọn gì
-$Global:DriverPath = "D:\Drivers_Backup_Auto" 
+$Global:CurrentISO = $null # Biến theo dõi ISO đang mount
+
+# --- HÀM HỖ TRỢ: DON DEP O AO ---
+function Dismount-All {
+    Write-Host "Dang kiem tra va go bo o dia ao cu..." -F Cyan
+    # Gỡ ISO đang lưu trong biến
+    if ($Global:CurrentISO) { Dismount-DiskImage -ImagePath $Global:CurrentISO -ErrorAction SilentlyContinue }
+    
+    # Quét tất cả ISO trong danh sách ComboBox để gỡ cho chắc
+    if ($CmbISO.Items.Count -gt 0) {
+        foreach ($IsoPath in $CmbISO.Items) { Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue }
+    }
+}
+
+# --- HÀM TẠO MENU BOOT TAM (BCD) ---
+function Create-Boot-Entry ($WimPath) {
+    try {
+        $Guid = [Guid]::NewGuid().ToString()
+        $Name = "CAI WIN TAM THOI (Phat Tan PC)"
+        
+        # 1. Tao Ramdisk Options
+        cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`""
+        cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=C:"
+        cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \boot.sdi"
+        
+        # 2. Tao Entry Boot
+        $Output = cmd /c "bcdedit /create /d `"$Name`" /application osloader"
+        if ($Output -match '{([a-f0-9\-]+)}') { $ID = $matches[0] } else { return $false }
+        
+        # 3. Cau hinh Entry
+        cmd /c "bcdedit /set $ID device ramdisk=[C:]$WimPath,{ramdiskoptions}"
+        cmd /c "bcdedit /set $ID osdevice ramdisk=[C:]$WimPath,{ramdiskoptions}"
+        cmd /c "bcdedit /set $ID systemroot \windows"
+        cmd /c "bcdedit /set $ID detecthal yes"
+        cmd /c "bcdedit /set $ID winpe yes"
+        cmd /c "bcdedit /displayorder $ID /addlast"
+        
+        # 4. Set Boot 1 Lan (One-Time Boot)
+        # Nếu cài lỗi, restart sẽ về Win cũ
+        cmd /c "bcdedit /bootsequence $ID"
+        
+        return $true
+    } catch { return $false }
+}
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS & DRIVER MASTER (V5.1 FLEX)"
-$Form.Size = New-Object System.Drawing.Size(750, 630) # Tăng chiều cao
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V7.0)"
+$Form.Size = New-Object System.Drawing.Size(750, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
 # Header
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "CHON ISO & CAU HINH DRIVER"; $LblTitle.Font = "Segoe UI, 14, Bold"; $LblTitle.ForeColor = "Cyan"; $LblTitle.AutoSize=$true; $LblTitle.Location = "20,15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "CHON ISO & PHUONG PHAP CAI DAT"; $LblTitle.Font = "Segoe UI, 14, Bold"; $LblTitle.ForeColor = "Cyan"; $LblTitle.AutoSize=$true; $LblTitle.Location = "20,15"; $Form.Controls.Add($LblTitle)
 
 # ISO Selection
 $CmbISO = New-Object System.Windows.Forms.ComboBox; $CmbISO.Size = "580, 30"; $CmbISO.Location = "20,55"; $CmbISO.Font = "Segoe UI, 10"; $CmbISO.DropDownStyle = "DropDownList"; $Form.Controls.Add($CmbISO)
-$BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "TIM ISO"; $BtnBrowse.Location = "610,53"; $BtnBrowse.Size = "100,30"; $BtnBrowse.BackColor = "Gray"; $BtnBrowse.Add_Click({ 
-    $OFD = New-Object System.Windows.Forms.OpenFileDialog; $OFD.Filter = "ISO (*.iso)|*.iso"; 
-    if ($OFD.ShowDialog() -eq "OK") { $CmbISO.Items.Insert(0, $OFD.FileName); $CmbISO.SelectedIndex = 0; Check-Version } 
-}); $Form.Controls.Add($BtnBrowse)
+$BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "TIM ISO"; $BtnBrowse.Location = "610,53"; $BtnBrowse.Size = "100,30"; $BtnBrowse.BackColor = "Gray"; $BtnBrowse.Add_Click({ $OFD = New-Object System.Windows.Forms.OpenFileDialog; $OFD.Filter = "ISO (*.iso)|*.iso"; if ($OFD.ShowDialog() -eq "OK") { $CmbISO.Items.Insert(0, $OFD.FileName); $CmbISO.SelectedIndex = 0 } }); $Form.Controls.Add($BtnBrowse)
+$LblScan = New-Object System.Windows.Forms.Label; $LblScan.Text = "Dang quet..."; $LblScan.Location = "20,90"; $LblScan.AutoSize=$true; $LblScan.ForeColor = "Yellow"; $Form.Controls.Add($LblScan)
 
-# --- GROUP OPTION (DRIVER INTELLIGENCE) ---
-$GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "TUY CHON DRIVER (SMART CHECK)"; $GBOpt.Location = "20,100"; $GBOpt.Size = "690,210"; $GBOpt.ForeColor = "Yellow"; $Form.Controls.Add($GBOpt)
+# --- ACTION AREA ---
+$GBAct = New-Object System.Windows.Forms.GroupBox; $GBAct.Text = "MENU CAI DAT"; $GBAct.Location = "20,130"; $GBAct.Size = "690,300"; $GBAct.ForeColor = "Lime"; $Form.Controls.Add($GBAct)
 
-# Info Version
-$LblVerInfo = New-Object System.Windows.Forms.Label; $LblVerInfo.Text = "Trang thai: Chua chon ISO..."; $LblVerInfo.Location = "20,30"; $LblVerInfo.AutoSize=$true; $LblVerInfo.ForeColor="LightGray"; $GBOpt.Controls.Add($LblVerInfo)
+# Nut 1: Cai De (Menu Con)
+$BtnMode1 = New-Object System.Windows.Forms.Button; $BtnMode1.Text = "CHE DO 1: CAI DE / NANG CAP (RECOMMENDED)"; $BtnMode1.Location = "20,40"; $BtnMode1.Size = "650,50"; $BtnMode1.BackColor = "LimeGreen"; $BtnMode1.ForeColor = "Black"; $BtnMode1.Font = "Segoe UI, 12, Bold"
+$BtnMode1.Add_Click({ Show-SubMenu-Upgrade }); $GBAct.Controls.Add($BtnMode1)
 
-# Checkbox Backup
-$CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai (Khuyen dung khi cung/nang cap Win)"; $CkBackup.Location = "20,60"; $CkBackup.AutoSize=$true; $CkBackup.Font="Segoe UI, 10, Bold"; $CkBackup.ForeColor="White"; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
+$LblNote1 = New-Object System.Windows.Forms.Label; $LblNote1.Text = "-> Giu nguyen du lieu. Co the chon cai truc tiep hoac tao Boot tam."; $LblNote1.Location = "25,95"; $LblNote1.AutoSize=$true; $LblNote1.ForeColor="LightGray"; $GBAct.Controls.Add($LblNote1)
 
-# --- CHỌN PATH BACKUP (MỚI) ---
-$LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text = "Luu Driver tai:"; $LblPath.Location = "40,90"; $LblPath.AutoSize=$true; $GBOpt.Controls.Add($LblPath)
-$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = $Global:DriverPath; $TxtPath.Location = "130,87"; $TxtPath.Size = "450,25"; $GBOpt.Controls.Add($TxtPath)
-$BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text = "..."; $BtnPath.Location = "590,86"; $BtnPath.Size = "40,27"; $BtnPath.BackColor="Gray"
-$BtnPath.Add_Click({
-    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog
-    $FBD.Description = "Chon thu muc luu Driver (Nen chon o D hoac USB)"
-    if ($FBD.ShowDialog() -eq "OK") { $TxtPath.Text = $FBD.SelectedPath; $Global:DriverPath = $FBD.SelectedPath }
-})
-$GBOpt.Controls.Add($BtnPath)
+# Nut 2: WinToHDD
+$BtnMode2 = New-Object System.Windows.Forms.Button; $BtnMode2.Text = "CHE DO 2: CAI MOI (WinToHDD - Sạch se)"; $BtnMode2.Location = "20,140"; $BtnMode2.Size = "650,50"; $BtnMode2.BackColor = "Orange"; $BtnMode2.ForeColor = "Black"; $BtnMode2.Font = "Segoe UI, 12, Bold"
+$BtnMode2.Add_Click({ Start-Install "WinToHDD" }); $GBAct.Controls.Add($BtnMode2)
+$LblNote2 = New-Object System.Windows.Forms.Label; $LblNote2.Text = "-> Format o C, cai lai tu dau. Dung cho may loi nang."; $LblNote2.Location = "25,195"; $LblNote2.AutoSize=$true; $LblNote2.ForeColor="LightGray"; $GBAct.Controls.Add($LblNote2)
 
-# Checkbox 3DP
-$Ck3DP = New-Object System.Windows.Forms.CheckBox; $Ck3DP.Text = "Tai san 3DP Net (Cuu mang) phong truong hop thieu Driver"; $Ck3DP.Location = "20,125"; $Ck3DP.AutoSize=$true; $Ck3DP.Font="Segoe UI, 10"; $Ck3DP.ForeColor="White"; $Ck3DP.Checked=$true; $GBOpt.Controls.Add($Ck3DP)
-
-# Checkbox Inject
-$CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script tu dong cai Driver (1-Click) cho Win moi"; $CkInject.Location = "20,155"; $CkInject.AutoSize=$true; $CkInject.Font="Segoe UI, 10"; $CkInject.ForeColor="Lime"; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
-
-# --- HÀM CHECK VERSION ---
-function Check-Version {
-    $ISO = $CmbISO.SelectedItem
-    if (!$ISO) { return }
-    
-    $Form.Cursor = "WaitCursor"
-    $LblVerInfo.Text = "Dang kiem tra phien ban ISO..."
-    $Form.Refresh()
-
-    try {
-        $HostVer = [Environment]::OSVersion.Version.Major # 10 = Win10/11, 6 = Win7/8
-        $HostBuild = [Environment]::OSVersion.Version.Build
-        
-        Mount-DiskImage -ImagePath $ISO -StorageType ISO -ErrorAction SilentlyContinue
-        $Vol = Get-Volume | Where-Object { Test-Path "$($_.DriveLetter):\setup.exe" } | Select -First 1
-        if (!$Vol) { $LblVerInfo.Text = "Loi: Khong doc duoc ISO!"; $Form.Cursor = "Default"; return }
-        
-        $Drive = "$($Vol.DriveLetter):"
-        $Wim = "$Drive\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Drive\sources\install.esd" }
-        
-        $DismInfo = dism /Get-WimInfo /WimFile:$Wim /Index:1
-        $ISOVerStr = ($DismInfo | Select-String "Version :").ToString().Split(":")[1].Trim()
-        $ISOVerMajor = [int]$ISOVerStr.Split(".")[0] # 10, 6...
-
-        $Msg = "May hien tai: Win $HostVer (Build $HostBuild) | ISO: Win $ISOVerMajor ($ISOVerStr)"
-        
-        if ($ISOVerMajor -lt $HostVer) {
-            $Msg += "`n[!] CANH BAO: Ban dang HA CAP Windows. Driver cu se gay man hinh xanh!"
-            $CkBackup.Checked = $false; $CkBackup.Enabled = $false; $TxtPath.Enabled = $false
-            $CkBackup.Text = "Sao luu Driver (DA KHOA: Do ha cap Windows)"
-            $LblVerInfo.ForeColor = "Red"
-        }
-        else {
-            $Msg += "`n[OK] Phien ban hop le. Cho phep Backup Driver."
-            $CkBackup.Enabled = $true; $CkBackup.Checked = $true; $TxtPath.Enabled = $true
-            $CkBackup.Text = "Sao luu Driver hien tai (Khuyen dung)"
-            $LblVerInfo.ForeColor = "Lime"
-        }
-        $LblVerInfo.Text = $Msg
-        
-    } catch { $LblVerInfo.Text = "Khong xac dinh duoc phien ban ISO." }
-    $Form.Cursor = "Default"
-}
-$CmbISO.Add_SelectedIndexChanged({ Check-Version })
-
-# --- ACTION BUTTONS ---
-$GBAct = New-Object System.Windows.Forms.GroupBox; $GBAct.Text = "CHON CHE DO CAI DAT"; $GBAct.Location = "20,330"; $GBAct.Size = "690,200"; $GBAct.ForeColor = "Cyan"; $Form.Controls.Add($GBAct)
-
-$BtnMode1 = New-Object System.Windows.Forms.Button; $BtnMode1.Text = "CHE DO 1: CAI DE (Giu App/Data)"; $BtnMode1.Location = "20,30"; $BtnMode1.Size = "650,45"; $BtnMode1.BackColor = "LimeGreen"; $BtnMode1.ForeColor = "Black"; $BtnMode1.Font = "Segoe UI, 11, Bold"
-$BtnMode1.Add_Click({ Start-Install "Upgrade" }); $GBAct.Controls.Add($BtnMode1)
-
-$BtnMode2 = New-Object System.Windows.Forms.Button; $BtnMode2.Text = "CHE DO 2: CAI MOI (WinToHDD - Sạch se)"; $BtnMode2.Location = "20,85"; $BtnMode2.Size = "650,45"; $BtnMode2.BackColor = "Orange"; $BtnMode2.ForeColor = "Black"; $BtnMode2.Font = "Segoe UI, 11, Bold"
-$BtnMode2.Add_Click({ Start-Install "Clean" }); $GBAct.Controls.Add($BtnMode2)
-
-function Start-Install ($Mode) {
+# --- HÀM HIỂN THỊ MENU CON (CHOICE DIALOG) ---
+function Show-SubMenu-Upgrade {
     $ISO = $CmbISO.SelectedItem
     if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
-    $FinalPath = $TxtPath.Text # Lấy đường dẫn từ Textbox
 
-    if ($CkBackup.Checked) {
-        $Form.Text = "DANG SAO LUU DRIVER..."
-        if (!(Test-Path $FinalPath)) { New-Item -ItemType Directory -Path $FinalPath -Force | Out-Null }
-        
-        dism /online /export-driver /destination:"$FinalPath"
-        
-        if ($CkInject.Checked) {
-            $BatContent = "@echo off`nTitle TUC DONG CAI DAT DRIVER`ncolor 0a`necho DANG NAP DRIVER...`npnputil /add-driver `"%~dp0*.inf`" /subdirs /install`necho DA XONG!`npause"
-            Set-Content -Path "$FinalPath\1_CLICK_INSTALL_DRIVER.bat" -Value $BatContent
-        }
-    }
+    $SubForm = New-Object System.Windows.Forms.Form
+    $SubForm.Text = "CHON CACH KHOI CHAY"
+    $SubForm.Size = New-Object System.Drawing.Size(500, 250)
+    $SubForm.StartPosition = "CenterParent"
+    $SubForm.BackColor = "Black"
+    $SubForm.ForeColor = "White"
+    $SubForm.FormBorderStyle = "FixedToolWindow"
+
+    $LblQ = New-Object System.Windows.Forms.Label; $LblQ.Text = "Ban muon cai dat theo cach nao?"; $LblQ.Location = "20,20"; $LblQ.AutoSize=$true; $LblQ.Font="Segoe UI, 11, Bold"; $SubForm.Controls.Add($LblQ)
+
+    # Nut A: Cai Truc Tiep
+    $BtnDirect = New-Object System.Windows.Forms.Button; $BtnDirect.Text = "CAI TRUC TIEP (Tren nen Win)"; $BtnDirect.Location = "20,60"; $BtnDirect.Size = "440,40"; $BtnDirect.BackColor = "Cyan"; $BtnDirect.ForeColor = "Black"
+    $BtnDirect.Add_Click({ 
+        $SubForm.Close(); Start-Install "Direct" 
+    })
+    $SubForm.Controls.Add($BtnDirect)
+
+    # Nut B: Tao Boot Tam
+    $BtnBoot = New-Object System.Windows.Forms.Button; $BtnBoot.Text = "TAO BOOT TAM (Restart vao moi truong cai dat)"; $BtnBoot.Location = "20,110"; $BtnBoot.Size = "440,40"; $BtnBoot.BackColor = "Magenta"; $BtnBoot.ForeColor = "White"
+    $BtnBoot.Add_Click({ 
+        $SubForm.Close(); Start-Install "BootTmp" 
+    })
+    $SubForm.Controls.Add($BtnBoot)
     
-    if ($Ck3DP.Checked) {
-        $Form.Text = "DANG TAI 3DP NET..."
-        (New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/3DP.Net.exe", "$FinalPath\3DP_Net.exe")
-    }
+    $SubForm.ShowDialog() | Out-Null
+}
+
+# --- MAIN INSTALL LOGIC ---
+function Start-Install ($Mode) {
+    $ISO = $CmbISO.SelectedItem
     
-    if ($Mode -eq "Upgrade") {
-        Mount-DiskImage -ImagePath $ISO -StorageType ISO
-        $Vol = Get-Volume | Where-Object { Test-Path "$($_.DriveLetter):\setup.exe" } | Select -First 1
-        $Setup = "$($Vol.DriveLetter):\setup.exe"
-        if ($CkBackup.Checked) { Start-Process $Setup -ArgumentList "/Auto Upgrade /InstallDrivers `"$FinalPath`"" } else { Start-Process $Setup }
+    # 1. Dọn dẹp ổ ảo cũ trước khi làm gì đó
+    Dismount-All
+    
+    # 2. Mount ISO Mới
+    $Form.Text = "DANG MOUNT ISO..."
+    $Global:CurrentISO = $ISO # Lưu lại để tí gỡ
+    Mount-DiskImage -ImagePath $ISO -StorageType ISO -ErrorAction SilentlyContinue
+    $Vol = Get-Volume | Where-Object { Test-Path "$($_.DriveLetter):\setup.exe" } | Select -First 1
+    
+    if (!$Vol) { [System.Windows.Forms.MessageBox]::Show("Loi Mount ISO!", "Loi"); return }
+    $Drive = "$($Vol.DriveLetter):"
+
+    # --- XU LY THEO MODE ---
+    
+    if ($Mode -eq "Direct") {
+        # Chạy Setup.exe thẳng
+        Start-Process "$Drive\setup.exe"
         $Form.Close()
     }
-    else {
+    elseif ($Mode -eq "BootTmp") {
+        # Copy boot.wim ra ổ C và tạo Menu Boot
+        $Form.Text = "DANG TAO BOOT TAM..."
+        $BootWim = "$Drive\sources\boot.wim"
+        $LocalWim = "\WinInstall_Boot.wim" # Lưu ở gốc ổ C
+        
+        if (Test-Path $BootWim) {
+            Copy-Item $BootWim "C:$LocalWim" -Force
+            # Copy file boot.sdi (cần thiết)
+            if (!(Test-Path "C:\boot.sdi")) { Copy-Item "$Drive\boot\boot.sdi" "C:\boot.sdi" -Force }
+            
+            if (Create-Boot-Entry $LocalWim) {
+                 $Res = [System.Windows.Forms.MessageBox]::Show("Da tao Boot Tam thanh cong!`nMay se khoi dong lai vao moi truong cai dat.`n`nNeu cai loi, lan sau khoi dong se tu ve Win cu.`n`nRestart ngay?", "Thanh Cong", "YesNo", "Information")
+                 if ($Res -eq "Yes") { Restart-Computer -Force }
+            } else {
+                 [System.Windows.Forms.MessageBox]::Show("Loi tao Menu Boot (BCD).", "Loi")
+            }
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Khong tim thay boot.wim trong ISO!", "Loi")
+        }
+    }
+    elseif ($Mode -eq "WinToHDD") {
         $WTHPath = "$env:TEMP\WinToHDD.exe"
         if (!(Test-Path $WTHPath)) { (New-Object Net.WebClient).DownloadFile($WinToHDD_Url, $WTHPath) }
         Start-Process $WTHPath
-        [System.Windows.Forms.MessageBox]::Show("Da chuan bi Driver tai: $FinalPath`nSau khi cai Win, hay chay '1_CLICK_INSTALL_DRIVER.bat'!", "PHAT TAN PC")
     }
 }
 
@@ -152,7 +172,7 @@ $Form.Add_Shown({
     $Form.Refresh(); $LblScan.Text = "Dang quet ISO..."
     $Paths = @("$env:USERPROFILE\Downloads", "$env:USERPROFILE\Desktop", "D:", "E:")
     foreach ($P in $Paths) { if (Test-Path $P) { Get-ChildItem $P -Filter "*.iso" -Recurse -Depth 1 | Where {$_.Length -gt 500MB} | ForEach { $CmbISO.Items.Add($_.FullName) } } }
-    if ($CmbISO.Items.Count -gt 0) { $CmbISO.SelectedIndex = 0; Check-Version; $LblScan.Text = "Tim thay ISO." } else { $LblScan.Text = "Khong thay ISO." }
+    if ($CmbISO.Items.Count -gt 0) { $CmbISO.SelectedIndex = 0; $LblScan.Text = "Tim thay ISO." } else { $LblScan.Text = "Khong thay ISO." }
 })
 
 $Form.ShowDialog() | Out-Null
