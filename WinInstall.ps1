@@ -1,19 +1,29 @@
 # --- 1. TỰ ĐỘNG YÊU CẦU QUYỀN ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
+    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    Exit
 }
-
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-$ErrorActionPreference = "SilentlyContinue"
 
 # --- CẤU HÌNH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
 
+# --- NẠP THƯ VIỆN GUI (Kiểm tra kỹ phần này) ---
+try {
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+    Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+}
+catch {
+    Write-Host "LỖI NẠP THƯ VIỆN GUI: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Nhấn Enter để thoát..."
+    Exit
+}
+
+$ErrorActionPreference = "Continue" # Để hiện lỗi đỏ thay vì im lặng
+
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CÀI ĐẶT WINDOWS TỰ ĐỘNG - PHÁT TẤN PC (V3.1)"
-$Form.Size = New-Object System.Drawing.Size(700, 480)
+$Form.Text = "CÀI ĐẶT WINDOWS TỰ ĐỘNG - PHÁT TẤN PC (V3.2 DEBUG)"
+$Form.Size = New-Object System.Drawing.Size(700, 520)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $Form.ForeColor = "White"
@@ -69,8 +79,6 @@ $BtnMount.Add_Click({
         if ($Vol) {
             $DriveLetter = $Vol.DriveLetter + ":"
             $SetupPath = "$DriveLetter\setup.exe"
-            
-            # Mở thư mục ổ ảo lên cho khách thấy
             Invoke-Item $DriveLetter
             
             if (Test-Path $SetupPath) {
@@ -135,4 +143,12 @@ $Form.Add_Shown({
     else { $LblScan.Text = "Không tìm thấy file ISO nào > 500MB."; $LblScan.ForeColor = "Red" }
 })
 
-$Form.ShowDialog() | Out-Null
+# --- CHẠY GUI ---
+Write-Host "Đang khởi động giao diện..." -ForegroundColor Cyan
+$Result = $Form.ShowDialog()
+
+# --- LỆNH PAUSE ĐỂ XEM LỖI (QUAN TRỌNG) ---
+Write-Host "`n========================================" -ForegroundColor Yellow
+Write-Host "TOOL ĐÃ ĐÓNG. NẾU CÓ LỖI ĐỎ, HÃY ĐỌC Ở TRÊN!" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Yellow
+Read-Host "Nhấn Enter để thoát..."
