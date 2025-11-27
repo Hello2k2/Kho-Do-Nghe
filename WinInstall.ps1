@@ -9,12 +9,13 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- CAU HINH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
-$DriverBackupPath = "D:\Drivers_Backup_Auto" # Lưu ổ D để cài lại Win không mất
+# Mặc định vẫn là D:\Drivers_Backup_Auto nếu không chọn gì
+$Global:DriverPath = "D:\Drivers_Backup_Auto" 
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS & DRIVER MASTER (V5.0)"
-$Form.Size = New-Object System.Drawing.Size(750, 600)
+$Form.Text = "CAI DAT WINDOWS & DRIVER MASTER (V5.1 FLEX)"
+$Form.Size = New-Object System.Drawing.Size(750, 630) # Tăng chiều cao
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
@@ -30,7 +31,7 @@ $BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "TIM ISO"
 }); $Form.Controls.Add($BtnBrowse)
 
 # --- GROUP OPTION (DRIVER INTELLIGENCE) ---
-$GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "TUY CHON DRIVER (SMART CHECK)"; $GBOpt.Location = "20,100"; $GBOpt.Size = "690,180"; $GBOpt.ForeColor = "Yellow"; $Form.Controls.Add($GBOpt)
+$GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "TUY CHON DRIVER (SMART CHECK)"; $GBOpt.Location = "20,100"; $GBOpt.Size = "690,210"; $GBOpt.ForeColor = "Yellow"; $Form.Controls.Add($GBOpt)
 
 # Info Version
 $LblVerInfo = New-Object System.Windows.Forms.Label; $LblVerInfo.Text = "Trang thai: Chua chon ISO..."; $LblVerInfo.Location = "20,30"; $LblVerInfo.AutoSize=$true; $LblVerInfo.ForeColor="LightGray"; $GBOpt.Controls.Add($LblVerInfo)
@@ -38,11 +39,22 @@ $LblVerInfo = New-Object System.Windows.Forms.Label; $LblVerInfo.Text = "Trang t
 # Checkbox Backup
 $CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai (Khuyen dung khi cung/nang cap Win)"; $CkBackup.Location = "20,60"; $CkBackup.AutoSize=$true; $CkBackup.Font="Segoe UI, 10, Bold"; $CkBackup.ForeColor="White"; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
 
-# Checkbox 3DP (Alternative)
-$Ck3DP = New-Object System.Windows.Forms.CheckBox; $Ck3DP.Text = "Tai san 3DP Net (Cuu mang) phong truong hop thieu Driver"; $Ck3DP.Location = "20,90"; $Ck3DP.AutoSize=$true; $Ck3DP.Font="Segoe UI, 10"; $Ck3DP.ForeColor="White"; $Ck3DP.Checked=$true; $GBOpt.Controls.Add($Ck3DP)
+# --- CHỌN PATH BACKUP (MỚI) ---
+$LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text = "Luu Driver tai:"; $LblPath.Location = "40,90"; $LblPath.AutoSize=$true; $GBOpt.Controls.Add($LblPath)
+$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = $Global:DriverPath; $TxtPath.Location = "130,87"; $TxtPath.Size = "450,25"; $GBOpt.Controls.Add($TxtPath)
+$BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text = "..."; $BtnPath.Location = "590,86"; $BtnPath.Size = "40,27"; $BtnPath.BackColor="Gray"
+$BtnPath.Add_Click({
+    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog
+    $FBD.Description = "Chon thu muc luu Driver (Nen chon o D hoac USB)"
+    if ($FBD.ShowDialog() -eq "OK") { $TxtPath.Text = $FBD.SelectedPath; $Global:DriverPath = $FBD.SelectedPath }
+})
+$GBOpt.Controls.Add($BtnPath)
+
+# Checkbox 3DP
+$Ck3DP = New-Object System.Windows.Forms.CheckBox; $Ck3DP.Text = "Tai san 3DP Net (Cuu mang) phong truong hop thieu Driver"; $Ck3DP.Location = "20,125"; $Ck3DP.AutoSize=$true; $Ck3DP.Font="Segoe UI, 10"; $Ck3DP.ForeColor="White"; $Ck3DP.Checked=$true; $GBOpt.Controls.Add($Ck3DP)
 
 # Checkbox Inject
-$CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script tu dong cai Driver (1-Click) cho Win moi"; $CkInject.Location = "20,120"; $CkInject.AutoSize=$true; $CkInject.Font="Segoe UI, 10"; $CkInject.ForeColor="Lime"; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
+$CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script tu dong cai Driver (1-Click) cho Win moi"; $CkInject.Location = "20,155"; $CkInject.AutoSize=$true; $CkInject.Font="Segoe UI, 10"; $CkInject.ForeColor="Lime"; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
 
 # --- HÀM CHECK VERSION ---
 function Check-Version {
@@ -54,11 +66,9 @@ function Check-Version {
     $Form.Refresh()
 
     try {
-        # 1. Lấy Version Máy Thật
         $HostVer = [Environment]::OSVersion.Version.Major # 10 = Win10/11, 6 = Win7/8
         $HostBuild = [Environment]::OSVersion.Version.Build
         
-        # 2. Lấy Version ISO (Mount ngầm)
         Mount-DiskImage -ImagePath $ISO -StorageType ISO -ErrorAction SilentlyContinue
         $Vol = Get-Volume | Where-Object { Test-Path "$($_.DriveLetter):\setup.exe" } | Select -First 1
         if (!$Vol) { $LblVerInfo.Text = "Loi: Khong doc duoc ISO!"; $Form.Cursor = "Default"; return }
@@ -66,25 +76,21 @@ function Check-Version {
         $Drive = "$($Vol.DriveLetter):"
         $Wim = "$Drive\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Drive\sources\install.esd" }
         
-        # Dùng DISM đọc thông tin
         $DismInfo = dism /Get-WimInfo /WimFile:$Wim /Index:1
         $ISOVerStr = ($DismInfo | Select-String "Version :").ToString().Split(":")[1].Trim()
         $ISOVerMajor = [int]$ISOVerStr.Split(".")[0] # 10, 6...
 
-        # 3. So Sánh Logic
         $Msg = "May hien tai: Win $HostVer (Build $HostBuild) | ISO: Win $ISOVerMajor ($ISOVerStr)"
         
         if ($ISOVerMajor -lt $HostVer) {
             $Msg += "`n[!] CANH BAO: Ban dang HA CAP Windows. Driver cu se gay man hinh xanh!"
-            $CkBackup.Checked = $false
-            $CkBackup.Enabled = $false # Khóa luôn
+            $CkBackup.Checked = $false; $CkBackup.Enabled = $false; $TxtPath.Enabled = $false
             $CkBackup.Text = "Sao luu Driver (DA KHOA: Do ha cap Windows)"
             $LblVerInfo.ForeColor = "Red"
         }
         else {
             $Msg += "`n[OK] Phien ban hop le. Cho phep Backup Driver."
-            $CkBackup.Enabled = $true
-            $CkBackup.Checked = $true
+            $CkBackup.Enabled = $true; $CkBackup.Checked = $true; $TxtPath.Enabled = $true
             $CkBackup.Text = "Sao luu Driver hien tai (Khuyen dung)"
             $LblVerInfo.ForeColor = "Lime"
         }
@@ -96,76 +102,48 @@ function Check-Version {
 $CmbISO.Add_SelectedIndexChanged({ Check-Version })
 
 # --- ACTION BUTTONS ---
-$GBAct = New-Object System.Windows.Forms.GroupBox; $GBAct.Text = "CHON CHE DO CAI DAT"; $GBAct.Location = "20,290"; $GBAct.Size = "690,200"; $GBAct.ForeColor = "Cyan"; $Form.Controls.Add($GBAct)
+$GBAct = New-Object System.Windows.Forms.GroupBox; $GBAct.Text = "CHON CHE DO CAI DAT"; $GBAct.Location = "20,330"; $GBAct.Size = "690,200"; $GBAct.ForeColor = "Cyan"; $Form.Controls.Add($GBAct)
 
-# Mode 1: Upgrade
 $BtnMode1 = New-Object System.Windows.Forms.Button; $BtnMode1.Text = "CHE DO 1: CAI DE (Giu App/Data)"; $BtnMode1.Location = "20,30"; $BtnMode1.Size = "650,45"; $BtnMode1.BackColor = "LimeGreen"; $BtnMode1.ForeColor = "Black"; $BtnMode1.Font = "Segoe UI, 11, Bold"
 $BtnMode1.Add_Click({ Start-Install "Upgrade" }); $GBAct.Controls.Add($BtnMode1)
 
-# Mode 2: Clean
 $BtnMode2 = New-Object System.Windows.Forms.Button; $BtnMode2.Text = "CHE DO 2: CAI MOI (WinToHDD - Sạch se)"; $BtnMode2.Location = "20,85"; $BtnMode2.Size = "650,45"; $BtnMode2.BackColor = "Orange"; $BtnMode2.ForeColor = "Black"; $BtnMode2.Font = "Segoe UI, 11, Bold"
 $BtnMode2.Add_Click({ Start-Install "Clean" }); $GBAct.Controls.Add($BtnMode2)
 
-# Logic Cài Đặt Chung
 function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem
     if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
-    
-    # 1. BACKUP DRIVER (Nếu được chọn)
+    $FinalPath = $TxtPath.Text # Lấy đường dẫn từ Textbox
+
     if ($CkBackup.Checked) {
         $Form.Text = "DANG SAO LUU DRIVER..."
-        if (!(Test-Path $DriverBackupPath)) { New-Item -ItemType Directory -Path $DriverBackupPath -Force | Out-Null }
+        if (!(Test-Path $FinalPath)) { New-Item -ItemType Directory -Path $FinalPath -Force | Out-Null }
         
-        # Export Driver
-        dism /online /export-driver /destination:"$DriverBackupPath"
+        dism /online /export-driver /destination:"$FinalPath"
         
-        # 2. TAO SCRIPT AUTO INSTALL (Cực Xịn)
         if ($CkInject.Checked) {
-            $BatContent = @"
-@echo off
-Title TUC DONG CAI DAT DRIVER - PHAT TAN PC
-color 0a
-echo ====================================================
-echo      DANG TU DONG NAP LAI TOAN BO DRIVER...
-echo      Vui long doi trong giay lat...
-echo ====================================================
-pnputil /add-driver "%~dp0*.inf" /subdirs /install
-echo.
-echo DA XONG! BAM PHIM BAT KY DE THOAT.
-pause
-"@
-            $BatFile = "$DriverBackupPath\1_CLICK_INSTALL_DRIVER.bat"
-            Set-Content -Path $BatFile -Value $BatContent
+            $BatContent = "@echo off`nTitle TUC DONG CAI DAT DRIVER`ncolor 0a`necho DANG NAP DRIVER...`npnputil /add-driver `"%~dp0*.inf`" /subdirs /install`necho DA XONG!`npause"
+            Set-Content -Path "$FinalPath\1_CLICK_INSTALL_DRIVER.bat" -Value $BatContent
         }
     }
     
-    # 3. TAI 3DP NET (Nếu chọn)
     if ($Ck3DP.Checked) {
         $Form.Text = "DANG TAI 3DP NET..."
-        (New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/3DP.Net.exe", "$DriverBackupPath\3DP_Net.exe")
+        (New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/3DP.Net.exe", "$FinalPath\3DP_Net.exe")
     }
     
-    # 4. THUC THI CAI WIN
     if ($Mode -eq "Upgrade") {
-        # Mount và chạy Setup (Có tham số Driver nếu Win hỗ trợ)
         Mount-DiskImage -ImagePath $ISO -StorageType ISO
         $Vol = Get-Volume | Where-Object { Test-Path "$($_.DriveLetter):\setup.exe" } | Select -First 1
         $Setup = "$($Vol.DriveLetter):\setup.exe"
-        
-        if ($CkBackup.Checked) {
-            # Setup.exe hỗ trợ tham số /InstallDrivers (Chỉ Win 10/11)
-            Start-Process $Setup -ArgumentList "/Auto Upgrade /InstallDrivers `"$DriverBackupPath`""
-        } else {
-            Start-Process $Setup
-        }
+        if ($CkBackup.Checked) { Start-Process $Setup -ArgumentList "/Auto Upgrade /InstallDrivers `"$FinalPath`"" } else { Start-Process $Setup }
         $Form.Close()
     }
     else {
-        # WinToHDD Mode
         $WTHPath = "$env:TEMP\WinToHDD.exe"
         if (!(Test-Path $WTHPath)) { (New-Object Net.WebClient).DownloadFile($WinToHDD_Url, $WTHPath) }
         Start-Process $WTHPath
-        [System.Windows.Forms.MessageBox]::Show("Da chuan bi Driver tai: $DriverBackupPath`n`nSau khi cai Win xong, hay vao thu muc do va chay file '1_CLICK_INSTALL_DRIVER.bat' de nap lai Driver nhe!", "PHAT TAN PC")
+        [System.Windows.Forms.MessageBox]::Show("Da chuan bi Driver tai: $FinalPath`nSau khi cai Win, hay chay '1_CLICK_INSTALL_DRIVER.bat'!", "PHAT TAN PC")
     }
 }
 
