@@ -135,6 +135,15 @@ $B6.BackColor = "Purple"
 $B6.ForeColor = "White"
 $B6.Add_Click({ Load-Module "SystemInfo.ps1" })
 $T4.Controls.Add($B6)
+# Thêm vào Tab 4 hoặc nơi ông thích
+$B_InstallWin = New-Object System.Windows.Forms.Button
+$B_InstallWin.Text = "CAI WIN TU DONG (ISO)"
+$B_InstallWin.Location = New-Object System.Drawing.Point(470, 80) # Chỉnh tọa độ cho đẹp
+$B_InstallWin.Size = New-Object System.Drawing.Size(180, 40)
+$B_InstallWin.BackColor = "Pink"
+$B_InstallWin.ForeColor = "Black"
+$B_InstallWin.Add_Click({ Load-Module "WinInstall.ps1" })
+$T4.Controls.Add($B_InstallWin)
 # Buttons Bottom
 $BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = New-Object System.Drawing.Point(20, 470); $BtnSelectAll.Size = New-Object System.Drawing.Size(80, 30); $BtnSelectAll.BackColor = "Gray"; $BtnSelectAll.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $true } } } }); $Form.Controls.Add($BtnSelectAll)
 $BtnUncheck = New-Object System.Windows.Forms.Button; $BtnUncheck.Text = "Bo Chon"; $BtnUncheck.Location = New-Object System.Drawing.Point(110, 470); $BtnUncheck.Size = New-Object System.Drawing.Size(80, 30); $BtnUncheck.BackColor = "Gray"; $BtnUncheck.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $false } } } }); $Form.Controls.Add($BtnUncheck)
