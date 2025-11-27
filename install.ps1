@@ -47,7 +47,7 @@ Write-Host "
  |_|    |_| |_|\__,_|\__|  |_|\__,_|_| |_|
                                           
     " -ForegroundColor Cyan
-Write-Host "    --- CHUYEN CUU HO MAY TINH ONLINE ---" -ForegroundColor Yellow
+Write-Host "    ---  CUU HO MAY TINH ONLINE ---" -ForegroundColor Yellow
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 Write-Host " [*] Author:      Phat Tan (Zalo: 0823.883.028)" -ForegroundColor White
 Write-Host " [*] Credits:     Vu Kim Dong, MMT, MAS" -ForegroundColor DarkGray
@@ -137,7 +137,7 @@ $B6.Add_Click({ Load-Module "SystemInfo.ps1" })
 $T4.Controls.Add($B6)
 # Thêm vào Tab 4 hoặc nơi ông thích
 $B_InstallWin = New-Object System.Windows.Forms.Button
-$B_InstallWin.Text = "CAI WIN TU DONG (ISO)"
+$B_InstallWin.Text = "CÀI WIN TỰ ĐỘNGĐỘNG (ISO)"
 $B_InstallWin.Location = New-Object System.Drawing.Point(470, 80) # Chỉnh tọa độ cho đẹp
 $B_InstallWin.Size = New-Object System.Drawing.Size(180, 40)
 $B_InstallWin.BackColor = "Pink"
