@@ -1,11 +1,13 @@
-Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing
+try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing } catch { Exit }
 $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounattend.xml"
 
 $Form = New-Object System.Windows.Forms.Form
 $Form.Text = "CAU HINH FILE TU DONG (XML GENERATOR)"
-$Form.Size = "600, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = "#2D2D30"; $Form.ForeColor = "White"
+$Form.Size = New-Object System.Drawing.Size(600, 550); $Form.StartPosition = "CenterScreen"; $Form.BackColor = "#2D2D30"; $Form.ForeColor = "White"
 
-$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "NHAP THONG TIN CHO WINDOWS MOI:"; $Lbl.Location = "20,20"; $Lbl.AutoSize=$true; $Lbl.Font="Segoe UI, 12, Bold"; $Form.Controls.Add($Lbl)
+$FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+
+$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "NHAP THONG TIN CHO WINDOWS MOI:"; $Lbl.Location = "20,20"; $Lbl.AutoSize=$true; $Lbl.Font=$FontBold; $Form.Controls.Add($Lbl)
 
 function Add-Input ($T, $Y, $D) {
     $L=New-Object System.Windows.Forms.Label; $L.Text=$T; $L.Location="20,$Y"; $L.AutoSize=$true; $Form.Controls.Add($L)
@@ -21,7 +23,7 @@ $GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG"; $GB.Lo
 $RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "XOA SACH (Clean Install)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.Checked=$true; $GB.Controls.Add($RadWipe)
 $RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "DUAL BOOT (Giu Win Cu)"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $GB.Controls.Add($RadDual)
 
-$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "LUU CAU HINH"; $BtnSave.Location = "20,400"; $BtnSave.Size = "530,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font="Segoe UI, 12, Bold"
+$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "LUU CAU HINH"; $BtnSave.Location = "20,400"; $BtnSave.Size = "530,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
 $BtnSave.Add_Click({
     $XMLPath = "$env:SystemDrive\autounattend.xml"
     try {
