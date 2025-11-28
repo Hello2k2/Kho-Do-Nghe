@@ -19,56 +19,75 @@ function Dismount-All {
 }
 
 function Get-BiosMode {
-    # Cách check BIOS Mode chuẩn nhất qua bcdedit
     $Info = bcdedit /enum | Out-String
     if ($Info -match "winload.efi") { return "UEFI" }
     return "Legacy"
 }
 
-# --- HÀM TẠO MENU BOOT (FIXED 0xc000000f) ---
+# --- HÀM DỌN DẸP BOOT MENU CŨ (MỚI) ---
+function Clean-Boot-Entries {
+    # Tìm tất cả Entry có tên "CAI WIN TAM THOI"
+    $BcdList = bcdedit /enum /v | Out-String
+    $Lines = $BcdList -split "`r`n"
+    $TargetID = ""
+    
+    for ($i=0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match "description\s+CAI WIN TAM THOI") {
+            # Quay ngược lên tìm ID (identifier)
+            for ($j=$i; $j -ge 0; $j--) {
+                if ($Lines[$j] -match "identifier\s+{(.*)}") {
+                    $TargetID = "{$($Matches[1])}"
+                    Write-Host "Da tim thay Entry cu: $TargetID -> Xoa!" -F Yellow
+                    cmd /c "bcdedit /delete $TargetID /f"
+                    break
+                }
+            }
+        }
+    }
+    
+    # Xóa file WIM cũ nếu có
+    $SysDrive = $env:SystemDrive
+    if (Test-Path "$SysDrive\WinInstall_Boot.wim") { Remove-Item "$SysDrive\WinInstall_Boot.wim" -Force }
+    if (Test-Path "$SysDrive\boot.sdi") { Remove-Item "$SysDrive\boot.sdi" -Force }
+}
+
+# --- HÀM TẠO MENU BOOT (FIX PATH) ---
 function Create-Boot-Entry ($WimPath) {
     try {
+        Clean-Boot-Entries # Dọn dẹp trước khi tạo mới
+        
         $Name = "CAI WIN TAM THOI (Phat Tan PC)"
         $Mode = Get-BiosMode
-        $Drive = $env:SystemDrive # Lấy ổ cài Win hiện tại (thường là C:)
+        $Drive = $env:SystemDrive # C:
         
-        # 1. Xóa Ramdisk Options cũ nếu có để tránh xung đột
-        cmd /c "bcdedit /delete {ramdiskoptions} /f"
-        
-        # 2. Tạo Ramdisk Options mới chuẩn
-        cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`""
+        # 1. Tao Ramdisk Options (Nếu chưa có)
+        cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`"" 2>$null
         cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"
         cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \boot.sdi"
         
-        # 3. Tạo Entry Boot
+        # 2. Tao Entry
         $Output = cmd /c "bcdedit /create /d `"$Name`" /application osloader"
         if ($Output -match '{([a-f0-9\-]+)}') { $ID = $matches[0] } else { return $false }
         
-        # 4. Cấu hình Entry (Quan trọng: Dùng [$Drive] thay vì [C:])
+        # 3. Config
         cmd /c "bcdedit /set $ID device ramdisk=[$Drive]$WimPath,{ramdiskoptions}"
         cmd /c "bcdedit /set $ID osdevice ramdisk=[$Drive]$WimPath,{ramdiskoptions}"
         cmd /c "bcdedit /set $ID systemroot \windows"
         cmd /c "bcdedit /set $ID detecthal yes"
         cmd /c "bcdedit /set $ID winpe yes"
         
-        # 5. Chỉnh Bootloader theo BIOS Mode chuẩn xác
-        if ($Mode -eq "UEFI") { 
-            cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.efi"
-        } else { 
-            cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.exe" 
-        }
+        if ($Mode -eq "UEFI") { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.efi" }
+        else { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.exe" }
 
-        # 6. Đưa lên đầu và Set Boot 1 lần
         cmd /c "bcdedit /displayorder $ID /addlast"
         cmd /c "bcdedit /bootsequence $ID"
-        
         return $true
     } catch { return $false }
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V9.0)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V9.1 FIX)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -85,14 +104,11 @@ function Make-Tab ($T) { $P = New-Object System.Windows.Forms.TabPage; $P.Text =
 # TAB 1: CAI DAT (MAIN)
 # ==========================================
 $TabInstall = Make-Tab "Cai Dat Windows"
-
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "CHON ISO & CAU HINH"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = "Cyan"; $LblTitle.AutoSize=$true; $LblTitle.Location = "20,15"; $TabInstall.Controls.Add($LblTitle)
 
-# ISO Select
 $CmbISO = New-Object System.Windows.Forms.ComboBox; $CmbISO.Size = "580, 30"; $CmbISO.Location = "20,55"; $CmbISO.Font = New-Object System.Drawing.Font("Segoe UI", 10); $CmbISO.DropDownStyle = "DropDownList"; $TabInstall.Controls.Add($CmbISO)
 $BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "TIM ISO"; $BtnBrowse.Location = "610,53"; $BtnBrowse.Size = "100,30"; $BtnBrowse.BackColor = "Gray"; $BtnBrowse.ForeColor="White"; $BtnBrowse.Add_Click({ $OFD = New-Object System.Windows.Forms.OpenFileDialog; $OFD.Filter = "ISO (*.iso)|*.iso"; if ($OFD.ShowDialog() -eq "OK") { $CmbISO.Items.Insert(0, $OFD.FileName); $CmbISO.SelectedIndex = 0; Check-Version } }); $TabInstall.Controls.Add($BtnBrowse)
 
-# Driver Options
 $GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "TUY CHON DRIVER"; $GBOpt.Location = "20,100"; $GBOpt.Size = "690,200"; $GBOpt.ForeColor = "Yellow"; $TabInstall.Controls.Add($GBOpt)
 $LblVerInfo = New-Object System.Windows.Forms.Label; $LblVerInfo.Text = "Trang thai: Chua chon ISO..."; $LblVerInfo.Location = "20,30"; $LblVerInfo.AutoSize=$true; $LblVerInfo.ForeColor="LightGray"; $GBOpt.Controls.Add($LblVerInfo)
 $CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai (Pnputil)"; $CkBackup.Location = "20,60"; $CkBackup.AutoSize=$true; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
@@ -102,7 +118,6 @@ $LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text = "Noi luu:"; $L
 $TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = $Global:DriverPath; $TxtPath.Location = "100,152"; $TxtPath.Size = "480,25"; $GBOpt.Controls.Add($TxtPath)
 $BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text = "..."; $BtnPath.Location = "590,151"; $BtnPath.Size = "40,27"; $BtnPath.BackColor="Gray"; $BtnPath.ForeColor="White"; $BtnPath.Add_Click({ $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { $TxtPath.Text = $FBD.SelectedPath; $Global:DriverPath = $FBD.SelectedPath } }); $GBOpt.Controls.Add($BtnPath)
 
-# Action Buttons
 $BtnMode1 = New-Object System.Windows.Forms.Button; $BtnMode1.Text = "CHE DO 1: CAI DE / NANG CAP (Setup.exe)"; $BtnMode1.Location = "20,320"; $BtnMode1.Size = "690,50"; $BtnMode1.BackColor = "LimeGreen"; $BtnMode1.ForeColor = "Black"; $BtnMode1.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $BtnMode1.Add_Click({ Show-SubMenu-Upgrade }); $TabInstall.Controls.Add($BtnMode1)
 
@@ -221,11 +236,7 @@ function Start-Install ($Mode) {
         if (!(Test-Path $FinalPath)) { New-Item -ItemType Directory -Path $FinalPath -Force | Out-Null }
         $Form.Text = "DANG SAO LUU DRIVER (Vui long doi)..."
         Start-Process "pnputil.exe" -ArgumentList "/export-driver * `"$FinalPath`"" -Wait -NoNewWindow
-        
-        if ($CkInject.Checked) {
-            $BatContent = "@echo off`nTitle AUTO DRIVER INSTALLER`ncolor 0a`necho DANG NAP LAI DRIVER...`npnputil /add-driver `"%~dp0*.inf`" /subdirs /install`necho DA XONG!`npause"
-            Set-Content -Path "$FinalPath\1_CLICK_INSTALL_DRIVER.bat" -Value $BatContent
-        }
+        if ($CkInject.Checked) { Set-Content -Path "$FinalPath\1_CLICK_INSTALL_DRIVER.bat" -Value "@echo off`nTitle AUTO DRIVER`ncolor 0a`n`npnputil /add-driver `"%~dp0*.inf`" /subdirs /install`npause" }
         if ($Ck3DP.Checked) { try { (New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/3DP.Net.exe", "$FinalPath\3DP_Net.exe") } catch {} }
     }
 
@@ -239,6 +250,10 @@ function Start-Install ($Mode) {
         $Form.Text = "DANG TAO BOOT TAM..."
         $SysDrive = $env:SystemDrive
         
+        # Check dung lượng ổ C
+        $FreeC = (Get-PSDrive $SysDrive.Substring(0,1)).Free / 1GB
+        if ($FreeC -lt 2) { [System.Windows.Forms.MessageBox]::Show("O C: day qua!", "Loi"); return }
+
         Copy-Item "$Drive\sources\boot.wim" "$SysDrive\WinInstall_Boot.wim" -Force
         Copy-Item "$Drive\boot\boot.sdi" "$SysDrive\boot.sdi" -Force
         if (Create-Boot-Entry "\WinInstall_Boot.wim") {
