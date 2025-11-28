@@ -1,96 +1,88 @@
-# --- 1. FORCE ADMIN ---
+# --- 1. TU DONG YEU CAU QUYEN ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- INIT ---
+# --- NAP THU VIEN ---
 try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing } catch { Exit }
 $ErrorActionPreference = "SilentlyContinue"
-$DebugLog = "C:\PhatTan_Debug.txt"
 
-# --- LOG FUNCTION ---
-function Write-DebugLog ($Message) {
-    $Time = Get-Date -Format "HH:mm:ss"; $Line = "[$Time] $Message"
-    $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
-}
-if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== TOOL START V9.7 (PRECISION MOUNT) ==="
-
-# --- HÀM MOUNT CHÍNH XÁC TUYỆT ĐỐI ---
-function Mount-And-GetDrive ($IsoPath) {
-    Write-DebugLog "Mounting ISO: $IsoPath"
-    
-    # 1. Dọn dẹp cũ
-    Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
-    
-    # 2. Mount mới
-    try {
-        Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop
-        Start-Sleep -Seconds 3 # Cho máy ảo thở xíu
-    } catch {
-        Write-DebugLog "Loi lenh Mount: $($_.Exception.Message)"
-        return $null
-    }
-
-    # --- CACH 1: CHINH CHU (Get-DiskImage) ---
-    try {
-        $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
-        if ($Vol) {
-            $Letter = "$($Vol.DriveLetter):"
-            if (Test-Path "$Letter\setup.exe") { 
-                Write-DebugLog "Cach 1 (Chuan) OK: $Letter"
-                return $Letter 
-            }
-        }
-    } catch { Write-DebugLog "Cach 1 that bai. Chuyen sang quet can..." }
-
-    # --- CACH 2: QUET CAN (BRUTE FORCE - Chuyen tri may ao/Win Lite) ---
-    Write-DebugLog "Dang quet tat ca o dia..."
-    $Drives = Get-PSDrive -PSProvider FileSystem
-    foreach ($D in $Drives) {
-        $Root = $D.Root
-        # Bỏ qua ổ C (ổ hệ thống) và ổ A/B (Floppy)
-        if ($Root -eq "C:\" -or $Root -eq "A:\" -or $Root -eq "B:\") { continue }
-        
-        # Dấu hiệu nhận biết bộ cài Win chuẩn
-        if ((Test-Path "$Root\setup.exe") -and (Test-Path "$Root\bootmgr")) {
-            # Kiểm tra kỹ hơn: Phải có thư mục sources
-            if ((Test-Path "$Root\sources\install.wim") -or (Test-Path "$Root\sources\install.esd") -or (Test-Path "$Root\sources\boot.wim")) {
-                Write-DebugLog "Cach 2 (Quet) OK: $Root"
-                return $Root
-            }
-        }
-    }
-
-    Write-DebugLog "ERROR: Mount roi nhung khong tim thay o dia nao chua Setup.exe!"
-    return $null
-}
-
-# --- HÀM DISMOUNT ALL ---
-function Dismount-All {
-    # Dismount tất cả ISO đang có trong ComboBox để tránh xung đột
-    foreach ($Item in $CmbISO.Items) {
-        Dismount-DiskImage -ImagePath $Item -ErrorAction SilentlyContinue
-    }
-}
-
-# --- CẤU HÌNH ---
+# --- CAU HINH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
 $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounattend.xml"
 $Global:DriverPath = "D:\Drivers_Backup_Auto"
+$DebugLog = "C:\PhatTan_Debug.txt"
 
-# --- HÀM TẠO BOOT (BCD) ---
+# --- HÀM GHI LOG ---
+function Write-DebugLog ($Message) {
+    $Time = Get-Date -Format "HH:mm:ss"; $Line = "[$Time] $Message"
+    $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
+    Write-Host $Line -ForegroundColor Cyan
+}
+if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
+Write-DebugLog "=== TOOL START V10.0 (HYBRID) ==="
+
+# --- HÀM HỖ TRỢ HỆ THỐNG ---
+function Dismount-All {
+    if ($CmbISO.SelectedItem) { Dismount-DiskImage -ImagePath $CmbISO.SelectedItem -ErrorAction SilentlyContinue }
+}
+
 function Get-BiosMode {
     $Info = bcdedit /enum | Out-String
     if ($Info -match "winload.efi") { return "UEFI" }
     return "Legacy"
 }
 
+# --- HÀM MOUNT HYBRID (BẤT TỬ) ---
+function Mount-And-GetDrive ($IsoPath) {
+    Write-DebugLog "Mounting: $IsoPath"
+    Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
+    
+    try {
+        Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop
+        Start-Sleep -Seconds 3
+    } catch {
+        Write-DebugLog "Loi lenh Mount: $($_.Exception.Message)"
+        return $null
+    }
+
+    # CACH 1: CHINH CHU (Get-DiskImage)
+    try {
+        $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
+        if ($Vol) {
+            $Letter = "$($Vol.DriveLetter):"
+            if (Test-Path "$Letter\setup.exe") { 
+                Write-DebugLog "Cach 1 OK: $Letter"; return $Letter 
+            }
+        }
+    } catch { Write-DebugLog "Cach 1 that bai. Chuyen sang quet can..." }
+
+    # CACH 2: QUET CAN (BRUTE FORCE - Fix cho May Ao)
+    Write-DebugLog "Dang quet tat ca o dia..."
+    $Drives = Get-PSDrive -PSProvider FileSystem
+    foreach ($D in $Drives) {
+        $Root = $D.Root
+        if ($Root -eq "C:\" -or $Root -eq "A:\" -or $Root -eq "B:\") { continue }
+        
+        # Dau hieu nhan biet bo cai Win
+        if ((Test-Path "$Root\setup.exe") -and (Test-Path "$Root\bootmgr")) {
+            if ((Test-Path "$Root\sources\install.wim") -or (Test-Path "$Root\sources\install.esd") -or (Test-Path "$Root\sources\boot.wim")) {
+                Write-DebugLog "Cach 2 OK: $Root"; return $Root
+            }
+        }
+    }
+
+    Write-DebugLog "ERROR: Khong tim thay o dia nao chua Setup.exe!"
+    return $null
+}
+
+# --- HÀM TẠO BOOT TẠM ---
 function Create-Boot-Entry ($WimPath) {
     try {
-        # Clean old
+        # Clean Old Entries
         $BcdList = bcdedit /enum /v | Out-String; $Lines = $BcdList -split "`r`n"
         for ($i=0; $i -lt $Lines.Count; $i++) { if ($Lines[$i] -match "description\s+CAI WIN TAM THOI") { for ($j=$i; $j -ge 0; $j--) { if ($Lines[$j] -match "identifier\s+{(.*)}") { cmd /c "bcdedit /delete {$($Matches[1])} /f"; break } } } }
+        if (Test-Path "$env:SystemDrive\WinInstall_Boot.wim") { Remove-Item "$env:SystemDrive\WinInstall_Boot.wim" -Force }
 
         $Name = "CAI WIN TAM THOI (Phat Tan PC)"; $Mode = Get-BiosMode; $Drive = $env:SystemDrive
         
@@ -118,16 +110,19 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V9.7 PRECISION)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V10.0 HYBRID)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
+# Tabs
 $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = "10,10"; $TabControl.Size = "765,620"; $Form.Controls.Add($TabControl)
 function Make-Tab ($T) { $P = New-Object System.Windows.Forms.TabPage; $P.Text = $T; $P.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $P.ForeColor = "White"; $TabControl.Controls.Add($P); return $P }
 
-# TAB 1
+# ==========================================
+# TAB 1: CAI DAT (MAIN)
+# ==========================================
 $TabInstall = Make-Tab "Cai Dat Windows"
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "CHON ISO & CAU HINH"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = "Cyan"; $LblTitle.AutoSize=$true; $LblTitle.Location = "20,15"; $TabInstall.Controls.Add($LblTitle)
 
@@ -136,20 +131,21 @@ $BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "TIM ISO"
 
 $GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "TUY CHON DRIVER"; $GBOpt.Location = "20,100"; $GBOpt.Size = "690,200"; $GBOpt.ForeColor = "Yellow"; $TabInstall.Controls.Add($GBOpt)
 $LblVerInfo = New-Object System.Windows.Forms.Label; $LblVerInfo.Text = "Trang thai: Chua chon ISO..."; $LblVerInfo.Location = "20,30"; $LblVerInfo.AutoSize=$true; $LblVerInfo.ForeColor="LightGray"; $GBOpt.Controls.Add($LblVerInfo)
-$CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai"; $CkBackup.Location = "20,60"; $CkBackup.AutoSize=$true; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
-$Ck3DP = New-Object System.Windows.Forms.CheckBox; $Ck3DP.Text = "Tai 3DP Net"; $Ck3DP.Location = "20,90"; $Ck3DP.AutoSize=$true; $Ck3DP.Checked=$true; $GBOpt.Controls.Add($Ck3DP)
-$CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script Auto-Install"; $CkInject.Location = "20,120"; $CkInject.AutoSize=$true; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
+$CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai (Pnputil)"; $CkBackup.Location = "20,60"; $CkBackup.AutoSize=$true; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
+$Ck3DP = New-Object System.Windows.Forms.CheckBox; $Ck3DP.Text = "Tai 3DP Net (Cuu mang)"; $Ck3DP.Location = "20,90"; $Ck3DP.AutoSize=$true; $Ck3DP.Checked=$true; $GBOpt.Controls.Add($Ck3DP)
+$CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script Auto-Install Driver (1-Click)"; $CkInject.Location = "20,120"; $CkInject.AutoSize=$true; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
 $LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text = "Noi luu:"; $LblPath.Location = "40,155"; $LblPath.AutoSize=$true; $GBOpt.Controls.Add($LblPath)
 $TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = $Global:DriverPath; $TxtPath.Location = "100,152"; $TxtPath.Size = "480,25"; $GBOpt.Controls.Add($TxtPath)
 $BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text = "..."; $BtnPath.Location = "590,151"; $BtnPath.Size = "40,27"; $BtnPath.BackColor="Gray"; $BtnPath.ForeColor="White"; $BtnPath.Add_Click({ $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { $TxtPath.Text = $FBD.SelectedPath; $Global:DriverPath = $FBD.SelectedPath } }); $GBOpt.Controls.Add($BtnPath)
 
-# Buttons
 $BtnMode1 = New-Object System.Windows.Forms.Button; $BtnMode1.Text = "CHE DO 1: CAI DE / NANG CAP (Setup.exe)"; $BtnMode1.Location = "20,320"; $BtnMode1.Size = "690,50"; $BtnMode1.BackColor = "LimeGreen"; $BtnMode1.ForeColor = "Black"; $BtnMode1.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $BtnMode1.Add_Click({ Show-SubMenu-Upgrade }); $TabInstall.Controls.Add($BtnMode1)
 $BtnMode2 = New-Object System.Windows.Forms.Button; $BtnMode2.Text = "CHE DO 2: CAI MOI (WinToHDD)"; $BtnMode2.Location = "20,390"; $BtnMode2.Size = "690,50"; $BtnMode2.BackColor = "Orange"; $BtnMode2.ForeColor = "Black"; $BtnMode2.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $BtnMode2.Add_Click({ Start-Install "WinToHDD" }); $TabInstall.Controls.Add($BtnMode2)
 
-# TAB 2: UNATTEND
+# ==========================================
+# TAB 2: CAU HINH UNATTEND
+# ==========================================
 $TabConfig = Make-Tab "Cau Hinh Tu Dong"; $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text = "CAU HINH XML"; $LblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $LblInfo.ForeColor = "Cyan"; $LblInfo.AutoSize=$true; $LblInfo.Location = "20,20"; $TabConfig.Controls.Add($LblInfo)
 function Add-Input ($Txt, $Y, $Def="") { $L = New-Object System.Windows.Forms.Label; $L.Text = $Txt; $L.Location = "20,$Y"; $L.AutoSize=$true; $TabConfig.Controls.Add($L); $T = New-Object System.Windows.Forms.TextBox; $T.Text = $Def; $T.Location = "220,$Y"; $T.Size = "300,25"; $TabConfig.Controls.Add($T); return $T }
 $TxtUser = Add-Input "User:" 60 "Admin"; $TxtPass = Add-Input "Pass:" 100 ""; $TxtPCName = Add-Input "PC Name:" 140 "PhatTan-PC"; $TxtKey = Add-Input "Key:" 180 ""
@@ -170,17 +166,18 @@ function Generate-XML {
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML!", "Error") }
 }
 
-# --- HÀM CHECK VERSION & THÔNG TIN ISO ---
+# --- HÀM CHECK VERSION (SỬ DỤNG HÀM MOUNT MỚI) ---
 function Check-Version {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra phien ban..."
-    
-    # DÙNG HÀM MOUNT MỚI (CHUẨN XÁC)
-    $DriveLetter = Mount-And-GetDrive $ISO
-    
-    if ($DriveLetter) {
-        try {
-            $HostVer = [Environment]::OSVersion.Version.Major
+    try {
+        $HostVer = [Environment]::OSVersion.Version.Major
+        
+        # Dùng hàm Mount Hybrid mới
+        $DriveLetter = Mount-And-GetDrive $ISO
+        
+        if ($DriveLetter) {
+            $Global:CurrentISO = $ISO
             $Wim = "$DriveLetter\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$DriveLetter\sources\install.esd" }
             $DismInfo = dism /Get-WimInfo /WimFile:$Wim /Index:1
             $ISOVerStr = ($DismInfo | Select-String "Version :").ToString().Split(":")[1].Trim(); $ISOVerMajor = [int]$ISOVerStr.Split(".")[0]
@@ -189,13 +186,13 @@ function Check-Version {
             if ($ISOVerMajor -lt $HostVer) { $Msg += " [HA CAP -> KHOA BACKUP]"; $CkBackup.Checked=$false; $CkBackup.Enabled=$false; $LblVerInfo.ForeColor="Red" } 
             else { $Msg += " [OK]"; $CkBackup.Enabled=$true; $CkBackup.Checked=$true; $LblVerInfo.ForeColor="Lime" }
             $LblVerInfo.Text = $Msg
-        } catch { $LblVerInfo.Text = "Loi doc WIM!" }
-    } else { $LblVerInfo.Text = "Mount loi." }
-    
+        }
+    } catch { $LblVerInfo.Text = "Loi Check Version: $($_.Exception.Message)" }
     $Form.Cursor = "Default"
 }
+# BỎ TỰ ĐỘNG CHECK Ở SỰ KIỆN SELECTED INDEX ĐỂ TRÁNH LAG, CHỈ CHECK KHI NGƯỜI DÙNG BẤM CÀI HOẶC BẤM NÚT RIÊNG (Ở đây tích hợp vào Start-Install)
+# $CmbISO.Add_SelectedIndexChanged({ Check-Version }) 
 
-# --- SUBMENU ---
 function Show-SubMenu-Upgrade {
     $SubForm = New-Object System.Windows.Forms.Form; $SubForm.Text="CHON CACH CHAY"; $SubForm.Size="550, 300"; $SubForm.StartPosition="CenterParent"; $SubForm.BackColor="Black"; $SubForm.ForeColor="White"
     $BtnD = New-Object System.Windows.Forms.Button; $BtnD.Text="1. CAI TRUC TIEP"; $BtnD.Location="20,60"; $BtnD.Size="490,40"; $BtnD.BackColor="Cyan"; $BtnD.ForeColor="Black"; $BtnD.Add_Click({ $SubForm.Close(); Start-Install "Direct" }); $SubForm.Controls.Add($BtnD)
@@ -208,11 +205,14 @@ function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $FinalPath = $TxtPath.Text
 
-    # 1. MOUNT LẠI CHO CHẮC (Tránh trường hợp user mount xong tháo ra)
+    # CHECK VERSION TRƯỚC KHI CÀI (NẾU CHƯA CHECK)
+    if ($LblVerInfo.Text -like "*Chua chon*") { Check-Version }
+    
+    # LẤY LẠI DRIVE LETTER TỪ BIẾN HOẶC QUÉT LẠI
     $DriveLetter = Mount-And-GetDrive $ISO
     if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay o dia chua ISO!", "Loi"); return }
 
-    # 2. BACKUP DRIVER
+    # BACKUP
     if ($CkBackup.Checked) {
         if (!(Test-Path $FinalPath)) { New-Item -ItemType Directory -Path $FinalPath -Force | Out-Null }
         $Form.Text = "DANG SAO LUU DRIVER..."
@@ -221,7 +221,7 @@ function Start-Install ($Mode) {
         if ($Ck3DP.Checked) { try { (New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/3DP.Net.exe", "$FinalPath\3DP_Net.exe") } catch {} }
     }
 
-    # 3. EXECUTE
+    # EXECUTE
     if ($Mode -eq "Direct") { Start-Process "$DriveLetter\setup.exe"; $Form.Close() }
     elseif ($Mode -eq "BootTmp") {
         $Form.Text = "DANG TAO BOOT TAM..."
@@ -230,11 +230,11 @@ function Start-Install ($Mode) {
         Copy-Item "$DriveLetter\boot\boot.sdi" "$SysDrive\boot.sdi" -Force
         if (Test-Path "$SysDrive\WinInstall_Boot.wim") {
             if (Create-Boot-Entry "\WinInstall_Boot.wim") { if ([System.Windows.Forms.MessageBox]::Show("Da tao Boot Tam! Restart?", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force } }
-        } else { [System.Windows.Forms.MessageBox]::Show("Loi copy boot.wim!", "Loi") }
+        } else { [System.Windows.Forms.MessageBox]::Show("Loi copy boot.wim! (Check lai ISO)", "Loi") }
     }
     elseif ($Mode -eq "WinToHDD") {
         $P = "$env:TEMP\WinToHDD.exe"; if (!(Test-Path $P)) { (New-Object Net.WebClient).DownloadFile($WinToHDD_Url, $P) }
-        Start-Process $P
+        Start-Process $P; [System.Windows.Forms.MessageBox]::Show("Da xong!", "Info")
     }
 }
 
