@@ -13,7 +13,7 @@ function Write-DebugLog ($Message) {
     $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== TOOL START V12.0 (REGEX CLEAN) ==="
+Write-DebugLog "=== TOOL START V13.0 (XCOPY ENGINE) ==="
 
 # --- CẤU HÌNH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
@@ -80,7 +80,7 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V12.0)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V13.0)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -130,13 +130,11 @@ function Generate-XML {
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML!", "Error") }
 }
 
-# --- CHECK VERSION ---
 function Check-Version {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra phien ban..."
     
     [string]$DriveLetter = Mount-And-GetDrive $ISO
-    # SỬA LẠI: Lọc sạch ký tự ổ đĩa (chỉ lấy E:)
     if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
 
     if ($DriveLetter) {
@@ -163,20 +161,18 @@ function Show-SubMenu-Upgrade {
     $SubForm.ShowDialog()
 }
 
-# --- MAIN INSTALL (FIX PATH) ---
+# --- MAIN INSTALL (XCOPY FIX) ---
 function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $FinalPath = $TxtPath.Text
 
     # Mount
-    [string]$DriveLetter = Mount-And-GetDrive $ISO 
-    # SỬA LẠI: Lọc sạch ký tự ổ đĩa (chỉ lấy E:)
+    [string]$DriveLetter = Mount-And-GetDrive $ISO
     if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
-    
     if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay o dia chua ISO!", "Loi"); return }
     Write-DebugLog "Setup Drive: $DriveLetter"
 
-    # Paths (Giờ biến $DriveLetter chắc chắn là sạch)
+    # Paths
     $SrcWim = "$DriveLetter\sources\boot.wim"
     $SrcSdi = "$DriveLetter\boot\boot.sdi"
 
@@ -194,25 +190,21 @@ function Start-Install ($Mode) {
     elseif ($Mode -eq "BootTmp") {
         $Form.Text = "DANG TAO BOOT TAM..."
         $SysDrive = $env:SystemDrive
-        $FreeC = (Get-PSDrive $SysDrive.Substring(0,1)).Free / 1GB; if ($FreeC -lt 2) { [System.Windows.Forms.MessageBox]::Show("O C: day qua!", "Loi"); return }
+        $DestWim = "$SysDrive\WinInstall_Boot.wim"
+        $DestSdi = "$SysDrive\boot.sdi"
 
-        Write-DebugLog "Robocopying boot.wim from $SrcWim..."
-        $DestDir = $SysDrive
-        
-        # Tự lấy tên file từ đường dẫn sạch
-        $FileWim = "boot.wim" # Mặc định tên file trong ISO
-        $SrcDirWim = "$DriveLetter\sources"
+        Write-DebugLog "Xcopying boot.wim..."
+        # Dùng XCOPY vì nó đơn giản và hiệu quả hơn Robocopy trong case này
+        # /H: Copy file ẩn, /Y: Ghi đè
+        Start-Process "xcopy.exe" -ArgumentList "`"$SrcWim`" `"$SysDrive`" /H /Y" -Wait -NoNewWindow
+        Start-Process "xcopy.exe" -ArgumentList "`"$SrcSdi`" `"$SysDrive`" /H /Y" -Wait -NoNewWindow
 
-        robocopy $SrcDirWim $DestDir $FileWim /R:2 /W:1 /NP | Out-Null
-        Rename-Item "$DestDir\$FileWim" "WinInstall_Boot.wim" -Force -ErrorAction SilentlyContinue
-        
-        $SrcDirSdi = "$DriveLetter\boot"
-        $FileSdi = "boot.sdi"
-        robocopy $SrcDirSdi $DestDir $FileSdi /R:2 /W:1 /NP | Out-Null
+        # Đổi tên file wim cho đúng chuẩn (nếu xcopy không đổi được tên đích)
+        if (Test-Path "$SysDrive\boot.wim") { Rename-Item "$SysDrive\boot.wim" "WinInstall_Boot.wim" -Force }
 
-        if (Test-Path "$SysDrive\WinInstall_Boot.wim") {
+        if (Test-Path $DestWim) {
             if (Create-Boot-Entry "\WinInstall_Boot.wim") { if ([System.Windows.Forms.MessageBox]::Show("Da tao Boot Tam! Restart?", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force } }
-        } else { [System.Windows.Forms.MessageBox]::Show("Loi: Khong copy duoc file boot.wim (Check Log)!", "Loi") }
+        } else { [System.Windows.Forms.MessageBox]::Show("Loi: Khong copy duoc file boot.wim!", "Loi") }
     }
     elseif ($Mode -eq "WinToHDD") {
         $P = "$env:TEMP\WinToHDD.exe"; if (!(Test-Path $P)) { (New-Object Net.WebClient).DownloadFile($WinToHDD_Url, $P) }
