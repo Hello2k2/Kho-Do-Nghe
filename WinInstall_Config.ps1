@@ -4,7 +4,7 @@ $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounat
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE TU DONG - PHAT TAN PC (V4.0 REGEX)"
+$Form.Text = "CAU HINH FILE TU DONG - PHAT TAN PC (V5.0 FINAL)"
 $Form.Size = New-Object System.Drawing.Size(650, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -46,7 +46,7 @@ $BtnSave.Add_Click({
     try {
         (New-Object Net.WebClient).DownloadFile($XML_Url, $XMLPath)
         
-        # Đọc file dưới dạng String thuần (Raw)
+        # Đọc file Raw
         $Content = [IO.File]::ReadAllText($XMLPath)
         
         # 1. Thay thế thông tin cơ bản
@@ -54,29 +54,32 @@ $BtnSave.Add_Click({
         $Content = $Content.Replace("%COMPUTERNAME%", $TxtPC.Text)
         $Content = $Content.Replace("SE Asia Standard Time", $CmbTZ.SelectedItem)
         
-        # 2. XỬ LÝ PASSWORD (REGEX)
+        # 2. XỬ LÝ PASSWORD (REGEX CHUẨN)
         if ([string]::IsNullOrWhiteSpace($TxtPass.Text)) {
-            # Xóa dòng Password trong AutoLogon và UserAccounts
-            # Regex: Tìm thẻ <Password>...</Password> và xóa
-            $Content = $Content -replace "(?s)\s*<Password>.*?<Value>%PASSWORD%</Value>.*?</Password>", ""
-            $Content = $Content -replace "%PASSWORD%", "" # Xóa nốt nếu còn sót
+            # Xóa khối Password trong UserAccounts
+            $Content = $Content -replace "(?s)<Password>.*?<Value>%PASSWORD%</Value>.*?</Password>", ""
+            # Xóa khối Password trong AutoLogon
+            $Content = $Content -replace "(?s)<Password>.*?<Value>%PASSWORD%</Value>.*?</Password>", ""
+            # Xóa tàn dư nếu có
+            $Content = $Content -replace "<Password></Password>", ""
         } else {
             $Content = $Content.Replace("%PASSWORD%", $TxtPass.Text)
         }
 
-        # 3. XỬ LÝ KEY (QUAN TRỌNG NHẤT - FIX LỖI)
+        # 3. XỬ LÝ KEY (REGEX CHUẨN XÁC 100%)
         if ([string]::IsNullOrWhiteSpace($TxtKey.Text)) {
-            # Xóa sạch thẻ ProductKey bằng Regex. (?s) là chế độ SingleLine (chấm . match cả xuống dòng)
-            # Pattern này tìm: <ProductKey> ... </ProductKey> và xóa trắng
+            # Xóa toàn bộ thẻ ProductKey (bao gồm cả Key con và WillShowUI)
+            # (?s) = SingleLine mode (match newline)
+            # \s* = Match khoảng trắng/xuống dòng
             $Content = $Content -replace "(?s)\s*<ProductKey>.*?</ProductKey>", ""
             
-            # Xóa thẻ Key lẻ nếu có
+            # Phòng hờ nếu template dùng thẻ Key lẻ
             $Content = $Content -replace "\s*<Key>%PRODUCTKEY%</Key>", ""
         } else {
             $Content = $Content.Replace("%PRODUCTKEY%", $TxtKey.Text)
         }
 
-        # 4. Xử lý Partition (Giữ nguyên Replace String vì nó an toàn)
+        # 4. Xử lý Partition
         if ($RadWipe.Checked) {
             $Content = $Content.Replace("%WIPEDISK%", "true")
             $PartLayout = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition>"
@@ -95,14 +98,14 @@ $BtnSave.Add_Click({
         if ($CkAutoLogon.Checked) { 
             $Content = $Content.Replace("<Enabled>false</Enabled>", "<Enabled>true</Enabled>") 
         } else {
-            # Xóa khối AutoLogon nếu không tích
+            # Nếu tắt AutoLogon -> Xóa sạch thẻ AutoLogon
             $Content = $Content -replace "(?s)\s*<AutoLogon>.*?</AutoLogon>", ""
         }
 
-        # Lưu file (UTF-8 No BOM để Windows dễ đọc)
+        # Lưu file (Dùng UTF-8 No BOM để Windows đọc chuẩn nhất)
         [IO.File]::WriteAllText($XMLPath, $Content)
         
-        [System.Windows.Forms.MessageBox]::Show("DA TAO XML (REGEX FIX)!`nLuu tai: $XMLPath", "Phat Tan PC")
+        [System.Windows.Forms.MessageBox]::Show("DA TAO XML (REGEX V5)!`nLuu tai: $XMLPath", "Phat Tan PC")
         $Form.Close()
 
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi tao XML: $($_.Exception.Message)", "Error") }
