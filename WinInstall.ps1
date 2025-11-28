@@ -8,12 +8,14 @@ try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System
 $ErrorActionPreference = "SilentlyContinue"
 $DebugLog = "C:\PhatTan_Debug.txt"
 
+# --- LOG FUNCTION ---
 function Write-DebugLog ($Message) {
     $Time = Get-Date -Format "HH:mm:ss"; $Line = "[$Time] $Message"
     $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
+    Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== TOOL START V13.0 (XCOPY ENGINE) ==="
+Write-DebugLog "=== TOOL START V14.0 (SAFE COPY) ==="
 
 # --- CẤU HÌNH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
@@ -80,7 +82,7 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V13.0)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V14.0 SAFE COPY)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -130,11 +132,13 @@ function Generate-XML {
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML!", "Error") }
 }
 
+# --- CHECK VERSION ---
 function Check-Version {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra phien ban..."
     
     [string]$DriveLetter = Mount-And-GetDrive $ISO
+    # SỬA LẠI: Lọc sạch ký tự ổ đĩa (chỉ lấy E:)
     if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
 
     if ($DriveLetter) {
@@ -161,13 +165,13 @@ function Show-SubMenu-Upgrade {
     $SubForm.ShowDialog()
 }
 
-# --- MAIN INSTALL (XCOPY FIX) ---
+# --- MAIN INSTALL (SAFE COPY) ---
 function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $FinalPath = $TxtPath.Text
 
     # Mount
-    [string]$DriveLetter = Mount-And-GetDrive $ISO
+    [string]$DriveLetter = Mount-And-GetDrive $ISO 
     if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
     if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay o dia chua ISO!", "Loi"); return }
     Write-DebugLog "Setup Drive: $DriveLetter"
@@ -190,21 +194,29 @@ function Start-Install ($Mode) {
     elseif ($Mode -eq "BootTmp") {
         $Form.Text = "DANG TAO BOOT TAM..."
         $SysDrive = $env:SystemDrive
-        $DestWim = "$SysDrive\WinInstall_Boot.wim"
-        $DestSdi = "$SysDrive\boot.sdi"
+        $FreeC = (Get-PSDrive $SysDrive.Substring(0,1)).Free / 1GB; if ($FreeC -lt 2) { [System.Windows.Forms.MessageBox]::Show("O C: day qua!", "Loi"); return }
 
-        Write-DebugLog "Xcopying boot.wim..."
-        # Dùng XCOPY vì nó đơn giản và hiệu quả hơn Robocopy trong case này
-        # /H: Copy file ẩn, /Y: Ghi đè
-        Start-Process "xcopy.exe" -ArgumentList "`"$SrcWim`" `"$SysDrive`" /H /Y" -Wait -NoNewWindow
-        Start-Process "xcopy.exe" -ArgumentList "`"$SrcSdi`" `"$SysDrive`" /H /Y" -Wait -NoNewWindow
-
-        # Đổi tên file wim cho đúng chuẩn (nếu xcopy không đổi được tên đích)
-        if (Test-Path "$SysDrive\boot.wim") { Rename-Item "$SysDrive\boot.wim" "WinInstall_Boot.wim" -Force }
-
-        if (Test-Path $DestWim) {
+        # --- SAFE COPY LOGIC (THƯ MỤC TẠM) ---
+        Write-DebugLog "Copying boot.wim to TEMP folder first..."
+        $TempDir = "C:\WinInstall_Temp" # Tạo thư mục tạm để né quyền Root
+        New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+        
+        # Copy vào thư mục tạm trước (ít bị chặn hơn C:\)
+        Copy-Item $SrcWim "$TempDir\boot.wim" -Force -ErrorAction SilentlyContinue
+        Copy-Item $SrcSdi "$TempDir\boot.sdi" -Force -ErrorAction SilentlyContinue
+        
+        if (Test-Path "$TempDir\boot.wim") {
+            Write-DebugLog "Copy to Temp OK. Moving to Root..."
+            # Di chuyển ra Root
+            Move-Item "$TempDir\boot.wim" "$SysDrive\WinInstall_Boot.wim" -Force
+            Move-Item "$TempDir\boot.sdi" "$SysDrive\boot.sdi" -Force
+            Remove-Item $TempDir -Recurse -Force
+            
             if (Create-Boot-Entry "\WinInstall_Boot.wim") { if ([System.Windows.Forms.MessageBox]::Show("Da tao Boot Tam! Restart?", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force } }
-        } else { [System.Windows.Forms.MessageBox]::Show("Loi: Khong copy duoc file boot.wim!", "Loi") }
+        } else { 
+            Write-DebugLog "COPY FAILED (Access Denied). Try WinToHDD."
+            [System.Windows.Forms.MessageBox]::Show("Loi Copy: Bi chan quyen Admin/Antivirus.`nVui long dung WinToHDD de cai dat!", "Loi") 
+        }
     }
     elseif ($Mode -eq "WinToHDD") {
         $P = "$env:TEMP\WinToHDD.exe"; if (!(Test-Path $P)) { (New-Object Net.WebClient).DownloadFile($WinToHDD_Url, $P) }
