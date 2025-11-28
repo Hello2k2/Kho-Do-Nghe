@@ -8,13 +8,12 @@ try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System
 $ErrorActionPreference = "SilentlyContinue"
 $DebugLog = "C:\PhatTan_Debug.txt"
 
-# --- LOG FUNCTION ---
 function Write-DebugLog ($Message) {
     $Time = Get-Date -Format "HH:mm:ss"; $Line = "[$Time] $Message"
     $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== TOOL START V11.6 (FIX PATH) ==="
+Write-DebugLog "=== TOOL START V11.7 (FINAL STRING FIX) ==="
 
 # --- CẤU HÌNH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
@@ -26,7 +25,7 @@ function Nuke-All-Mounts {
     Get-DiskImage -ImagePath * -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue
 }
 
-# --- HÀM MOUNT (TRẢ VỀ STRING CHUẨN) ---
+# --- HÀM MOUNT (FIX RETURN) ---
 function Mount-And-GetDrive ($IsoPath) {
     Write-DebugLog "Mounting: $IsoPath"
     Nuke-All-Mounts
@@ -36,7 +35,8 @@ function Mount-And-GetDrive ($IsoPath) {
     try {
         $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
         if ($Vol) { 
-            $L = "$($Vol.DriveLetter):"
+            # Ép kiểu String mạnh tay ở đây
+            [string]$L = "$($Vol.DriveLetter):"
             if (Test-Path "$L\setup.exe") { return $L } 
         }
     } catch {}
@@ -46,7 +46,10 @@ function Mount-And-GetDrive ($IsoPath) {
     foreach ($D in $Drives) {
         $R = $D.Root
         if ($R -in "C:\", "A:\", "B:\") { continue }
-        if ((Test-Path "$R\setup.exe") -and (Test-Path "$R\bootmgr")) { return $R }
+        if ((Test-Path "$R\setup.exe") -and (Test-Path "$R\bootmgr")) { 
+            # Ép kiểu String ở đây nữa
+            return [string]$R.TrimEnd("\")
+        }
     }
     return $null
 }
@@ -79,7 +82,7 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V11.6 FIX)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V11.7)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -129,12 +132,14 @@ function Generate-XML {
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML!", "Error") }
 }
 
-# --- CHECK VERSION (FIXED) ---
+# --- CHECK VERSION ---
 function Check-Version {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra phien ban..."
     
-    $DriveLetter = Mount-And-GetDrive $ISO
+    # DÙNG HÀM MOUNT MỚI
+    [string]$DriveLetter = Mount-And-GetDrive $ISO
+    
     if ($DriveLetter) {
         try {
             $HostVer = [Environment]::OSVersion.Version.Major
@@ -159,13 +164,13 @@ function Show-SubMenu-Upgrade {
     $SubForm.ShowDialog()
 }
 
-# --- MAIN INSTALL (FIXED PATH) ---
+# --- MAIN INSTALL ---
 function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $FinalPath = $TxtPath.Text
 
     # Mount
-    [string]$DriveLetter = Mount-And-GetDrive $ISO # Ép kiểu string để tránh lỗi Object
+    [string]$DriveLetter = Mount-And-GetDrive $ISO # Ép kiểu String để tránh lỗi Robocopy
     if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay o dia chua ISO!", "Loi"); return }
     Write-DebugLog "Setup Drive: $DriveLetter"
 
@@ -185,7 +190,8 @@ function Start-Install ($Mode) {
     # Execute
     if ($Mode -eq "Direct") { Start-Process "$DriveLetter\setup.exe"; $Form.Close() }
     elseif ($Mode -eq "BootTmp") {
-        $Form.Text = "DANG TAO BOOT TAM..."; $SysDrive = $env:SystemDrive
+        $Form.Text = "DANG TAO BOOT TAM..."
+        $SysDrive = $env:SystemDrive
         $FreeC = (Get-PSDrive $SysDrive.Substring(0,1)).Free / 1GB; if ($FreeC -lt 2) { [System.Windows.Forms.MessageBox]::Show("O C: day qua!", "Loi"); return }
 
         Write-DebugLog "Robocopying boot.wim from $SrcWim..."
