@@ -13,7 +13,7 @@ function Write-DebugLog ($Message) {
     $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== TOOL START V11.7 (FINAL STRING FIX) ==="
+Write-DebugLog "=== TOOL START V12.0 (REGEX CLEAN) ==="
 
 # --- CẤU HÌNH ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
@@ -22,21 +22,20 @@ $Global:DriverPath = "D:\Drivers_Backup_Auto"
 
 # --- HÀM CLEANUP ---
 function Nuke-All-Mounts {
-    Get-DiskImage -ImagePath * -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue
+    Get-DiskImage -ImagePath * -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null
 }
 
-# --- HÀM MOUNT (FIX RETURN) ---
+# --- HÀM MOUNT ---
 function Mount-And-GetDrive ($IsoPath) {
     Write-DebugLog "Mounting: $IsoPath"
     Nuke-All-Mounts
-    try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop; Start-Sleep -Seconds 2 } catch {}
+    try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null; Start-Sleep -Seconds 2 } catch {}
 
     # 1. Get-DiskImage
     try {
         $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
         if ($Vol) { 
-            # Ép kiểu String mạnh tay ở đây
-            [string]$L = "$($Vol.DriveLetter):"
+            $L = "$($Vol.DriveLetter):"
             if (Test-Path "$L\setup.exe") { return $L } 
         }
     } catch {}
@@ -47,7 +46,6 @@ function Mount-And-GetDrive ($IsoPath) {
         $R = $D.Root
         if ($R -in "C:\", "A:\", "B:\") { continue }
         if ((Test-Path "$R\setup.exe") -and (Test-Path "$R\bootmgr")) { 
-            # Ép kiểu String ở đây nữa
             return [string]$R.TrimEnd("\")
         }
     }
@@ -82,7 +80,7 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V11.7)"
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V12.0)"
 $Form.Size = New-Object System.Drawing.Size(800, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -137,9 +135,10 @@ function Check-Version {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra phien ban..."
     
-    # DÙNG HÀM MOUNT MỚI
     [string]$DriveLetter = Mount-And-GetDrive $ISO
-    
+    # SỬA LẠI: Lọc sạch ký tự ổ đĩa (chỉ lấy E:)
+    if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
+
     if ($DriveLetter) {
         try {
             $HostVer = [Environment]::OSVersion.Version.Major
@@ -164,17 +163,20 @@ function Show-SubMenu-Upgrade {
     $SubForm.ShowDialog()
 }
 
-# --- MAIN INSTALL ---
+# --- MAIN INSTALL (FIX PATH) ---
 function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $FinalPath = $TxtPath.Text
 
     # Mount
-    [string]$DriveLetter = Mount-And-GetDrive $ISO # Ép kiểu String để tránh lỗi Robocopy
+    [string]$DriveLetter = Mount-And-GetDrive $ISO 
+    # SỬA LẠI: Lọc sạch ký tự ổ đĩa (chỉ lấy E:)
+    if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
+    
     if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay o dia chua ISO!", "Loi"); return }
     Write-DebugLog "Setup Drive: $DriveLetter"
 
-    # Paths
+    # Paths (Giờ biến $DriveLetter chắc chắn là sạch)
     $SrcWim = "$DriveLetter\sources\boot.wim"
     $SrcSdi = "$DriveLetter\boot\boot.sdi"
 
@@ -196,14 +198,16 @@ function Start-Install ($Mode) {
 
         Write-DebugLog "Robocopying boot.wim from $SrcWim..."
         $DestDir = $SysDrive
-        $SrcDirWim = Split-Path $SrcWim -Parent
-        $FileWim = Split-Path $SrcWim -Leaf
         
+        # Tự lấy tên file từ đường dẫn sạch
+        $FileWim = "boot.wim" # Mặc định tên file trong ISO
+        $SrcDirWim = "$DriveLetter\sources"
+
         robocopy $SrcDirWim $DestDir $FileWim /R:2 /W:1 /NP | Out-Null
         Rename-Item "$DestDir\$FileWim" "WinInstall_Boot.wim" -Force -ErrorAction SilentlyContinue
         
-        $SrcDirSdi = Split-Path $SrcSdi -Parent
-        $FileSdi = Split-Path $SrcSdi -Leaf
+        $SrcDirSdi = "$DriveLetter\boot"
+        $FileSdi = "boot.sdi"
         robocopy $SrcDirSdi $DestDir $FileSdi /R:2 /W:1 /NP | Out-Null
 
         if (Test-Path "$SysDrive\WinInstall_Boot.wim") {
