@@ -65,7 +65,7 @@ $Form.Controls.Add($Panel)
 
 # --- NÚT 1: CẤU HÌNH ---
 $BtnCfg = New-Object System.Windows.Forms.Button
-$BtnCfg.Text = "⚙️  1. CAU HINH FILE TU DONG`n(Tao file XML: User, Key, Disk...)"
+$BtnCfg.Text = "1. CAU HINH FILE TU DONG`n(Tao file XML: User, Key, Disk...)"
 $BtnCfg.Font = $FontBtn
 $BtnCfg.Location = New-Object System.Drawing.Point(20, 20)
 $BtnCfg.Size = New-Object System.Drawing.Size(460, 80)
@@ -81,7 +81,7 @@ $Panel.Controls.Add($BtnCfg)
 
 # --- NÚT 2: CÀI ĐẶT ---
 $BtnRun = New-Object System.Windows.Forms.Button
-$BtnRun.Text = "🚀  2. TIEN HANH CAI DAT`n(Mount ISO, Backup Driver, Cai Win)"
+$BtnRun.Text = "2. TIEN HANH CAI DAT`n(Mount ISO, Backup Driver, Cai Win)"
 $BtnRun.Font = $FontBtn
 $BtnRun.Location = New-Object System.Drawing.Point(20, 120)
 $BtnRun.Size = New-Object System.Drawing.Size(460, 80)
