@@ -18,32 +18,52 @@ Write-DebugLog "=== TOOL START V9.7 (PRECISION MOUNT) ==="
 
 # --- HÀM MOUNT CHÍNH XÁC TUYỆT ĐỐI ---
 function Mount-And-GetDrive ($IsoPath) {
-    Write-DebugLog "Mounting: $IsoPath"
+    Write-DebugLog "Mounting ISO: $IsoPath"
     
-    # 1. Dismount file này trước nếu đang mount dở
+    # 1. Dọn dẹp cũ
     Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
     
+    # 2. Mount mới
     try {
-        # 2. Mount
         Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop
-        
-        # 3. HỎI TRỰC TIẾP ISO ĐANG Ở Ổ NÀO (Key Magic)
-        # Lệnh này truy ngược từ File ISO -> Volume -> DriveLetter
-        $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
-        
-        if ($Vol) {
-            $Letter = "$($Vol.DriveLetter):"
-            Write-DebugLog "ISO $IsoPath -> Mounted at: $Letter"
-            
-            # 4. Check xem có phải bộ cài Win không
-            if (Test-Path "$Letter\setup.exe") { return $Letter }
-            else { Write-DebugLog "Loi: O $Letter khong co setup.exe!"; return $null }
-        } 
-        else { Write-DebugLog "Loi: Mount xong nhung khong lay duoc Volume!"; return $null }
+        Start-Sleep -Seconds 3 # Cho máy ảo thở xíu
     } catch {
-        Write-DebugLog "Mount Exception: $($_.Exception.Message)"
+        Write-DebugLog "Loi lenh Mount: $($_.Exception.Message)"
         return $null
     }
+
+    # --- CACH 1: CHINH CHU (Get-DiskImage) ---
+    try {
+        $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
+        if ($Vol) {
+            $Letter = "$($Vol.DriveLetter):"
+            if (Test-Path "$Letter\setup.exe") { 
+                Write-DebugLog "Cach 1 (Chuan) OK: $Letter"
+                return $Letter 
+            }
+        }
+    } catch { Write-DebugLog "Cach 1 that bai. Chuyen sang quet can..." }
+
+    # --- CACH 2: QUET CAN (BRUTE FORCE - Chuyen tri may ao/Win Lite) ---
+    Write-DebugLog "Dang quet tat ca o dia..."
+    $Drives = Get-PSDrive -PSProvider FileSystem
+    foreach ($D in $Drives) {
+        $Root = $D.Root
+        # Bỏ qua ổ C (ổ hệ thống) và ổ A/B (Floppy)
+        if ($Root -eq "C:\" -or $Root -eq "A:\" -or $Root -eq "B:\") { continue }
+        
+        # Dấu hiệu nhận biết bộ cài Win chuẩn
+        if ((Test-Path "$Root\setup.exe") -and (Test-Path "$Root\bootmgr")) {
+            # Kiểm tra kỹ hơn: Phải có thư mục sources
+            if ((Test-Path "$Root\sources\install.wim") -or (Test-Path "$Root\sources\install.esd") -or (Test-Path "$Root\sources\boot.wim")) {
+                Write-DebugLog "Cach 2 (Quet) OK: $Root"
+                return $Root
+            }
+        }
+    }
+
+    Write-DebugLog "ERROR: Mount roi nhung khong tim thay o dia nao chua Setup.exe!"
+    return $null
 }
 
 # --- HÀM DISMOUNT ALL ---
