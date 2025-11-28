@@ -4,12 +4,11 @@ $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounat
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE TU DONG - PHAT TAN PC (V3.0 XML DOM)"
+$Form.Text = "CAU HINH FILE TU DONG - PHAT TAN PC (V4.0 REGEX)"
 $Form.Size = New-Object System.Drawing.Size(650, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
-
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
@@ -25,7 +24,7 @@ $TxtPass = Add-Input "Mat Khau:" 100 ""
 $TxtPC   = Add-Input "Ten May:" 140 "PhatTan-PC"
 $TxtKey  = Add-Input "Product Key:" 180 ""
 
-$LblHint = New-Object System.Windows.Forms.Label; $LblHint.Text = "(Bo trong Key se tu dong xoa the Key de tranh loi)"; $LblHint.Location = "200,210"; $LblHint.AutoSize=$true; $LblHint.ForeColor="Gray"; $Form.Controls.Add($LblHint)
+$LblHint = New-Object System.Windows.Forms.Label; $LblHint.Text = "(De trong Key se tu dong xoa de tranh loi)"; $LblHint.Location = "200,210"; $LblHint.AutoSize=$true; $LblHint.ForeColor="Gray"; $Form.Controls.Add($LblHint)
 
 $GBSet = New-Object System.Windows.Forms.GroupBox; $GBSet.Text = "CAI DAT HE THONG"; $GBSet.Location = "20,240"; $GBSet.Size = "580,150"; $GBSet.ForeColor = "Lime"; $Form.Controls.Add($GBSet)
 $LblTZ = New-Object System.Windows.Forms.Label; $LblTZ.Text = "Mui Gio:"; $LblTZ.Location = "20,30"; $LblTZ.AutoSize=$true; $LblTZ.ForeColor="White"; $GBSet.Controls.Add($LblTZ)
@@ -41,72 +40,73 @@ $RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "XOA SAC
 $RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "DUAL BOOT"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $GB.Controls.Add($RadDual)
 
 $BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAO FILE XML"; $BtnSave.Location = "20,530"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
+
 $BtnSave.Add_Click({
     $XMLPath = "$env:SystemDrive\autounattend.xml"
     try {
         (New-Object Net.WebClient).DownloadFile($XML_Url, $XMLPath)
         
-        # Đọc nội dung thô để replace biến đơn giản trước
-        $Content = Get-Content $XMLPath -Raw
-        $Content = $Content -replace "%USERNAME%", $TxtUser.Text
-        $Content = $Content -replace "%PASSWORD%", $TxtPass.Text
-        $Content = $Content -replace "%COMPUTERNAME%", $TxtPC.Text
-        $Content = $Content -replace "SE Asia Standard Time", $CmbTZ.SelectedItem
+        # Đọc file dưới dạng String thuần (Raw)
+        $Content = [IO.File]::ReadAllText($XMLPath)
         
-        # Xử lý Partition (Vẫn dùng String Replace vì đoạn này là block lớn)
-        if ($RadWipe.Checked) {
-            $PartLayout = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition>"
-            $Content = $Content -replace "%WIPEDISK%", "true" -replace "%CREATEPARTITIONS%", $PartLayout -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>1</PartitionID>"
-        } else {
-            $Content = $Content -replace "%WIPEDISK%", "false" -replace "%CREATEPARTITIONS%", "" -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>3</PartitionID>"
-        }
+        # 1. Thay thế thông tin cơ bản
+        $Content = $Content.Replace("%USERNAME%", $TxtUser.Text)
+        $Content = $Content.Replace("%COMPUTERNAME%", $TxtPC.Text)
+        $Content = $Content.Replace("SE Asia Standard Time", $CmbTZ.SelectedItem)
         
-        # Lưu tạm để load vào XML Object
-        $Content | Set-Content $XMLPath -Encoding UTF8
-        
-        # --- XỬ LÝ NÂNG CAO BẰNG XML DOM (FIX LỖI KEY/PASS) ---
-        $XmlDoc = New-Object System.Xml.XmlDocument
-        $XmlDoc.Load($XMLPath)
-        $NS = New-Object System.Xml.XmlNamespaceManager($XmlDoc.NameTable)
-        $NS.AddNamespace("u", "urn:schemas-microsoft-com:unattend")
-        $NS.AddNamespace("wcm", "http://schemas.microsoft.com/WMIConfig/2002/State")
-
-        # 1. XỬ LÝ KEY (QUAN TRỌNG)
-        if ([string]::IsNullOrWhiteSpace($TxtKey.Text)) {
-            # Tìm node UserData
-            $UserData = $XmlDoc.SelectSingleNode("//u:UserData", $NS)
-            if ($UserData) {
-                # Tìm node ProductKey bên trong UserData
-                $PKeyNode = $UserData.SelectSingleNode("u:ProductKey", $NS)
-                if ($PKeyNode) { 
-                    # Xóa sạch node ProductKey
-                    $UserData.RemoveChild($PKeyNode) | Out-Null 
-                }
-            }
-        } else {
-            # Nếu có key, điền vào
-            $KeyNode = $XmlDoc.SelectSingleNode("//u:ProductKey/u:Key", $NS)
-            if ($KeyNode) { $KeyNode.InnerText = $TxtKey.Text }
-        }
-
-        # 2. XỬ LÝ PASSWORD RỖNG (Để tránh lỗi OOBE)
+        # 2. XỬ LÝ PASSWORD (REGEX)
         if ([string]::IsNullOrWhiteSpace($TxtPass.Text)) {
-            # Tìm tất cả thẻ Password
-            $PassNodes = $XmlDoc.SelectNodes("//u:Password", $NS)
-            foreach ($Node in $PassNodes) {
-                $Parent = $Node.ParentNode
-                $Parent.RemoveChild($Node) | Out-Null
-            }
+            # Xóa dòng Password trong AutoLogon và UserAccounts
+            # Regex: Tìm thẻ <Password>...</Password> và xóa
+            $Content = $Content -replace "(?s)\s*<Password>.*?<Value>%PASSWORD%</Value>.*?</Password>", ""
+            $Content = $Content -replace "%PASSWORD%", "" # Xóa nốt nếu còn sót
+        } else {
+            $Content = $Content.Replace("%PASSWORD%", $TxtPass.Text)
         }
 
-        # 3. LƯU LẠI FILE XML CHUẨN
-        $XmlDoc.Save($XMLPath)
+        # 3. XỬ LÝ KEY (QUAN TRỌNG NHẤT - FIX LỖI)
+        if ([string]::IsNullOrWhiteSpace($TxtKey.Text)) {
+            # Xóa sạch thẻ ProductKey bằng Regex. (?s) là chế độ SingleLine (chấm . match cả xuống dòng)
+            # Pattern này tìm: <ProductKey> ... </ProductKey> và xóa trắng
+            $Content = $Content -replace "(?s)\s*<ProductKey>.*?</ProductKey>", ""
+            
+            # Xóa thẻ Key lẻ nếu có
+            $Content = $Content -replace "\s*<Key>%PRODUCTKEY%</Key>", ""
+        } else {
+            $Content = $Content.Replace("%PRODUCTKEY%", $TxtKey.Text)
+        }
+
+        # 4. Xử lý Partition (Giữ nguyên Replace String vì nó an toàn)
+        if ($RadWipe.Checked) {
+            $Content = $Content.Replace("%WIPEDISK%", "true")
+            $PartLayout = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition>"
+            $Content = $Content.Replace("%CREATEPARTITIONS%", $PartLayout)
+            $Content = $Content.Replace("%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>1</PartitionID>")
+        } else {
+            $Content = $Content.Replace("%WIPEDISK%", "false")
+            $Content = $Content.Replace("%CREATEPARTITIONS%", "")
+            $Content = $Content.Replace("%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>3</PartitionID>")
+        }
         
-        [System.Windows.Forms.MessageBox]::Show("DA TAO XML CHUAN! (Da fix loi Key/Pass)", "Phat Tan PC")
+        # 5. Xử lý Settings khác
+        if ($CkSkipWifi.Checked) { 
+            $Content = $Content.Replace("<HideWirelessSetupInOOBE>false</HideWirelessSetupInOOBE>", "<HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>") 
+        }
+        if ($CkAutoLogon.Checked) { 
+            $Content = $Content.Replace("<Enabled>false</Enabled>", "<Enabled>true</Enabled>") 
+        } else {
+            # Xóa khối AutoLogon nếu không tích
+            $Content = $Content -replace "(?s)\s*<AutoLogon>.*?</AutoLogon>", ""
+        }
+
+        # Lưu file (UTF-8 No BOM để Windows dễ đọc)
+        [IO.File]::WriteAllText($XMLPath, $Content)
+        
+        [System.Windows.Forms.MessageBox]::Show("DA TAO XML (REGEX FIX)!`nLuu tai: $XMLPath", "Phat Tan PC")
         $Form.Close()
 
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi: $($_.Exception.Message)", "Error") }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tao XML: $($_.Exception.Message)", "Error") }
 })
-$Form.Controls.Add($BtnSave)
 
+$Form.Controls.Add($BtnSave)
 $Form.ShowDialog() | Out-Null
