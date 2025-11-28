@@ -1,39 +1,39 @@
-# --- 1. FORCE ADMIN ---
+# --- 1. TU DONG YEU CAU QUYEN ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- INIT ---
+# --- NAP THU VIEN ---
 try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing } catch { Exit }
 $ErrorActionPreference = "SilentlyContinue"
+
+# --- CAU HINH ---
+$WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
+$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounattend.xml"
+$Global:DriverPath = "D:\Drivers_Backup_Auto"
 $DebugLog = "C:\PhatTan_Debug.txt"
 
 # --- LOG FUNCTION ---
 function Write-DebugLog ($Message) {
     $Time = Get-Date -Format "HH:mm:ss"; $Line = "[$Time] $Message"
     $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
-    Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== TOOL START V14.0 (SAFE COPY) ==="
-
-# --- CẤU HÌNH ---
-$WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
-$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounattend.xml"
-$Global:DriverPath = "D:\Drivers_Backup_Auto"
+Write-DebugLog "=== TOOL START V16.0 (ULTIMATE) ==="
 
 # --- HÀM CLEANUP ---
-function Nuke-All-Mounts {
+function Dismount-All {
+    Write-DebugLog "Dismounting ALL..."
     Get-DiskImage -ImagePath * -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null
 }
 
-# --- HÀM MOUNT ---
+# --- HÀM MOUNT HYBRID (BẤT TỬ) ---
 function Mount-And-GetDrive ($IsoPath) {
     Write-DebugLog "Mounting: $IsoPath"
-    Nuke-All-Mounts
-    try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null; Start-Sleep -Seconds 2 } catch {}
+    Dismount-All
+    try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null; Start-Sleep -Seconds 2 } catch { return $null }
 
-    # 1. Get-DiskImage
+    # 1. Get-DiskImage (Chuan)
     try {
         $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
         if ($Vol) { 
@@ -42,7 +42,7 @@ function Mount-And-GetDrive ($IsoPath) {
         }
     } catch {}
 
-    # 2. Brute Force
+    # 2. Brute Force (Quet Can)
     $Drives = Get-PSDrive -PSProvider FileSystem
     foreach ($D in $Drives) {
         $R = $D.Root
@@ -54,14 +54,15 @@ function Mount-And-GetDrive ($IsoPath) {
     return $null
 }
 
-# --- HÀM TẠO BOOT ---
+# --- HÀM TẠO BOOT (BCD) ---
 function Get-BiosMode { if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { return "UEFI" } return "Legacy" }
 
 function Create-Boot-Entry ($WimPath) {
     try {
+        # Clean Old Entries
         $BcdList = bcdedit /enum /v | Out-String; $Lines = $BcdList -split "`r`n"
         for ($i=0; $i -lt $Lines.Count; $i++) { if ($Lines[$i] -match "description\s+CAI WIN TAM THOI") { for ($j=$i; $j -ge 0; $j--) { if ($Lines[$j] -match "identifier\s+{(.*)}") { cmd /c "bcdedit /delete {$($Matches[1])} /f"; break } } } }
-        
+
         $Name = "CAI WIN TAM THOI (Phat Tan PC)"; $Mode = Get-BiosMode; $Drive = $env:SystemDrive
         cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`"" 2>$null
         cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"
@@ -69,11 +70,13 @@ function Create-Boot-Entry ($WimPath) {
         
         $Output = cmd /c "bcdedit /create /d `"$Name`" /application osloader"
         if ($Output -match '{([a-f0-9\-]+)}') { $ID = $matches[0] } else { return $false }
+        
         cmd /c "bcdedit /set $ID device ramdisk=[$Drive]$WimPath,{ramdiskoptions}"
         cmd /c "bcdedit /set $ID osdevice ramdisk=[$Drive]$WimPath,{ramdiskoptions}"
         cmd /c "bcdedit /set $ID systemroot \windows"
         cmd /c "bcdedit /set $ID detecthal yes"
         cmd /c "bcdedit /set $ID winpe yes"
+        
         if ($Mode -eq "UEFI") { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.efi" } else { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.exe" }
         cmd /c "bcdedit /displayorder $ID /addlast"; cmd /c "bcdedit /bootsequence $ID"
         return $true
@@ -82,16 +85,16 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V14.0 SAFE COPY)"
-$Form.Size = New-Object System.Drawing.Size(800, 680)
+$Form.Text = "CAI DAT WINDOWS MASTER - PHAT TAN PC (V16.0)"
+$Form.Size = New-Object System.Drawing.Size(850, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = "10,10"; $TabControl.Size = "765,620"; $Form.Controls.Add($TabControl)
+$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = "10,10"; $TabControl.Size = "815,690"; $Form.Controls.Add($TabControl)
 function Make-Tab ($T) { $P = New-Object System.Windows.Forms.TabPage; $P.Text = $T; $P.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $P.ForeColor = "White"; $TabControl.Controls.Add($P); return $P }
 
-# TAB 1
+# --- TAB 1: INSTALL ---
 $TabInstall = Make-Tab "Cai Dat Windows"
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "CHON ISO & CAU HINH"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = "Cyan"; $LblTitle.AutoSize=$true; $LblTitle.Location = "20,15"; $TabInstall.Controls.Add($LblTitle)
 $CmbISO = New-Object System.Windows.Forms.ComboBox; $CmbISO.Size = "580, 30"; $CmbISO.Location = "20,55"; $CmbISO.Font = New-Object System.Drawing.Font("Segoe UI", 10); $CmbISO.DropDownStyle = "DropDownList"; $TabInstall.Controls.Add($CmbISO)
@@ -111,36 +114,48 @@ $BtnMode1.Add_Click({ Show-SubMenu-Upgrade }); $TabInstall.Controls.Add($BtnMode
 $BtnMode2 = New-Object System.Windows.Forms.Button; $BtnMode2.Text = "CHE DO 2: CAI MOI (WinToHDD)"; $BtnMode2.Location = "20,390"; $BtnMode2.Size = "690,50"; $BtnMode2.BackColor = "Orange"; $BtnMode2.ForeColor = "Black"; $BtnMode2.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $BtnMode2.Add_Click({ Start-Install "WinToHDD" }); $TabInstall.Controls.Add($BtnMode2)
 
-# TAB 2: UNATTEND
-$TabConfig = Make-Tab "Cau Hinh Tu Dong"; $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text = "CAU HINH XML"; $LblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $LblInfo.ForeColor = "Cyan"; $LblInfo.AutoSize=$true; $LblInfo.Location = "20,20"; $TabConfig.Controls.Add($LblInfo)
+# --- TAB 2: AUTO UNATTEND (PRO MAX) ---
+$TabConfig = Make-Tab "Cau Hinh Tu Dong (Unattend)"
+$LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text = "CAU HINH TAI KHOAN & HE THONG (XML)"; $LblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $LblInfo.ForeColor = "Cyan"; $LblInfo.AutoSize=$true; $LblInfo.Location = "20,20"; $TabConfig.Controls.Add($LblInfo)
+
 function Add-Input ($Txt, $Y, $Def="") { $L = New-Object System.Windows.Forms.Label; $L.Text = $Txt; $L.Location = "20,$Y"; $L.AutoSize=$true; $TabConfig.Controls.Add($L); $T = New-Object System.Windows.Forms.TextBox; $T.Text = $Def; $T.Location = "220,$Y"; $T.Size = "300,25"; $TabConfig.Controls.Add($T); return $T }
 $TxtUser = Add-Input "User:" 60 "Admin"; $TxtPass = Add-Input "Pass:" 100 ""; $TxtPCName = Add-Input "PC Name:" 140 "PhatTan-PC"; $TxtKey = Add-Input "Key:" 180 ""
-$GBPart = New-Object System.Windows.Forms.GroupBox; $GBPart.Text = "TUY CHON O CUNG"; $GBPart.Location = "20,230"; $GBPart.Size = "700,120"; $GBPart.ForeColor = "Red"; $TabConfig.Controls.Add($GBPart)
-$RadioWipe = New-Object System.Windows.Forms.RadioButton; $RadioWipe.Text = "XOA SACH (Clean)"; $RadioWipe.Location = "20,30"; $RadioWipe.AutoSize=$true; $RadioWipe.Checked=$true; $GBPart.Controls.Add($RadioWipe)
-$RadioDual = New-Object System.Windows.Forms.RadioButton; $RadioDual.Text = "DUAL BOOT"; $RadioDual.Location = "20,60"; $RadioDual.AutoSize=$true; $GBPart.Controls.Add($RadioDual)
-$BtnGenXML = New-Object System.Windows.Forms.Button; $BtnGenXML.Text = "TAO FILE XML"; $BtnGenXML.Location = "20,380"; $BtnGenXML.Size = "700,50"; $BtnGenXML.BackColor = "Cyan"; $BtnGenXML.ForeColor = "Black"; $BtnGenXML.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+
+$LblLoc = New-Object System.Windows.Forms.Label; $LblLoc.Text = "Mui gio:"; $LblLoc.Location = "20,220"; $LblLoc.AutoSize=$true; $TabConfig.Controls.Add($LblLoc)
+$CmbTZ = New-Object System.Windows.Forms.ComboBox; $CmbTZ.Location = "220,217"; $CmbTZ.Size = "300,25"; $CmbTZ.DropDownStyle="DropDownList"; $TabConfig.Controls.Add($CmbTZ)
+$CmbTZ.Items.AddRange(@("SE Asia Standard Time", "Pacific Standard Time", "China Standard Time", "Tokyo Standard Time")); $CmbTZ.SelectedIndex=0
+
+$CkSkipWifi = New-Object System.Windows.Forms.CheckBox; $CkSkipWifi.Text = "Bo qua buoc ket noi Wifi (OOBE)"; $CkSkipWifi.Location = "220,250"; $CkSkipWifi.AutoSize=$true; $CkSkipWifi.Checked=$true; $TabConfig.Controls.Add($CkSkipWifi)
+$CkAutoLogon = New-Object System.Windows.Forms.CheckBox; $CkAutoLogon.Text = "Tu dong dang nhap (Auto Logon)"; $CkAutoLogon.Location = "220,280"; $CkAutoLogon.AutoSize=$true; $CkAutoLogon.Checked=$true; $TabConfig.Controls.Add($CkAutoLogon)
+
+$GBPart = New-Object System.Windows.Forms.GroupBox; $GBPart.Text = "TUY CHON O CUNG"; $GBPart.Location = "20,320"; $GBPart.Size = "700,80"; $GBPart.ForeColor = "Red"; $TabConfig.Controls.Add($GBPart)
+$RadioWipe = New-Object System.Windows.Forms.RadioButton; $RadioWipe.Text = "XOA SACH (Clean Install)"; $RadioWipe.Location = "20,30"; $RadioWipe.AutoSize=$true; $RadioWipe.Checked=$true; $GBPart.Controls.Add($RadioWipe)
+$RadioDual = New-Object System.Windows.Forms.RadioButton; $RadioDual.Text = "DUAL BOOT (Giu nguyen du lieu)"; $RadioDual.Location = "250,30"; $RadioDual.AutoSize=$true; $GBPart.Controls.Add($RadioDual)
+
+$BtnGenXML = New-Object System.Windows.Forms.Button; $BtnGenXML.Text = "TAO FILE CAU HINH"; $BtnGenXML.Location = "20,420"; $BtnGenXML.Size = "700,50"; $BtnGenXML.BackColor = "Cyan"; $BtnGenXML.ForeColor = "Black"; $BtnGenXML.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $BtnGenXML.Add_Click({ Generate-XML }); $TabConfig.Controls.Add($BtnGenXML)
 
+# --- LOGIC XML ---
 function Generate-XML {
-    $User = $TxtUser.Text; $Pass = $TxtPass.Text; $PC = $TxtPCName.Text; $Key = $TxtKey.Text; $XMLPath = "$env:SystemDrive\autounattend.xml"
+    $User = $TxtUser.Text; $Pass = $TxtPass.Text; $PC = $TxtPCName.Text; $Key = $TxtKey.Text; $TZ = $CmbTZ.SelectedItem
+    $XMLPath = "$env:SystemDrive\autounattend.xml"
     try { (New-Object Net.WebClient).DownloadFile($XML_Url, $XMLPath); $Content = Get-Content $XMLPath -Raw
-        $Content = $Content -replace "%USERNAME%", $User -replace "%PASSWORD%", $Pass -replace "%COMPUTERNAME%", $PC
-        if ($Key) { $Content = $Content -replace "%PRODUCTKEY%", $Key } else { $Content = $Content -replace "<Key>.*?</Key>", "<Key></Key>" }
+        $Content = $Content -replace "%USERNAME%", $User -replace "%PASSWORD%", $Pass -replace "%COMPUTERNAME%", $PC -replace "SE Asia Standard Time", $TZ
+        if ([string]::IsNullOrWhiteSpace($Key)) { $Content = $Content -replace "(?s)<ProductKey>.*?</ProductKey>", "" } else { $Content = $Content -replace "%PRODUCTKEY%", $Key }
+        if ($CkSkipWifi.Checked) { $Content = $Content -replace "<HideWirelessSetupInOOBE>false</HideWirelessSetupInOOBE>", "<HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>" }
+        if ($CkAutoLogon.Checked) { $Content = $Content -replace "<Enabled>false</Enabled>", "<Enabled>true</Enabled>" }
         if ($RadioWipe.Checked) { $Content = $Content -replace "%WIPEDISK%", "true" -replace "%CREATEPARTITIONS%", "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition>" -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>1</PartitionID>" } 
         else { $Content = $Content -replace "%WIPEDISK%", "false" -replace "%CREATEPARTITIONS%", "" -replace "%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>3</PartitionID>" }
         $Content | Set-Content $XMLPath; [System.Windows.Forms.MessageBox]::Show("DA TAO XML!", "Phat Tan PC")
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML!", "Error") }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi XML!", "Error") }
 }
 
 # --- CHECK VERSION ---
 function Check-Version {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
-    $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra phien ban..."
-    
+    $Form.Cursor = "WaitCursor"; $LblVerInfo.Text = "Dang kiem tra..."
     [string]$DriveLetter = Mount-And-GetDrive $ISO
-    # SỬA LẠI: Lọc sạch ký tự ổ đĩa (chỉ lấy E:)
     if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
-
     if ($DriveLetter) {
         try {
             $HostVer = [Environment]::OSVersion.Version.Major
@@ -165,22 +180,18 @@ function Show-SubMenu-Upgrade {
     $SubForm.ShowDialog()
 }
 
-# --- MAIN INSTALL (SAFE COPY) ---
+# --- MAIN INSTALL ---
 function Start-Install ($Mode) {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $FinalPath = $TxtPath.Text
 
-    # Mount
-    [string]$DriveLetter = Mount-And-GetDrive $ISO 
+    # MOUNT
+    [string]$DriveLetter = Mount-And-GetDrive $ISO
     if ($DriveLetter -match "([A-Z]:)") { $DriveLetter = $matches[1] }
-    if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay o dia chua ISO!", "Loi"); return }
-    Write-DebugLog "Setup Drive: $DriveLetter"
+    if (!$DriveLetter) { [System.Windows.Forms.MessageBox]::Show("Loi: Khong tim thay ISO!", "Loi"); return }
+    $SrcWim = "$DriveLetter\sources\boot.wim"; $SrcSdi = "$DriveLetter\boot\boot.sdi"
 
-    # Paths
-    $SrcWim = "$DriveLetter\sources\boot.wim"
-    $SrcSdi = "$DriveLetter\boot\boot.sdi"
-
-    # Backup
+    # BACKUP
     if ($CkBackup.Checked) {
         if (!(Test-Path $FinalPath)) { New-Item -ItemType Directory -Path $FinalPath -Force | Out-Null }
         $Form.Text = "DANG SAO LUU DRIVER..."
@@ -189,34 +200,22 @@ function Start-Install ($Mode) {
         if ($Ck3DP.Checked) { try { (New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/3DP.Net.exe", "$FinalPath\3DP_Net.exe") } catch {} }
     }
 
-    # Execute
+    # EXECUTE
     if ($Mode -eq "Direct") { Start-Process "$DriveLetter\setup.exe"; $Form.Close() }
     elseif ($Mode -eq "BootTmp") {
-        $Form.Text = "DANG TAO BOOT TAM..."
+        $Form.Text = "DANG TAO BOOT TAM (SAFE COPY)..."
         $SysDrive = $env:SystemDrive
         $FreeC = (Get-PSDrive $SysDrive.Substring(0,1)).Free / 1GB; if ($FreeC -lt 2) { [System.Windows.Forms.MessageBox]::Show("O C: day qua!", "Loi"); return }
 
-        # --- SAFE COPY LOGIC (THƯ MỤC TẠM) ---
-        Write-DebugLog "Copying boot.wim to TEMP folder first..."
-        $TempDir = "C:\WinInstall_Temp" # Tạo thư mục tạm để né quyền Root
-        New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
-        
-        # Copy vào thư mục tạm trước (ít bị chặn hơn C:\)
-        Copy-Item $SrcWim "$TempDir\boot.wim" -Force -ErrorAction SilentlyContinue
-        Copy-Item $SrcSdi "$TempDir\boot.sdi" -Force -ErrorAction SilentlyContinue
-        
-        if (Test-Path "$TempDir\boot.wim") {
-            Write-DebugLog "Copy to Temp OK. Moving to Root..."
-            # Di chuyển ra Root
-            Move-Item "$TempDir\boot.wim" "$SysDrive\WinInstall_Boot.wim" -Force
-            Move-Item "$TempDir\boot.sdi" "$SysDrive\boot.sdi" -Force
-            Remove-Item $TempDir -Recurse -Force
-            
+        # SAFE COPY
+        $Temp = "C:\WinInstall_Temp"; New-Item -ItemType Directory -Path $Temp -Force | Out-Null
+        Copy-Item $SrcWim "$Temp\boot.wim" -Force; Copy-Item $SrcSdi "$Temp\boot.sdi" -Force
+        Move-Item "$Temp\boot.wim" "$SysDrive\WinInstall_Boot.wim" -Force; Move-Item "$Temp\boot.sdi" "$SysDrive\boot.sdi" -Force
+        Remove-Item $Temp -Recurse -Force
+
+        if (Test-Path "$SysDrive\WinInstall_Boot.wim") {
             if (Create-Boot-Entry "\WinInstall_Boot.wim") { if ([System.Windows.Forms.MessageBox]::Show("Da tao Boot Tam! Restart?", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force } }
-        } else { 
-            Write-DebugLog "COPY FAILED (Access Denied). Try WinToHDD."
-            [System.Windows.Forms.MessageBox]::Show("Loi Copy: Bi chan quyen Admin/Antivirus.`nVui long dung WinToHDD de cai dat!", "Loi") 
-        }
+        } else { [System.Windows.Forms.MessageBox]::Show("Loi copy boot.wim!", "Loi") }
     }
     elseif ($Mode -eq "WinToHDD") {
         $P = "$env:TEMP\WinToHDD.exe"; if (!(Test-Path $P)) { (New-Object Net.WebClient).DownloadFile($WinToHDD_Url, $P) }
