@@ -13,9 +13,7 @@ $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/ma
 
 # --- KEY DATABASE ---
 $KeyDB = @{
-    "Windows 10/11" = @{
-        "Pro" = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"; "Home" = "YTMG3-N6DKC-DKB77-7M9GH-8HVX7"; "Home Single Language" = "BT79Q-G7N6G-PGBYW-4YWX6-6F4BT"; "Enterprise" = "XGVPP-NMH47-7TTHJ-W3FW7-8HV2C"; "Education" = "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y"
-    }
+    "Windows 10/11" = @{ "Pro" = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"; "Home" = "YTMG3-N6DKC-DKB77-7M9GH-8HVX7"; "Home Single Language" = "BT79Q-G7N6G-PGBYW-4YWX6-6F4BT"; "Enterprise" = "XGVPP-NMH47-7TTHJ-W3FW7-8HV2C"; "Education" = "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y" }
     "Windows 8.1" = @{ "Pro" = "GCRJD-8NW9H-F2CDX-CCM8D-9D6T9"; "Core" = "334NH-RXG76-64THK-C7CKG-D3VPT"; "Enterprise" = "MHF9N-XY6XB-WVXMC-BTDCT-MKKG7" }
     "Windows 7" = @{ "Ultimate" = "D4F6K-QK3RD-TMVMJ-BBMRX-3MBMV"; "Professional" = "FJ82H-XT6CR-J8D7P-XQJJ2-GPDD4"; "Home Premium" = "VQB3X-Q3KP8-WJ2H8-R6B6D-7QJB7"; "Enterprise" = "33PXH-7Y6KF-2VJC9-XBBR8-HVTHH" }
 }
@@ -24,7 +22,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V22.0 (DOM INJECTOR) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V23.0 (PLACEHOLDER FIX) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -63,7 +61,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V22.0)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V23.0)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -144,20 +142,45 @@ function Start-Boot-Install {
     if ($CmbEd.SelectedItem) { $FullString = $CmbEd.SelectedItem.ToString(); $Idx = $FullString.Split("-")[0].Trim(); $DetectedKey = Get-SmartKey $FullString } else { $Idx = 1; $DetectedKey = $null }
     $D_ID = $Global:SelectedDisk; $P_ID = $Global:SelectedPart
     
-    # --- DOM MANIPULATION (CHINH XAC 100%) ---
+    # --- PRE-PROCESS: FIX PLACEHOLDERS (TEXT MODE) ---
+    try {
+        $RawContent = [IO.File]::ReadAllText($XML)
+        if ($RawContent.Contains("%INSTALLTO%")) {
+             Write-DebugLog "Replacing Placeholders..." "FIX"
+             # Thay the tam placeholder thanh the chuan de DOM khong bi loi
+             $RawContent = $RawContent.Replace("%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>0</PartitionID>")
+             $RawContent = $RawContent.Replace("%PRODUCTKEY%", "")
+             [IO.File]::WriteAllText($XML, $RawContent)
+        }
+    } catch { Write-DebugLog "Pre-process failed: $($_.Exception.Message)" "WARN" }
+
+    # --- DOM MANIPULATION ---
     try {
         $xml = [xml](Get-Content $XML)
         
         # 1. Update Disk/Partition (Duyet qua moi component Setup - x86/amd64)
         $InstallTos = $xml.GetElementsByTagName("InstallTo")
         foreach ($IT in $InstallTos) {
-            $IT.SelectSingleNode("*[local-name()='DiskID']").InnerText = $D_ID.ToString()
-            $IT.SelectSingleNode("*[local-name()='PartitionID']").InnerText = $P_ID.ToString()
+            # Tim hoac Tao DiskID
+            $DNode = $IT.SelectSingleNode("*[local-name()='DiskID']")
+            if (!$DNode) { $DNode = $xml.CreateElement("DiskID", "urn:schemas-microsoft-com:unattend"); [void]$IT.AppendChild($DNode) }
+            $DNode.InnerText = $D_ID.ToString()
+
+            # Tim hoac Tao PartitionID
+            $PNode = $IT.SelectSingleNode("*[local-name()='PartitionID']")
+            if (!$PNode) { $PNode = $xml.CreateElement("PartitionID", "urn:schemas-microsoft-com:unattend"); [void]$IT.AppendChild($PNode) }
+            $PNode.InnerText = $P_ID.ToString()
         }
 
         # 2. Update Index
-        $Indexes = $xml.GetElementsByTagName("Key")
-        foreach ($K in $Indexes) { if ($K.InnerText -eq "/IMAGE/INDEX") { $K.NextSibling.InnerText = $Idx.ToString() } }
+        $Keys = $xml.GetElementsByTagName("Key")
+        foreach ($K in $Keys) { 
+            if ($K.InnerText -eq "/IMAGE/INDEX") { 
+                # Dung ParentNode de tim Value an toan hon
+                $Val = $K.ParentNode.SelectSingleNode("*[local-name()='Value']")
+                if ($Val) { $Val.InnerText = $Idx.ToString() }
+            } 
+        }
 
         # 3. Inject Key
         if ($CkSkipKey.Checked) {
@@ -166,11 +189,9 @@ function Start-Boot-Install {
             Write-DebugLog "Injecting Key: $DetectedKey" "XML"
             $UserDatas = $xml.GetElementsByTagName("UserData")
             foreach ($UD in $UserDatas) {
-                # Xoa key cu neu co
                 $OldKey = $UD.SelectSingleNode("*[local-name()='ProductKey']")
                 if ($OldKey) { [void]$UD.RemoveChild($OldKey) }
                 
-                # Chen key moi vao dau
                 $pkNode = $xml.CreateElement("ProductKey", "urn:schemas-microsoft-com:unattend")
                 $kNode = $xml.CreateElement("Key", "urn:schemas-microsoft-com:unattend"); $kNode.InnerText = $DetectedKey; [void]$pkNode.AppendChild($kNode)
                 $uiNode = $xml.CreateElement("WillShowUI", "urn:schemas-microsoft-com:unattend"); $uiNode.InnerText = "OnError"; [void]$pkNode.AppendChild($uiNode)
