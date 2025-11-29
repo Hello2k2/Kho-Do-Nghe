@@ -9,7 +9,6 @@ $ErrorActionPreference = "SilentlyContinue"
 $DebugLog = "C:\PhatTan_Debug.txt"
 $Global:SelectedDisk = 0
 $Global:SelectedPart = 0
-$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/autounattend.xml"
 
 # --- KEY DATABASE ---
 $KeyDB = @{
@@ -22,7 +21,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V23.0 (PLACEHOLDER FIX) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V24.0 (TEXT REPLACEMENT) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -61,7 +60,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V23.0)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V24.0)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -132,76 +131,35 @@ function Start-Boot-Install {
     if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG!", "Loi"); return }
     
     $XML = "$env:SystemDrive\autounattend.xml"
-    if (!(Test-Path $XML)) { 
-        try { 
-            [System.Net.ServicePointManager]::SecurityProtocol = 3072
-            (New-Object Net.WebClient).DownloadFile($XML_Url, $XML) 
-        } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML goc! Chay Tool Config truoc.", "Error"); return }
-    } else { Write-DebugLog "Using existing XML." "CONFIG" }
+    if (!(Test-Path $XML)) { [System.Windows.Forms.MessageBox]::Show("Chua co file XML! Vui long chay Tool Config truoc.", "Error"); return }
 
     if ($CmbEd.SelectedItem) { $FullString = $CmbEd.SelectedItem.ToString(); $Idx = $FullString.Split("-")[0].Trim(); $DetectedKey = Get-SmartKey $FullString } else { $Idx = 1; $DetectedKey = $null }
     $D_ID = $Global:SelectedDisk; $P_ID = $Global:SelectedPart
     
-    # --- PRE-PROCESS: FIX PLACEHOLDERS (TEXT MODE) ---
+    # --- FINAL TEXT REPLACEMENT (SAFE & SIMPLE) ---
     try {
-        $RawContent = [IO.File]::ReadAllText($XML)
-        if ($RawContent.Contains("%INSTALLTO%")) {
-             Write-DebugLog "Replacing Placeholders..." "FIX"
-             # Thay the tam placeholder thanh the chuan de DOM khong bi loi
-             $RawContent = $RawContent.Replace("%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>0</PartitionID>")
-             $RawContent = $RawContent.Replace("%PRODUCTKEY%", "")
-             [IO.File]::WriteAllText($XML, $RawContent)
-        }
-    } catch { Write-DebugLog "Pre-process failed: $($_.Exception.Message)" "WARN" }
-
-    # --- DOM MANIPULATION ---
-    try {
-        $xml = [xml](Get-Content $XML)
+        $Content = [IO.File]::ReadAllText($XML)
         
-        # 1. Update Disk/Partition (Duyet qua moi component Setup - x86/amd64)
-        $InstallTos = $xml.GetElementsByTagName("InstallTo")
-        foreach ($IT in $InstallTos) {
-            # Tim hoac Tao DiskID
-            $DNode = $IT.SelectSingleNode("*[local-name()='DiskID']")
-            if (!$DNode) { $DNode = $xml.CreateElement("DiskID", "urn:schemas-microsoft-com:unattend"); [void]$IT.AppendChild($DNode) }
-            $DNode.InnerText = $D_ID.ToString()
+        # Thay the cac Placeholder ma Config da tao ra
+        $Content = $Content.Replace("__DISKID__", $D_ID.ToString())
+        $Content = $Content.Replace("__PARTID__", $P_ID.ToString())
+        $Content = $Content.Replace("__INDEX__", $Idx.ToString())
 
-            # Tim hoac Tao PartitionID
-            $PNode = $IT.SelectSingleNode("*[local-name()='PartitionID']")
-            if (!$PNode) { $PNode = $xml.CreateElement("PartitionID", "urn:schemas-microsoft-com:unattend"); [void]$IT.AppendChild($PNode) }
-            $PNode.InnerText = $P_ID.ToString()
-        }
-
-        # 2. Update Index
-        $Keys = $xml.GetElementsByTagName("Key")
-        foreach ($K in $Keys) { 
-            if ($K.InnerText -eq "/IMAGE/INDEX") { 
-                # Dung ParentNode de tim Value an toan hon
-                $Val = $K.ParentNode.SelectSingleNode("*[local-name()='Value']")
-                if ($Val) { $Val.InnerText = $Idx.ToString() }
-            } 
-        }
-
-        # 3. Inject Key
+        # Logic Key
         if ($CkSkipKey.Checked) {
-            Write-DebugLog "USER SKIP KEY." "USER_OPT"
+            $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "")
         } elseif ($DetectedKey) {
-            Write-DebugLog "Injecting Key: $DetectedKey" "XML"
-            $UserDatas = $xml.GetElementsByTagName("UserData")
-            foreach ($UD in $UserDatas) {
-                $OldKey = $UD.SelectSingleNode("*[local-name()='ProductKey']")
-                if ($OldKey) { [void]$UD.RemoveChild($OldKey) }
-                
-                $pkNode = $xml.CreateElement("ProductKey", "urn:schemas-microsoft-com:unattend")
-                $kNode = $xml.CreateElement("Key", "urn:schemas-microsoft-com:unattend"); $kNode.InnerText = $DetectedKey; [void]$pkNode.AppendChild($kNode)
-                $uiNode = $xml.CreateElement("WillShowUI", "urn:schemas-microsoft-com:unattend"); $uiNode.InnerText = "OnError"; [void]$pkNode.AppendChild($uiNode)
-                [void]$UD.PrependChild($pkNode)
-            }
+            $KeyBlock = "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>"
+            $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", $KeyBlock)
+        } else {
+            $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "")
         }
 
-        $xml.Save($XML)
-        Write-DebugLog "XML Updated via DOM." "SUCCESS"
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi XML DOM: $($_.Exception.Message)", "Error"); return }
+        # SAVE (UTF8 BOM)
+        $Utf8Bom = New-Object System.Text.UTF8Encoding $true
+        [IO.File]::WriteAllText($XML, $Content, $Utf8Bom)
+        Write-DebugLog "XML Finalized with Data." "SUCCESS"
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi Inject Data: $($_.Exception.Message)", "Error"); return }
 
     if ($CkBackup.Checked) {
         $Path = $TxtPath.Text; if (!(Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
