@@ -9,6 +9,7 @@ $ErrorActionPreference = "SilentlyContinue"
 $DebugLog = "C:\PhatTan_Debug.txt"
 $Global:SelectedDisk = 0
 $Global:SelectedPart = 0
+$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounattend.xml"
 
 # --- KEY DATABASE ---
 $KeyDB = @{
@@ -23,7 +24,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE START V15.4 (HYBRID MODE) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V16.0 (ASCII ENCODING FIX) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -62,7 +63,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V15.4 HYBRID)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V16.0 ASCII FIX)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -72,7 +73,7 @@ $BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "MO FILE"
 $GBVer = New-Object System.Windows.Forms.GroupBox; $GBVer.Text = "2. CHON PHIEN BAN WINDOWS"; $GBVer.Location = "20,100"; $GBVer.Size = "790,80"; $GBVer.ForeColor = "Lime"; $Form.Controls.Add($GBVer)
 $CmbEd = New-Object System.Windows.Forms.ComboBox; $CmbEd.Location = "20,30"; $CmbEd.Size = "750,30"; $CmbEd.Font = $FontNorm; $CmbEd.DropDownStyle = "DropDownList"; $GBVer.Controls.Add($CmbEd)
 
-$GBPart = New-Object System.Windows.Forms.GroupBox; $GBPart.Text = "3. CHON O CUNG (BAT BUOC)"; $GBPart.Location = "20,190"; $GBPart.Size = "790,220"; $GBPart.ForeColor = "Yellow"; $Form.Controls.Add($GBPart)
+$GBPart = New-Object System.Windows.Forms.GroupBox; $GBPart.Text = "3. CHON O CUNG (CLICK CHON 1 DONG)"; $GBPart.Location = "20,190"; $GBPart.Size = "790,220"; $GBPart.ForeColor = "Yellow"; $Form.Controls.Add($GBPart)
 $GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location = "20,30"; $GridPart.Size = "750,170"; $GridPart.BackgroundColor="Black"; $GridPart.ForeColor="Black"; $GridPart.AllowUserToAddRows=$false; $GridPart.RowHeadersVisible=$false; $GridPart.SelectionMode="FullRowSelect"; $GridPart.MultiSelect=$false; $GridPart.ReadOnly=$true; $GridPart.AutoSizeColumnsMode="Fill"
 $GridPart.Columns.Add("Disk", "Disk"); $GridPart.Columns.Add("Part", "Part"); $GridPart.Columns.Add("Letter", "Ky Tu"); $GridPart.Columns.Add("Label", "Nhan"); $GridPart.Columns.Add("Size", "Dung Luong"); $GridPart.Columns.Add("Info", "Thong Tin")
 $GridPart.Columns[0].FillWeight=10; $GridPart.Columns[1].FillWeight=10; $GridPart.Columns[2].FillWeight=10; $GridPart.Columns[5].FillWeight=40
@@ -80,8 +81,8 @@ $GridPart.Add_CellClick({ $R = $GridPart.SelectedRows[0]; $Global:SelectedDisk =
 
 $GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "4. TUY CHON KHAC"; $GBOpt.Location = "20,420"; $GBOpt.Size = "790,100"; $GBOpt.ForeColor = "White"; $Form.Controls.Add($GBOpt)
 $CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai"; $CkBackup.Location = "20,30"; $CkBackup.AutoSize=$true; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
-$CkInject = New-Object System.Windows.Forms.CheckBox; $CkInject.Text = "Tao Script Auto-Install"; $CkInject.Location = "20,60"; $CkInject.AutoSize=$true; $CkInject.Checked=$true; $GBOpt.Controls.Add($CkInject)
-$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = "D:\Drivers_Backup_Auto"; $TxtPath.Location = "250,30"; $TxtPath.Size = "400,25"; $GBOpt.Controls.Add($TxtPath)
+$CkSkipKey = New-Object System.Windows.Forms.CheckBox; $CkSkipKey.Text = "BO QUA KEY (Tich vao neu bi loi Key XML)"; $CkSkipKey.Location = "20,60"; $CkSkipKey.AutoSize=$true; $CkSkipKey.Checked=$false; $CkSkipKey.ForeColor="Red"; $GBOpt.Controls.Add($CkSkipKey)
+$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = "D:\Drivers_Backup_Auto"; $TxtPath.Location = "300,30"; $TxtPath.Size = "350,25"; $GBOpt.Controls.Add($TxtPath)
 
 $BtnBoot = New-Object System.Windows.Forms.Button; $BtnBoot.Text = "TAO BOOT TAM (Khoi dong lai va Cai dat)"; $BtnBoot.Location = "20,540"; $BtnBoot.Size = "790,50"; $BtnBoot.BackColor = "Magenta"; $BtnBoot.ForeColor = "White"; $BtnBoot.Font = $FontBold
 $BtnBoot.Add_Click({ Start-Boot-Install }); $Form.Controls.Add($BtnBoot)
@@ -101,76 +102,72 @@ function Load-WimInfo {
 }
 $CmbISO.Add_SelectedIndexChanged({ Load-WimInfo })
 
-# --- LOAD PARTITIONS (HYBRID: MODERN -> FALLBACK LEGACY) ---
 function Load-Partitions {
     $GridPart.Rows.Clear(); $SysDrive = $env:SystemDrive.Replace(":", "")
     $AutoSelected = $false
-    
-    # === PHUONG AN 1: MODERN TECH (Get-Partition) ===
-    Write-DebugLog "Scanning Partitions (Modern Mode)..." "DISK"
+    Write-DebugLog "Scanning Partitions (Hybrid)..." "DISK"
     $Parts = Get-Partition -ErrorAction SilentlyContinue
-    
     if ($Parts -and $Parts.Count -gt 0) {
-        Write-DebugLog "Modern Mode Success. Found $($Parts.Count) partitions." "DISK"
         foreach ($P in $Parts) {
             $GB = [Math]::Round($P.Size / 1GB, 1); $Let = if ($P.DriveLetter) { $P.DriveLetter } else { "" }
             $Info = ""; if ($P.IsSystem) { $Info = "[BOOT/EFI]" }; if ($P.DriveLetter -eq $SysDrive) { $Info = "[WINDOWS HIEN TAI]" }
             $RowId = $GridPart.Rows.Add($P.DiskNumber, $P.PartitionNumber, $Let, $P.GptType, "$GB GB", $Info)
             if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$RowId].Selected = $true; $Global:SelectedDisk = $P.DiskNumber; $Global:SelectedPart = $P.PartitionNumber; $AutoSelected = $true }
-            if ($P.IsSystem) { $GridPart.Rows[$RowId].DefaultCellStyle.BackColor = "Yellow" }
         }
-    } 
-    else {
-        # === PHUONG AN 2: LEGACY TECH (WMI) - KHI MAY AO BI NGOC ===
-        Write-DebugLog "Modern Mode Failed (Empty). Switching to Legacy Mode (WMI)..." "WARN"
+    } else {
         try {
             $Partitions = Get-WmiObject Win32_DiskPartition
             foreach ($P in $Partitions) {
-                $DiskIdx = $P.DiskIndex; $PartIdx = $P.Index + 1 # Fix Index
-                $SizeGB = [Math]::Round($P.Size / 1GB, 1); $Letter = ""
+                $DiskIdx = $P.DiskIndex; $PartIdx = $P.Index + 1; $SizeGB = [Math]::Round($P.Size / 1GB, 1); $Letter = ""
                 try { $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"; if ($LogDisk) { $Letter = $LogDisk.DeviceID.Replace(":","") } } catch {}
-                $Info = ""; if ($P.BootPartition) { $Info = "[BOOT]" }; if ($Letter -eq $SysDrive) { $Info = "[WINDOWS HIEN TAI]" }
-                
+                $Info = ""; if ($Letter -eq $SysDrive) { $Info = "[WINDOWS HIEN TAI]" }
                 $RowId = $GridPart.Rows.Add($DiskIdx, $PartIdx, $Letter, $P.Type, "$SizeGB GB", $Info)
                 if ($Letter -eq $SysDrive) { $GridPart.Rows[$RowId].Selected = $true; $Global:SelectedDisk = $DiskIdx; $Global:SelectedPart = $PartIdx; $AutoSelected = $true }
             }
-             Write-DebugLog "Legacy Mode Success." "SUCCESS"
-        } catch { Write-DebugLog "Legacy Mode Failed: $($_.Exception.Message)" "CRITICAL" }
+        } catch {}
     }
 }
 
 function Start-Boot-Install {
     if (!$CmbISO.SelectedItem) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
-    if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG (PARTITION)!", "Loi"); return }
+    if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG!", "Loi"); return }
     
+    # 1. TAI FILE GOC (RESET SACH)
     $XML = "$env:SystemDrive\autounattend.xml"
-    if (!(Test-Path $XML)) { [System.Windows.Forms.MessageBox]::Show("Chua co file XML!", "Canh Bao"); return }
+    try { (New-Object Net.WebClient).DownloadFile($XML_Url, $XML) } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML goc! Kiem tra mang.", "Error"); return }
 
     if ($CmbEd.SelectedItem) { $FullString = $CmbEd.SelectedItem.ToString(); $Idx = $FullString.Split("-")[0].Trim(); $DetectedKey = Get-SmartKey $FullString } else { $Idx = 1; $DetectedKey = $null }
-
     $D_ID = $Global:SelectedDisk; $P_ID = $Global:SelectedPart
     
+    # --- STRING REPLACE (AN TOAN HON DOM CHO FILE NAY) ---
     try {
-        $xmlDoc = New-Object System.Xml.XmlDocument; $xmlDoc.PreserveWhitespace = $true; $xmlDoc.Load($XML)
-        $ns = New-Object System.Xml.XmlNamespaceManager($xmlDoc.NameTable)
-        $ns.AddNamespace("u", "urn:schemas-microsoft-com:unattend")
+        $Content = [IO.File]::ReadAllText($XML)
         
-        $diskIdNode = $xmlDoc.SelectSingleNode("//u:DiskID", $ns); if ($diskIdNode) { $diskIdNode.InnerText = $D_ID.ToString() }
-        $partIdNode = $xmlDoc.SelectSingleNode("//u:PartitionID", $ns); if ($partIdNode) { $partIdNode.InnerText = $P_ID.ToString() }
-        $valNode = $xmlDoc.SelectSingleNode("//u:Value", $ns); if ($valNode) { $valNode.InnerText = $Idx.ToString() }
+        # Inject Disk Info
+        $DiskBlock = "<DiskID>$D_ID</DiskID><PartitionID>$P_ID</PartitionID>"
+        $Content = $Content -replace "(?s)<InstallTo>.*?</InstallTo>", "<InstallTo>$DiskBlock</InstallTo>"
+        
+        # Inject Index
+        $ImgBlock = "<InstallFrom><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>$Idx</Value></MetaData></InstallFrom>"
+        if ($Content -match "<InstallFrom>") { $Content = $Content -replace "(?s)<InstallFrom>.*?</InstallFrom>", $ImgBlock } else { $Content = $Content -replace "<OSImage>", "<OSImage>$ImgBlock" }
 
-        $userData = $xmlDoc.SelectSingleNode("//u:UserData", $ns)
-        if ($userData) {
-            $oldKey = $userData.SelectSingleNode("u:ProductKey", $ns); if ($oldKey) { [void]$userData.RemoveChild($oldKey) }
-            if ($DetectedKey) {
-                Write-DebugLog "Injecting Key: $DetectedKey" "XML"
-                $pkNode = $xmlDoc.CreateElement("ProductKey", "urn:schemas-microsoft-com:unattend")
-                $kNode = $xmlDoc.CreateElement("Key", "urn:schemas-microsoft-com:unattend"); $kNode.InnerText = $DetectedKey; [void]$pkNode.AppendChild($kNode)
-                $uiNode = $xmlDoc.CreateElement("WillShowUI", "urn:schemas-microsoft-com:unattend"); $uiNode.InnerText = "OnError"; [void]$pkNode.AppendChild($uiNode)
-                [void]$userData.PrependChild($pkNode)
-            }
+        # KEY LOGIC
+        # Xoa Key cu
+        $Content = $Content -replace "(?s)\s*<ProductKey>.*?</ProductKey>", ""
+        
+        if ($CkSkipKey.Checked) {
+            Write-DebugLog "User selected SKIP KEY. No key injected." "USER_OPT"
+        } elseif ($DetectedKey) {
+            Write-DebugLog "Injecting Key: $DetectedKey" "XML"
+            # Hard-code Key Block chuan
+            $KeyBlock = "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>"
+            # Chen vao sau <UserData>
+            $Content = $Content -replace "<UserData>", "<UserData>`r`n$KeyBlock"
         }
-        $xmlDoc.Save($XML); Write-DebugLog "XML Saved OK." "SUCCESS"
+
+        # SAVE AS ASCII (QUAN TRONG NHAT)
+        [IO.File]::WriteAllText($XML, $Content, [System.Text.Encoding]::ASCII)
+        Write-DebugLog "XML Saved as ASCII." "SUCCESS"
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi XML: $($_.Exception.Message)", "Error"); return }
 
     if ($CkBackup.Checked) {
