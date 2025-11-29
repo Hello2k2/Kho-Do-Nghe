@@ -24,7 +24,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V16.1 (FIX MOUNT BUG) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V17.0 (SYNC WITH CONFIG) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -63,7 +63,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V16.1 FINAL FIX)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V17.0 SYNC CONFIG)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -129,20 +129,24 @@ function Load-Partitions {
 }
 
 function Start-Boot-Install {
-    # --- FIX 1: KHAI BAO LAI BIEN ISO ---
+    # --- FIX KHAI BAO LAI BIEN ISO (NEU BI NULL) ---
     $ISO = $CmbISO.SelectedItem
-
     if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
     if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG!", "Loi"); return }
     
-    # 1. TAI FILE GOC (RESET SACH)
+    # --- LOGIC MOI: KIEM TRA FILE LOCAL ---
     $XML = "$env:SystemDrive\autounattend.xml"
-    try { (New-Object Net.WebClient).DownloadFile($XML_Url, $XML) } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML goc! Kiem tra mang.", "Error"); return }
+    if (Test-Path $XML) {
+        Write-DebugLog "Found existing XML from Config Tool. Using it." "CONFIG"
+    } else {
+        Write-DebugLog "No local XML found. Downloading template..." "DOWNLOAD"
+        try { (New-Object Net.WebClient).DownloadFile($XML_Url, $XML) } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML goc! Kiem tra mang.", "Error"); return }
+    }
 
     if ($CmbEd.SelectedItem) { $FullString = $CmbEd.SelectedItem.ToString(); $Idx = $FullString.Split("-")[0].Trim(); $DetectedKey = Get-SmartKey $FullString } else { $Idx = 1; $DetectedKey = $null }
     $D_ID = $Global:SelectedDisk; $P_ID = $Global:SelectedPart
     
-    # --- STRING REPLACE (AN TOAN HON DOM CHO FILE NAY) ---
+    # --- STRING REPLACE & INJECT (ASCII SAFE) ---
     try {
         $Content = [IO.File]::ReadAllText($XML)
         
@@ -162,7 +166,6 @@ function Start-Boot-Install {
             Write-DebugLog "User selected SKIP KEY. No key injected." "USER_OPT"
         } elseif ($DetectedKey) {
             Write-DebugLog "Injecting Key: $DetectedKey" "XML"
-            # Hard-code Key Block chuan
             $KeyBlock = "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>"
             # Chen vao sau <UserData>
             $Content = $Content -replace "<UserData>", "<UserData>`r`n$KeyBlock"
