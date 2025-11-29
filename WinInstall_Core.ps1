@@ -10,13 +10,37 @@ $DebugLog = "C:\PhatTan_Debug.txt"
 $Global:SelectedDisk = 0
 $Global:SelectedPart = 0
 
-# --- LOG FUNCTION ---
-function Write-DebugLog ($Message) {
-    $Time = Get-Date -Format "HH:mm:ss"; $Line = "[$Time] $Message"
+# --- DATABASE KEY (INTEGRATED) ---
+$KeyDB = @{
+    "Windows 10/11" = @{
+        "Pro"          = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
+        "Home"         = "YTMG3-N6DKC-DKB77-7M9GH-8HVX7"
+        "Enterprise"   = "XGVPP-NMH47-7TTHJ-W3FW7-8HV2C"
+        "Education"    = "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y"
+    }
+    "Windows 8.1" = @{
+        "Pro"          = "GCRJD-8NW9H-F2CDX-CCM8D-9D6T9"
+        "Core"         = "334NH-RXG76-64THK-C7CKG-D3VPT" # Home
+        "Enterprise"   = "MHF9N-XY6XB-WVXMC-BTDCT-MKKG7"
+    }
+    "Windows 7" = @{
+        "Ultimate"     = "D4F6K-QK3RD-TMVMJ-BBMRX-3MBMV"
+        "Professional" = "FJ82H-XT6CR-J8D7P-XQJJ2-GPDD4"
+        "Home Premium" = "VQB3X-Q3KP8-WJ2H8-R6B6D-7QJB7"
+        "Home Basic"   = "22MFQ-HDH7V-RBV79-QMVK9-PTMXQ"
+        "Enterprise"   = "33PXH-7Y6KF-2VJC9-XBBR8-HVTHH"
+    }
+}
+
+# --- LOG FUNCTION (ENHANCED) ---
+function Write-DebugLog ($Message, $Type="INFO") {
+    $Time = Get-Date -Format "HH:mm:ss"
+    $Line = "[$Time] [$Type] $Message"
     $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8
+    Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE START V13.0 (PARTITION MASTER) ==="
+Write-DebugLog "=== CORE MODULE START V14.0 (AUTO KEY) ===" "INIT"
 
 # --- CONFIG ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
@@ -26,9 +50,9 @@ $Global:DriverPath = "D:\Drivers_Backup_Auto"
 function Dismount-All { Get-DiskImage -ImagePath * -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null }
 
 function Mount-And-GetDrive ($IsoPath) {
-    Write-DebugLog "Mounting: $IsoPath"
+    Write-DebugLog "Mounting ISO: $IsoPath" "DISK"
     Dismount-All
-    try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null; Start-Sleep -Seconds 2 } catch { return $null }
+    try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null; Start-Sleep -Seconds 2 } catch { Write-DebugLog "Mount Failed!" "ERROR"; return $null }
 
     try { $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume; if ($Vol) { $L="$($Vol.DriveLetter):"; if (Test-Path "$L\setup.exe") { return $L } } } catch {}
     $Drives = Get-PSDrive -PSProvider FileSystem
@@ -37,6 +61,42 @@ function Mount-And-GetDrive ($IsoPath) {
 }
 
 function Get-BiosMode { if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { return "UEFI" } return "Legacy" }
+
+# --- SMART KEY DETECTOR ---
+function Get-SmartKey ($FullIndexName) {
+    Write-DebugLog "Analysing OS Name: $FullIndexName" "KEY_LOGIC"
+    $Name = $FullIndexName.ToLower()
+    $VerGroup = $null
+    $Edition = $null
+
+    # 1. Detect Version Group
+    if ($Name -match "windows 7") { $VerGroup = "Windows 7" }
+    elseif ($Name -match "windows 8.1") { $VerGroup = "Windows 8.1" }
+    elseif ($Name -match "windows 10" -or $Name -match "windows 11") { $VerGroup = "Windows 10/11" }
+    
+    if (!$VerGroup) { Write-DebugLog "-> Unknown Windows Version. Skip Key." "WARN"; return $null }
+
+    # 2. Detect Edition
+    if ($Name -match "enterprise") { $Edition = "Enterprise" }
+    elseif ($Name -match "education") { $Edition = "Education" }
+    elseif ($Name -match "ultimate") { $Edition = "Ultimate" }
+    elseif ($Name -match "pro") { $Edition = "Pro" }
+    elseif ($Name -match "home" -or $Name -match "core") { 
+        if ($VerGroup -eq "Windows 7") {
+             if ($Name -match "premium") { $Edition = "Home Premium" } else { $Edition = "Home Basic" }
+        } elseif ($VerGroup -eq "Windows 8.1") { $Edition = "Core (Home)" } 
+        else { $Edition = "Home" }
+    }
+
+    if ($Edition -and $KeyDB[$VerGroup][$Edition]) {
+        $K = $KeyDB[$VerGroup][$Edition]
+        Write-DebugLog "-> DETECTED: $VerGroup | $Edition" "SUCCESS"
+        Write-DebugLog "-> KEY FOUND: $K" "SUCCESS"
+        return $K
+    }
+    Write-DebugLog "-> No matching key in DB for: $Edition" "WARN"
+    return $null
+}
 
 function Create-Boot-Entry ($WimPath) {
     try {
@@ -51,13 +111,14 @@ function Create-Boot-Entry ($WimPath) {
         cmd /c "bcdedit /set $ID systemroot \windows"; cmd /c "bcdedit /set $ID detecthal yes"; cmd /c "bcdedit /set $ID winpe yes"
         if ($Mode -eq "UEFI") { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.efi" } else { cmd /c "bcdedit /set $ID path \windows\system32\boot\winload.exe" }
         cmd /c "bcdedit /displayorder $ID /addlast"; cmd /c "bcdedit /bootsequence $ID"
+        Write-DebugLog "BCD Entry Created: $ID ($Mode)" "BOOT"
         return $true
-    } catch { return $false }
+    } catch { Write-DebugLog "BCD Error: $($_.Exception.Message)" "ERROR"; return $false }
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS (CORE V13.0)"
+$Form.Text = "CAI DAT WINDOWS (CORE V14.0 AUTO KEY)"
 $Form.Size = New-Object System.Drawing.Size(850, 780)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -104,7 +165,7 @@ function Load-WimInfo {
     
     [string]$Drive = Mount-And-GetDrive $ISO
     if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
-    if (!$Drive) { $Form.Cursor = "Default"; return }
+    if (!$Drive) { $Form.Cursor = "Default"; Write-DebugLog "Cannot Mount ISO" "ERROR"; return }
 
     $Wim = "$Drive\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Drive\sources\install.esd" }
     
@@ -149,15 +210,22 @@ function Load-Partitions {
 
 # --- START INSTALL LOGIC ---
 function Start-Boot-Install {
+    Write-DebugLog "STARTING INSTALL PROCESS..." "MAIN"
     $ISO = $CmbISO.SelectedItem
     if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
     
-    # 1. UPDATE XML (INJECT INFO)
+    # 1. UPDATE XML (INJECT INFO + SMART KEY)
     $XML = "$env:SystemDrive\autounattend.xml"
     if (!(Test-Path $XML)) { [System.Windows.Forms.MessageBox]::Show("Chua co file XML! Vui long dung Tool Config tao truoc.", "Canh Bao"); return }
     
     # Lấy thông tin từ GUI
-    if ($CmbEd.SelectedItem) { $Idx = $CmbEd.SelectedItem.ToString().Split("-")[0].Trim() } else { $Idx = 1 }
+    if ($CmbEd.SelectedItem) { 
+        $FullString = $CmbEd.SelectedItem.ToString()
+        $Idx = $FullString.Split("-")[0].Trim() 
+        # TỰ ĐỘNG LẤY KEY TỪ TÊN
+        $DetectedKey = Get-SmartKey $FullString
+    } else { $Idx = 1; $DetectedKey = $null }
+    
     $D_ID = $Global:SelectedDisk
     $P_ID = $Global:SelectedPart
     
@@ -165,31 +233,49 @@ function Start-Boot-Install {
         $Content = [IO.File]::ReadAllText($XML)
         
         # Cập nhật Partition đích (InstallTo)
-        # Tìm dòng <InstallTo>...</InstallTo> và thay thế nội dung bên trong
-        # Regex: (?s) bật chế độ multiline, tìm nội dung giữa thẻ InstallTo
         $InstallBlock = "<DiskID>$D_ID</DiskID><PartitionID>$P_ID</PartitionID>"
         $Content = $Content -replace "(?s)<InstallTo>.*?</InstallTo>", "<InstallTo>$InstallBlock</InstallTo>"
 
         # Cập nhật Image Index (InstallFrom)
-        # Thêm thẻ MetaData để chỉ định phiên bản
         $ImgBlock = "<InstallFrom><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>$Idx</Value></MetaData></InstallFrom>"
-        # Thay thế khối InstallFrom cũ hoặc thêm mới vào OSImage
         if ($Content -match "<InstallFrom>") {
             $Content = $Content -replace "(?s)<InstallFrom>.*?</InstallFrom>", $ImgBlock
         } else {
             $Content = $Content -replace "<OSImage>", "<OSImage>$ImgBlock"
         }
 
+        # --- KEY INJECTION LOGIC ---
+        # 1. Xoa Key cu neu con sot
+        $Content = $Content -replace "(?s)\s*<ProductKey>.*?</ProductKey>", ""
+        
+        # 2. Neu tim thay Key, nhet vao UserData
+        if ($DetectedKey) {
+            Write-DebugLog "Injecting Product Key to XML: $DetectedKey" "XML"
+            $KeyBlock = "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>"
+            # Tim the <UserData> de nhet Key vao sau do
+            if ($Content -match "<UserData>") {
+                $Content = $Content -replace "<UserData>", "<UserData>$KeyBlock"
+            }
+        } else {
+             Write-DebugLog "No Key to inject. Clean install without key." "XML"
+        }
+
         [IO.File]::WriteAllText($XML, $Content)
-        Write-DebugLog "Updated XML with: Disk $D_ID, Part $P_ID, Index $Idx"
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi update XML: $($_.Exception.Message)", "Error"); return }
+        Write-DebugLog "XML Saved. Disk:$D_ID Part:$P_ID Idx:$Idx" "SUCCESS"
+    } catch { 
+        [System.Windows.Forms.MessageBox]::Show("Loi update XML: $($_.Exception.Message)", "Error")
+        Write-DebugLog "XML Update Failed: $($_.Exception.Message)" "CRITICAL"
+        return 
+    }
 
     # 2. BACKUP DRIVER
     if ($CkBackup.Checked) {
+        Write-DebugLog "Backing up Drivers..." "DRIVER"
         $Path = $TxtPath.Text
         if (!(Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
         Start-Process "pnputil.exe" -ArgumentList "/export-driver * `"$Path`"" -Wait -NoNewWindow
         if ($CkInject.Checked) { Set-Content -Path "$Path\1_CLICK_INSTALL_DRIVER.bat" -Value "@echo off`npnputil /add-driver `"%~dp0*.inf`" /subdirs /install`npause" }
+        Write-DebugLog "Driver Backup Done." "DRIVER"
     }
 
     # 3. PREPARE BOOT
@@ -201,6 +287,7 @@ function Start-Boot-Install {
     $DestWim = "$SysDrive\WinInstall_Boot.wim"
     
     # SAFE COPY
+    Write-DebugLog "Copying Boot WIM..." "COPY"
     $Temp = "C:\WinInstall_Temp"; New-Item -ItemType Directory -Path $Temp -Force | Out-Null
     Copy-Item "$Drive\sources\boot.wim" "$Temp\boot.wim" -Force
     Copy-Item "$Drive\boot\boot.sdi" "$Temp\boot.sdi" -Force
@@ -213,17 +300,22 @@ function Start-Boot-Install {
         $Panther = "$SysDrive\Windows\Panther"
         if (!(Test-Path $Panther)) { New-Item -ItemType Directory -Path $Panther -Force | Out-Null }
         Copy-Item $XML "$Panther\unattend.xml" -Force
+        Write-DebugLog "XML Copied to Panther." "COPY"
 
         if (Create-Boot-Entry "\WinInstall_Boot.wim") {
-             if ([System.Windows.Forms.MessageBox]::Show("DA XONG! Khoi dong lai ngay?", "Thanh Cong", "YesNo") -eq "Yes") { Restart-Computer -Force }
+             Write-DebugLog "ALL DONE. READY TO RESTART." "SUCCESS"
+             if ([System.Windows.Forms.MessageBox]::Show("DA XONG! Log file: $DebugLog `nKhoi dong lai ngay?", "Thanh Cong", "YesNo") -eq "Yes") { Restart-Computer -Force }
         }
-    } else { [System.Windows.Forms.MessageBox]::Show("Loi copy file Boot!", "Loi") }
+    } else { 
+        [System.Windows.Forms.MessageBox]::Show("Loi copy file Boot!", "Loi") 
+        Write-DebugLog "Copy Boot File Failed!" "CRITICAL"
+    }
 }
 
 # --- AUTO SCAN ---
 $Form.Add_Shown({ 
     Load-Partitions
-    $ScanPaths = @("$env:USERPROFILE\Downloads", "D:", "E:")
+    $ScanPaths = @("$env:USERPROFILE\Downloads", "D:", "E:", "F:")
     foreach ($P in $ScanPaths) { if (Test-Path $P) { Get-ChildItem $P -Filter "*.iso" -Recurse -Depth 1 | Where {$_.Length -gt 500MB} | ForEach { $CmbISO.Items.Add($_.FullName) } } }
     if ($CmbISO.Items.Count -gt 0) { $CmbISO.SelectedIndex = 0; Load-WimInfo }
 })
