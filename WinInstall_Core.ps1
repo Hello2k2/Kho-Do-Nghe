@@ -24,7 +24,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V16.0 (ASCII ENCODING FIX) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V16.1 (FIX MOUNT BUG) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -63,7 +63,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V16.0 ASCII FIX)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V16.1 FINAL FIX)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -82,7 +82,7 @@ $GridPart.Add_CellClick({ $R = $GridPart.SelectedRows[0]; $Global:SelectedDisk =
 $GBOpt = New-Object System.Windows.Forms.GroupBox; $GBOpt.Text = "4. TUY CHON KHAC"; $GBOpt.Location = "20,420"; $GBOpt.Size = "790,100"; $GBOpt.ForeColor = "White"; $Form.Controls.Add($GBOpt)
 $CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu Driver hien tai"; $CkBackup.Location = "20,30"; $CkBackup.AutoSize=$true; $CkBackup.Checked=$true; $GBOpt.Controls.Add($CkBackup)
 $CkSkipKey = New-Object System.Windows.Forms.CheckBox; $CkSkipKey.Text = "BO QUA KEY (Tich vao neu bi loi Key XML)"; $CkSkipKey.Location = "20,60"; $CkSkipKey.AutoSize=$true; $CkSkipKey.Checked=$false; $CkSkipKey.ForeColor="Red"; $GBOpt.Controls.Add($CkSkipKey)
-$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = "D:\Drivers_Backup_Auto"; $TxtPath.Location = "300,30"; $TxtPath.Size = "350,25"; $GBOpt.Controls.Add($TxtPath)
+$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = "$env:SystemDrive\Drivers_Backup_Auto"; $TxtPath.Location = "300,30"; $TxtPath.Size = "350,25"; $GBOpt.Controls.Add($TxtPath)
 
 $BtnBoot = New-Object System.Windows.Forms.Button; $BtnBoot.Text = "TAO BOOT TAM (Khoi dong lai va Cai dat)"; $BtnBoot.Location = "20,540"; $BtnBoot.Size = "790,50"; $BtnBoot.BackColor = "Magenta"; $BtnBoot.ForeColor = "White"; $BtnBoot.Font = $FontBold
 $BtnBoot.Add_Click({ Start-Boot-Install }); $Form.Controls.Add($BtnBoot)
@@ -129,7 +129,10 @@ function Load-Partitions {
 }
 
 function Start-Boot-Install {
-    if (!$CmbISO.SelectedItem) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
+    # --- FIX 1: KHAI BAO LAI BIEN ISO ---
+    $ISO = $CmbISO.SelectedItem
+
+    if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
     if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG!", "Loi"); return }
     
     # 1. TAI FILE GOC (RESET SACH)
