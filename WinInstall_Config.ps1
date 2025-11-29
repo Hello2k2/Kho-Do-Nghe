@@ -1,10 +1,9 @@
 # --- INIT ---
 try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing } catch { Exit }
-$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/autounattend.xml"
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE (V22.1 LOOP FIX)"
+$Form.Text = "CAU HINH FILE (V24.0 GENERATOR)"
 $Form.Size = New-Object System.Drawing.Size(650, 550)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -37,77 +36,97 @@ $GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG"; $GB.Lo
 $RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "XOA SACH (Clean Install)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.ForeColor="White"; $RadWipe.Checked=$true; $GB.Controls.Add($RadWipe)
 $RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "DUAL BOOT (Giu nguyen Partition)"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $GB.Controls.Add($RadDual)
 
-$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAI XML & LUU CAU HINH"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
+$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAO FILE XML (AUTO GEN)"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
 
 $BtnSave.Add_Click({
     $XMLPath = "$env:SystemDrive\autounattend.xml"
+
+    # --- 1. CHUAN BI DU LIEU ---
+    $User = $TxtUser.Text; $Pass = $TxtPass.Text; $PCName = $TxtPC.Text; $TZ = $CmbTZ.SelectedItem
+    $PassBlock = ""; if (![string]::IsNullOrEmpty($Pass)) { $PassBlock = "<Password><Value>$Pass</Value><PlainText>true</PlainText></Password>" }
+    $AutoLogon = ""; if ($CkAutoLogon.Checked) { $AutoLogon = "<AutoLogon><Username>$User</Username>$PassBlock<Enabled>true</Enabled><LogonCount>1</LogonCount></AutoLogon>" }
+    $SkipWifi = if ($CkSkipWifi.Checked) { "true" } else { "false" }
+    
+    # Logic Disk
+    if ($RadWipe.Checked) {
+        $Wipe = "true"
+        $CreatePart = "<CreatePartitions><CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition></CreatePartitions><ModifyPartitions><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition></ModifyPartitions>"
+    } else {
+        $Wipe = "false"
+        $CreatePart = "" # Khong tao gi ca
+    }
+
+    # Registry Tricks
+    $Regs = ""
+    $i=1
+    $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
+    $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
+    $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
+    if ($CkDefender.Checked) { $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SOFTWARE\Policies\Microsoft\Windows Defender`" /v DisableAntiSpyware /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++ }
+    if ($CkUAC.Checked) { $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`" /v EnableLUA /t REG_DWORD /d 0 /f</Path></RunSynchronousCommand>"; $i++ }
+
+    # --- 2. TAO COMPONENT (Function de tao ca x86 va amd64) ---
+    function Gen-Comp ($Arch) {
+        return @"
+        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="$Arch" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <SetupUILanguage><UILanguage>en-US</UILanguage></SetupUILanguage><InputLocale>0409:00000409</InputLocale><SystemLocale>en-US</SystemLocale><UILanguage>en-US</UILanguage><UserLocale>en-US</UserLocale>
+        </component>
+        <component name="Microsoft-Windows-Setup" processorArchitecture="$Arch" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <UserData>
+                %PRODUCTKEY_PLACEHOLDER%
+                <AcceptEula>true</AcceptEula>
+            </UserData>
+            <DiskConfiguration>
+                <WillShowUI>OnError</WillShowUI>
+                <Disk wcm:action="add">
+                    <DiskID>__DISKID__</DiskID>
+                    <WillWipeDisk>$Wipe</WillWipeDisk>
+                    $CreatePart
+                </Disk>
+            </DiskConfiguration>
+            <ImageInstall>
+                <OSImage>
+                    <InstallTo><DiskID>__DISKID__</DiskID><PartitionID>__PARTID__</PartitionID></InstallTo>
+                    <InstallFrom><MetaData wcm:action="add"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>
+                </OSImage>
+            </ImageInstall>
+            <RunSynchronous>$Regs</RunSynchronous>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="$Arch" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <ComputerName>$PCName</ComputerName><TimeZone>$TZ</TimeZone>
+            <UserAccounts><LocalAccounts><LocalAccount wcm:action="add"><Name>$User</Name><DisplayName>$User</DisplayName><Group>Administrators</Group>$PassBlock</LocalAccount></LocalAccounts></UserAccounts>
+            $AutoLogon
+            <OOBE><ProtectYourPC>3</ProtectYourPC><HideEULAPage>true</HideEULAPage><HideWirelessSetupInOOBE>$SkipWifi</HideWirelessSetupInOOBE><HideOnlineAccountScreens>true</HideOnlineAccountScreens></OOBE>
+        </component>
+"@
+    }
+
+    # --- 3. GHEP FILE XML ---
+    $FinalXML = @"
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+    <settings pass="windowsPE">
+        $(Gen-Comp "amd64")
+        $(Gen-Comp "x86")
+    </settings>
+    <settings pass="specialize">
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"><ComputerName>$PCName</ComputerName></component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="x86" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"><ComputerName>$PCName</ComputerName></component>
+    </settings>
+    <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">$AutoLogon</component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="x86" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">$AutoLogon</component>
+    </settings>
+</unattend>
+"@
+
+    # --- 4. LUU FILE (UTF8 BOM) ---
     try {
-        # 1. TAI FILE TU GITHUB
-        [System.Net.ServicePointManager]::SecurityProtocol = 3072
-        (New-Object Net.WebClient).DownloadFile($XML_Url, $XMLPath)
-        
-        # 2. LOAD XML DOM
-        $xml = [xml](Get-Content $XMLPath)
-        $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-        $ns.AddNamespace("u", "urn:schemas-microsoft-com:unattend")
-        $ns.AddNamespace("wcm", "http://schemas.microsoft.com/WMIConfig/2002/State")
-
-        # 3. FILL THONG TIN (String Replace cho Text co ban)
-        $xml.OuterXml.Replace("%USERNAME%", $TxtUser.Text).Replace("%COMPUTERNAME%", $TxtPC.Text).Replace("SE Asia Standard Time", $CmbTZ.SelectedItem) | Set-Content $XMLPath
-        $xml = [xml](Get-Content $XMLPath) # Reload
-
-        # 4. LOGIC DISK (DOM SAFE)
-        $Disks = $xml.GetElementsByTagName("Disk")
-        foreach ($Disk in $Disks) {
-            $WipeNode = $Disk.SelectSingleNode("*[local-name()='WillWipeDisk']")
-            if ($WipeNode) { if ($RadWipe.Checked) { $WipeNode.InnerText = "true" } else { $WipeNode.InnerText = "false" } }
-
-            $CPNode = $Disk.SelectSingleNode("*[local-name()='CreatePartitions']")
-            if ($CPNode) {
-                if ($RadWipe.Checked) {
-                    $CPNode.InnerXml = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>"
-                } else {
-                    [void]$Disk.RemoveChild($CPNode)
-                }
-            }
-        }
-
-        # 5. XOA KEY MAC DINH (DOM - FIX LOI LOOP)
-        # Dung @(...) de ep kieu thanh mang tinh, tranh loi "List changed"
-        $Keys = @($xml.GetElementsByTagName("ProductKey"))
-        foreach ($K in $Keys) { [void]$K.ParentNode.RemoveChild($K) }
-
-        # 6. LOGIC PASSWORD (DOM - FIX LOI LOOP)
-        if ([string]::IsNullOrWhiteSpace($TxtPass.Text)) {
-            $Pwds = @($xml.GetElementsByTagName("Password"))
-            foreach ($P in $Pwds) { [void]$P.ParentNode.RemoveChild($P) }
-        } else {
-            $xml.OuterXml.Replace("%PASSWORD%", $TxtPass.Text) | Set-Content $XMLPath
-            $xml = [xml](Get-Content $XMLPath)
-        }
-
-        # 7. SKIP WIFI & AUTO LOGON
-        if ($CkSkipWifi.Checked) {
-            $HideWifi = $xml.GetElementsByTagName("HideWirelessSetupInOOBE")
-            foreach ($H in $HideWifi) { $H.InnerText = "true" }
-        }
-        
-        if ($CkAutoLogon.Checked) {
-            $Enables = $xml.GetElementsByTagName("Enabled")
-            foreach ($E in $Enables) { if ($E.ParentNode.Name -eq "AutoLogon") { $E.InnerText = "true" } }
-        } else {
-            # FIX LOI LOOP CHO AUTO LOGON
-            $ALs = @($xml.GetElementsByTagName("AutoLogon"))
-            foreach ($A in $ALs) { [void]$A.ParentNode.RemoveChild($A) }
-        }
-
-        # 8. SAVE (UTF8 BOM)
-        $xml.Save($XMLPath)
-        
-        [System.Windows.Forms.MessageBox]::Show("DA CAU HINH XML THANH CONG!`nFile luu tai: $XMLPath", "Success")
+        $Utf8Bom = New-Object System.Text.UTF8Encoding $true
+        [IO.File]::WriteAllText($XMLPath, $FinalXML, $Utf8Bom)
+        [System.Windows.Forms.MessageBox]::Show("DA TAO FILE XML MOI (V24.0)!`nSan sang de Tool Core su dung.", "Success")
         $Form.Close()
-
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi Config: $($_.Exception.Message)", "Error") }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi ghi file: $($_.Exception.Message)", "Loi") }
 })
 
 $Form.Controls.Add($BtnSave)
