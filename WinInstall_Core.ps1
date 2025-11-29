@@ -10,17 +10,18 @@ $DebugLog = "C:\PhatTan_Debug.txt"
 $Global:SelectedDisk = 0
 $Global:SelectedPart = 0
 
-# --- DATABASE KEY (INTEGRATED) ---
+# --- DATABASE KEY (DA CAP NHAT THEM HOME SL) ---
 $KeyDB = @{
     "Windows 10/11" = @{
-        "Pro"          = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
-        "Home"         = "YTMG3-N6DKC-DKB77-7M9GH-8HVX7"
-        "Enterprise"   = "XGVPP-NMH47-7TTHJ-W3FW7-8HV2C"
-        "Education"    = "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y"
+        "Pro"                  = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
+        "Home"                 = "YTMG3-N6DKC-DKB77-7M9GH-8HVX7"
+        "Home Single Language" = "BT79Q-G7N6G-PGBYW-4YWX6-6F4BT"
+        "Enterprise"           = "XGVPP-NMH47-7TTHJ-W3FW7-8HV2C"
+        "Education"            = "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y"
     }
     "Windows 8.1" = @{
         "Pro"          = "GCRJD-8NW9H-F2CDX-CCM8D-9D6T9"
-        "Core"         = "334NH-RXG76-64THK-C7CKG-D3VPT" # Home
+        "Core"         = "334NH-RXG76-64THK-C7CKG-D3VPT"
         "Enterprise"   = "MHF9N-XY6XB-WVXMC-BTDCT-MKKG7"
     }
     "Windows 7" = @{
@@ -32,7 +33,7 @@ $KeyDB = @{
     }
 }
 
-# --- LOG FUNCTION (ENHANCED) ---
+# --- LOG FUNCTION ---
 function Write-DebugLog ($Message, $Type="INFO") {
     $Time = Get-Date -Format "HH:mm:ss"
     $Line = "[$Time] [$Type] $Message"
@@ -40,7 +41,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE START V14.0 (AUTO KEY) ===" "INIT"
+Write-DebugLog "=== CORE MODULE START V14.2 (XML FIX) ===" "INIT"
 
 # --- CONFIG ---
 $WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
@@ -62,7 +63,7 @@ function Mount-And-GetDrive ($IsoPath) {
 
 function Get-BiosMode { if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { return "UEFI" } return "Legacy" }
 
-# --- SMART KEY DETECTOR ---
+# --- SMART KEY DETECTOR (FIXED LOGIC) ---
 function Get-SmartKey ($FullIndexName) {
     Write-DebugLog "Analysing OS Name: $FullIndexName" "KEY_LOGIC"
     $Name = $FullIndexName.ToLower()
@@ -84,8 +85,13 @@ function Get-SmartKey ($FullIndexName) {
     elseif ($Name -match "home" -or $Name -match "core") { 
         if ($VerGroup -eq "Windows 7") {
              if ($Name -match "premium") { $Edition = "Home Premium" } else { $Edition = "Home Basic" }
-        } elseif ($VerGroup -eq "Windows 8.1") { $Edition = "Core (Home)" } 
-        else { $Edition = "Home" }
+        } elseif ($VerGroup -eq "Windows 8.1") { 
+             $Edition = "Core" 
+        } else { 
+             # Windows 10/11 Logic: Check ky Single Language
+             if ($Name -match "single language") { $Edition = "Home Single Language" }
+             else { $Edition = "Home" }
+        }
     }
 
     if ($Edition -and $KeyDB[$VerGroup][$Edition]) {
@@ -118,7 +124,7 @@ function Create-Boot-Entry ($WimPath) {
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAI DAT WINDOWS (CORE V14.0 AUTO KEY)"
+$Form.Text = "CAI DAT WINDOWS (CORE V14.2 AUTO KEY)"
 $Form.Size = New-Object System.Drawing.Size(850, 780)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -214,7 +220,7 @@ function Start-Boot-Install {
     $ISO = $CmbISO.SelectedItem
     if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
     
-    # 1. UPDATE XML (INJECT INFO + SMART KEY)
+    # 1. UPDATE XML
     $XML = "$env:SystemDrive\autounattend.xml"
     if (!(Test-Path $XML)) { [System.Windows.Forms.MessageBox]::Show("Chua co file XML! Vui long dung Tool Config tao truoc.", "Canh Bao"); return }
     
@@ -232,11 +238,11 @@ function Start-Boot-Install {
     try {
         $Content = [IO.File]::ReadAllText($XML)
         
-        # Cập nhật Partition đích (InstallTo)
+        # Cập nhật Partition
         $InstallBlock = "<DiskID>$D_ID</DiskID><PartitionID>$P_ID</PartitionID>"
         $Content = $Content -replace "(?s)<InstallTo>.*?</InstallTo>", "<InstallTo>$InstallBlock</InstallTo>"
 
-        # Cập nhật Image Index (InstallFrom)
+        # Cập nhật Image Index
         $ImgBlock = "<InstallFrom><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>$Idx</Value></MetaData></InstallFrom>"
         if ($Content -match "<InstallFrom>") {
             $Content = $Content -replace "(?s)<InstallFrom>.*?</InstallFrom>", $ImgBlock
@@ -244,20 +250,28 @@ function Start-Boot-Install {
             $Content = $Content -replace "<OSImage>", "<OSImage>$ImgBlock"
         }
 
-        # --- KEY INJECTION LOGIC ---
-        # 1. Xoa Key cu neu con sot
+        # --- KEY INJECTION LOGIC (FIXED) ---
+        # 1. XOA SACH KEY CU (Bao gom ca the rong hoac the sai)
+        # Regex nay se xoa moi thu tu <ProductKey> den </ProductKey> bat ke no chua cai gi
         $Content = $Content -replace "(?s)\s*<ProductKey>.*?</ProductKey>", ""
         
-        # 2. Neu tim thay Key, nhet vao UserData
+        # 2. NEU TIM THAY KEY HOP LE -> CHEN VAO
         if ($DetectedKey) {
-            Write-DebugLog "Injecting Product Key to XML: $DetectedKey" "XML"
+            Write-DebugLog "Injecting Product Key: $DetectedKey" "XML"
+            # Tao khoi ProductKey moi hoan chinh, khong loi syntax
             $KeyBlock = "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>"
-            # Tim the <UserData> de nhet Key vao sau do
+            
+            # Tim the <UserData> de nhet Key vao ngay sau do
+            # (ProductKey bat buoc phai nam trong UserData)
             if ($Content -match "<UserData>") {
-                $Content = $Content -replace "<UserData>", "<UserData>$KeyBlock"
+                $Content = $Content -replace "<UserData>", "<UserData>`r`n$KeyBlock"
+            } else {
+                Write-DebugLog "Critical Error: XML missing <UserData> tag!" "ERROR"
             }
         } else {
-             Write-DebugLog "No Key to inject. Clean install without key." "XML"
+             Write-DebugLog "No Key found/matched. Removed ProductKey tag entirely." "XML"
+             # Khong lam gi ca, vi buoc 1 da xoa the ProductKey roi.
+             # Windows Setup se tu hien bang nhap key hoac tu nhan key BIOS.
         }
 
         [IO.File]::WriteAllText($XML, $Content)
