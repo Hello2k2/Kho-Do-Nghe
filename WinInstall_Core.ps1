@@ -9,7 +9,7 @@ $ErrorActionPreference = "SilentlyContinue"
 $DebugLog = "C:\PhatTan_Debug.txt"
 $Global:SelectedDisk = 0
 $Global:SelectedPart = 0
-$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/autounattend.xml"
+$XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/autounattend.xml"
 
 # --- KEY DATABASE ---
 $KeyDB = @{
@@ -24,7 +24,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V17.0 (SYNC WITH CONFIG) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V19.0 (FINAL INTEGRATION) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -63,7 +63,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V17.0 SYNC CONFIG)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V19.0 FINAL)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -129,18 +129,21 @@ function Load-Partitions {
 }
 
 function Start-Boot-Install {
-    # --- FIX KHAI BAO LAI BIEN ISO (NEU BI NULL) ---
     $ISO = $CmbISO.SelectedItem
     if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
     if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG!", "Loi"); return }
     
-    # --- LOGIC MOI: KIEM TRA FILE LOCAL ---
+    # 1. KIEM TRA FILE XML
     $XML = "$env:SystemDrive\autounattend.xml"
-    if (Test-Path $XML) {
-        Write-DebugLog "Found existing XML from Config Tool. Using it." "CONFIG"
+    if (!(Test-Path $XML)) { 
+        # Neu chua co file (chua chay Config), thi tai tu mang ve
+        Write-DebugLog "No local XML found. Downloading template from GitHub..." "DOWNLOAD"
+        try { 
+            [System.Net.ServicePointManager]::SecurityProtocol = 3072
+            (New-Object Net.WebClient).DownloadFile($XML_Url, $XML) 
+        } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML goc! Vui long chay Config Tool truoc.", "Error"); return }
     } else {
-        Write-DebugLog "No local XML found. Downloading template..." "DOWNLOAD"
-        try { (New-Object Net.WebClient).DownloadFile($XML_Url, $XML) } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML goc! Kiem tra mang.", "Error"); return }
+        Write-DebugLog "Found existing XML from Config Tool. Using it." "CONFIG"
     }
 
     if ($CmbEd.SelectedItem) { $FullString = $CmbEd.SelectedItem.ToString(); $Idx = $FullString.Split("-")[0].Trim(); $DetectedKey = Get-SmartKey $FullString } else { $Idx = 1; $DetectedKey = $null }
@@ -171,9 +174,10 @@ function Start-Boot-Install {
             $Content = $Content -replace "<UserData>", "<UserData>`r`n$KeyBlock"
         }
 
-        # SAVE AS ASCII (QUAN TRONG NHAT)
-        [IO.File]::WriteAllText($XML, $Content, [System.Text.Encoding]::ASCII)
-        Write-DebugLog "XML Saved as ASCII." "SUCCESS"
+        # SAVE AS UTF-8 BOM (STANDARD FOR WINDOWS)
+        $Utf8Bom = New-Object System.Text.UTF8Encoding $true
+        [IO.File]::WriteAllText($XML, $Content, $Utf8Bom)
+        Write-DebugLog "XML Saved as UTF-8 BOM." "SUCCESS"
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi XML: $($_.Exception.Message)", "Error"); return }
 
     if ($CkBackup.Checked) {
