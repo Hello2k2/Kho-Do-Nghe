@@ -4,7 +4,7 @@ $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/ma
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE (V22.0 DOM FIX)"
+$Form.Text = "CAU HINH FILE (V22.1 LOOP FIX)"
 $Form.Size = New-Object System.Drawing.Size(650, 550)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -46,56 +46,44 @@ $BtnSave.Add_Click({
         [System.Net.ServicePointManager]::SecurityProtocol = 3072
         (New-Object Net.WebClient).DownloadFile($XML_Url, $XMLPath)
         
-        # 2. LOAD XML DOM (QUAN TRONG)
+        # 2. LOAD XML DOM
         $xml = [xml](Get-Content $XMLPath)
         $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
         $ns.AddNamespace("u", "urn:schemas-microsoft-com:unattend")
         $ns.AddNamespace("wcm", "http://schemas.microsoft.com/WMIConfig/2002/State")
 
-        # 3. FILL THONG TIN (Tim & Thay the tren toan bo file)
-        # Thay the thong tin user (Dung Replace string don gian cho cac placeholder)
-        # Nhung xu ly cac node cau truc bang DOM
+        # 3. FILL THONG TIN (String Replace cho Text co ban)
         $xml.OuterXml.Replace("%USERNAME%", $TxtUser.Text).Replace("%COMPUTERNAME%", $TxtPC.Text).Replace("SE Asia Standard Time", $CmbTZ.SelectedItem) | Set-Content $XMLPath
-        
-        # Reload lai XML sau khi replace string co ban
-        $xml = [xml](Get-Content $XMLPath)
+        $xml = [xml](Get-Content $XMLPath) # Reload
 
         # 4. LOGIC DISK (DOM SAFE)
-        # Tim tat ca cac node <Disk> trong file (co the co nhieu do x86/amd64)
         $Disks = $xml.GetElementsByTagName("Disk")
-        
         foreach ($Disk in $Disks) {
-            # Tim node WillWipeDisk
             $WipeNode = $Disk.SelectSingleNode("*[local-name()='WillWipeDisk']")
-            if ($WipeNode) { 
-                if ($RadWipe.Checked) { $WipeNode.InnerText = "true" } else { $WipeNode.InnerText = "false" }
-            }
+            if ($WipeNode) { if ($RadWipe.Checked) { $WipeNode.InnerText = "true" } else { $WipeNode.InnerText = "false" } }
 
-            # Xu ly CreatePartitions
             $CPNode = $Disk.SelectSingleNode("*[local-name()='CreatePartitions']")
             if ($CPNode) {
                 if ($RadWipe.Checked) {
-                    # Tao moi noi dung CreatePartition
                     $CPNode.InnerXml = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>"
                 } else {
-                    # XOA HAN NODE CreatePartitions (Tranh loi tag rong)
                     [void]$Disk.RemoveChild($CPNode)
                 }
             }
         }
 
-        # 5. XOA KEY MAC DINH (DOM)
-        $Keys = $xml.GetElementsByTagName("ProductKey")
+        # 5. XOA KEY MAC DINH (DOM - FIX LOI LOOP)
+        # Dung @(...) de ep kieu thanh mang tinh, tranh loi "List changed"
+        $Keys = @($xml.GetElementsByTagName("ProductKey"))
         foreach ($K in $Keys) { [void]$K.ParentNode.RemoveChild($K) }
 
-        # 6. LOGIC PASSWORD
+        # 6. LOGIC PASSWORD (DOM - FIX LOI LOOP)
         if ([string]::IsNullOrWhiteSpace($TxtPass.Text)) {
-            $Pwds = $xml.GetElementsByTagName("Password")
+            $Pwds = @($xml.GetElementsByTagName("Password"))
             foreach ($P in $Pwds) { [void]$P.ParentNode.RemoveChild($P) }
         } else {
-            # Da co san trong file mau voi %PASSWORD%, replace o buoc string roi
             $xml.OuterXml.Replace("%PASSWORD%", $TxtPass.Text) | Set-Content $XMLPath
-            $xml = [xml](Get-Content $XMLPath) # Reload
+            $xml = [xml](Get-Content $XMLPath)
         }
 
         # 7. SKIP WIFI & AUTO LOGON
@@ -103,19 +91,20 @@ $BtnSave.Add_Click({
             $HideWifi = $xml.GetElementsByTagName("HideWirelessSetupInOOBE")
             foreach ($H in $HideWifi) { $H.InnerText = "true" }
         }
+        
         if ($CkAutoLogon.Checked) {
             $Enables = $xml.GetElementsByTagName("Enabled")
-            # Can than chon dung Enabled cua AutoLogon
             foreach ($E in $Enables) { if ($E.ParentNode.Name -eq "AutoLogon") { $E.InnerText = "true" } }
         } else {
-            $ALs = $xml.GetElementsByTagName("AutoLogon")
+            # FIX LOI LOOP CHO AUTO LOGON
+            $ALs = @($xml.GetElementsByTagName("AutoLogon"))
             foreach ($A in $ALs) { [void]$A.ParentNode.RemoveChild($A) }
         }
 
         # 8. SAVE (UTF8 BOM)
         $xml.Save($XMLPath)
         
-        [System.Windows.Forms.MessageBox]::Show("DA CAU HINH XML BANG DOM (SAFE)!`nFile luu tai: $XMLPath", "Success")
+        [System.Windows.Forms.MessageBox]::Show("DA CAU HINH XML THANH CONG!`nFile luu tai: $XMLPath", "Success")
         $Form.Close()
 
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi Config: $($_.Exception.Message)", "Error") }
