@@ -1,12 +1,12 @@
 # --- INIT ---
 try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing } catch { Exit }
 
-# LINK GITHUB CUA ONG
+# LINK GITHUB CUA ONG (RAW)
 $XML_Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/autounattend.xml"
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE TU DONG - PHAT TAN PC (V10.0 GITHUB SYNC)"
+$Form.Text = "CAU HINH FILE (V21.0 GITHUB FIX)"
 $Form.Size = New-Object System.Drawing.Size(650, 550)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -37,9 +37,9 @@ $CkUAC = New-Object System.Windows.Forms.CheckBox; $CkUAC.Text = "Tat UAC"; $CkU
 
 $GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG"; $GB.Location = "20,360"; $GB.Size = "580,100"; $GB.ForeColor = "Yellow"; $Form.Controls.Add($GB)
 $RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "XOA SACH (Clean Install)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.ForeColor="White"; $RadWipe.Checked=$true; $GB.Controls.Add($RadWipe)
-$RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "DUAL BOOT"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $GB.Controls.Add($RadDual)
+$RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "DUAL BOOT (Giu nguyen Partition)"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $GB.Controls.Add($RadDual)
 
-$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAI FILE XML VA LUU CAU HINH"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
+$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAI XML & LUU CAU HINH"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
 
 $BtnSave.Add_Click({
     $XMLPath = "$env:SystemDrive\autounattend.xml"
@@ -51,7 +51,7 @@ $BtnSave.Add_Click({
         # 2. DOC NOI DUNG
         $Content = [IO.File]::ReadAllText($XMLPath)
         
-        # 3. THAY THE THONG TIN CO BAN
+        # 3. FILL THONG TIN
         $Content = $Content.Replace("%USERNAME%", $TxtUser.Text)
         $Content = $Content.Replace("%COMPUTERNAME%", $TxtPC.Text)
         $Content = $Content.Replace("SE Asia Standard Time", $CmbTZ.SelectedItem)
@@ -61,20 +61,22 @@ $BtnSave.Add_Click({
             $Content = $Content.Replace("%PASSWORD%", "")
         } else { $Content = $Content.Replace("%PASSWORD%", $TxtPass.Text) }
 
-        # --- QUAN TRONG: XOA SACH KEY TRONG FILE MAU ---
-        # De file sach se, Core Module se tu bom key vao sau.
+        # --- XOA SACH KEY TRONG FILE MAU (Tranh loi) ---
         $Content = $Content -replace "(?s)\s*<ProductKey>.*?</ProductKey>", ""
         $Content = $Content -replace "\s*<Key>%PRODUCTKEY%</Key>", ""
 
-        # 4. LOGIC DISK
+        # --- LOGIC DISK (FIX QUAN TRONG) ---
         if ($RadWipe.Checked) {
             $Content = $Content.Replace("%WIPEDISK%", "true")
-            $PartLayout = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition>"
-            $Content = $Content.Replace("%CREATEPARTITIONS%", $PartLayout)
+            # Chen noi dung vao giua the <CreatePartitions>
+            $PartContent = "<CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>"
+            $Content = $Content.Replace("%CREATEPARTITIONS%", $PartContent)
             $Content = $Content.Replace("%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>1</PartitionID>")
         } else {
             $Content = $Content.Replace("%WIPEDISK%", "false")
-            $Content = $Content.Replace("%CREATEPARTITIONS%", "")
+            # --- FIX LOI TAG RONG: Xoa luon cap the <CreatePartitions>...</CreatePartitions> ---
+            # Regex nay tim cap the bao quanh placeholder va xoa no di
+            $Content = $Content -replace "(?s)<CreatePartitions>\s*%CREATEPARTITIONS%\s*</CreatePartitions>", ""
             $Content = $Content.Replace("%INSTALLTO%", "<DiskID>0</DiskID><PartitionID>3</PartitionID>")
         }
         
@@ -82,14 +84,14 @@ $BtnSave.Add_Click({
         if ($CkAutoLogon.Checked) { $Content = $Content.Replace("<Enabled>false</Enabled>", "<Enabled>true</Enabled>") } 
         else { $Content = $Content -replace "(?s)\s*<AutoLogon>.*?</AutoLogon>", "" }
 
-        # 5. LUU FILE (UTF8 BOM)
+        # 5. LUU FILE (UTF8 BOM - CHUAN MICROSOFT)
         $Utf8Bom = New-Object System.Text.UTF8Encoding $true
         [IO.File]::WriteAllText($XMLPath, $Content, $Utf8Bom)
         
-        [System.Windows.Forms.MessageBox]::Show("DA TAI VA CAU HINH XML!`n(Key se duoc Core Module xu ly)", "Phat Tan PC")
+        [System.Windows.Forms.MessageBox]::Show("DA CAU HINH XML THANH CONG!`nFile luu tai: $XMLPath", "Success")
         $Form.Close()
 
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai XML: $($_.Exception.Message)", "Error") }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai/ghi XML: $($_.Exception.Message)", "Error") }
 })
 
 $Form.Controls.Add($BtnSave)
