@@ -22,7 +22,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V31.0 (CLEAN BEFORE COPY) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V32.0 (SAFETY FIRST) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -33,8 +33,6 @@ function Mount-And-GetDrive ($IsoPath) {
     $Drives = Get-PSDrive -PSProvider FileSystem; foreach ($D in $Drives) { $R=$D.Root; if($R -in "C:\","A:\","B:\"){continue}; if((Test-Path "$R\setup.exe") -and (Test-Path "$R\bootmgr")){ return $R.TrimEnd("\") } }
     return $null
 }
-
-function Get-BiosMode { if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { return "UEFI" } return "Legacy" }
 
 function Get-SmartKey ($FullIndexName) {
     $Name = $FullIndexName.ToLower(); $VerGroup = $null; $Edition = $null
@@ -49,7 +47,7 @@ function Create-Boot-Entry ($WimPath) {
     try {
         $BcdList = bcdedit /enum /v | Out-String; $Lines = $BcdList -split "`r`n"
         for ($i=0; $i -lt $Lines.Count; $i++) { if ($Lines[$i] -match "description\s+CAI WIN TAM THOI") { for ($j=$i; $j -ge 0; $j--) { if ($Lines[$j] -match "identifier\s+{(.*)}") { cmd /c "bcdedit /delete {$($Matches[1])} /f"; break } } } }
-        $Name="CAI WIN TAM THOI (Phat Tan PC)"; $Mode=Get-BiosMode; $Drive=$env:SystemDrive
+        $Name="CAI WIN TAM THOI (Phat Tan PC)"; $Mode=if(Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State"){"UEFI"}else{"Legacy"}; $Drive=$env:SystemDrive
         cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`"" 2>$null
         cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"; cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \boot.sdi"
         $Output = cmd /c "bcdedit /create /d `"$Name`" /application osloader"; if ($Output -match '{([a-f0-9\-]+)}') { $ID = $matches[0] } else { return $false }
@@ -61,7 +59,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V31.0 CLEANUP)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V32.0)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -115,6 +113,8 @@ function Load-Partitions {
             $Info = ""; if ($P.IsSystem) { $Info = "[BOOT/EFI]" }; if ($P.DriveLetter -eq $SysDrive) { $Info = "[WINDOWS HIEN TAI]" }
             $RowId = $GridPart.Rows.Add($P.DiskNumber, $P.PartitionNumber, $Let, $P.GptType, "$GB GB", $Info)
             if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$RowId].Selected = $true; $Global:SelectedDisk = $P.DiskNumber; $Global:SelectedPart = $P.PartitionNumber; $AutoSelected = $true }
+            
+            # --- CHECK O CHUA SOURCE ---
             if ($Let -ne $SysDrive -and $Let -ne "" -and $P.Size -gt 5GB) { $Global:SourceDrive = $Let }
         }
     } else {
@@ -133,8 +133,7 @@ function Load-Partitions {
 }
 
 function Copy-FileWithProgress ($Source, $Dest) {
-    # --- CLEANUP TRUOC KHI COPY DE TIET KIEM O CUNG ---
-    Write-DebugLog "Cleaning up disk space..." "CLEAN"
+    # CLEANUP
     Clear-RecycleBin -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -168,32 +167,25 @@ function Start-Boot-Install {
         $Content = $Content.Replace("__DISKID__", $D_ID.ToString()); $Content = $Content.Replace("__PARTID__", $P_ID.ToString())
         
         if ($Global:SourceDrive) {
+            # MODE: CO O PHU -> COPY SANG DO -> FORMAT O C
             $SrcPath = "$($Global:SourceDrive):\WinInstall_Source\install.wim"
             $Content = $Content.Replace("%SOURCEPATH_PLACEHOLDER%", "<InstallFrom><Path>$SrcPath</Path><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>")
-            $Content = $Content.Replace("__INDEX__", $Idx.ToString())
-            
-            $Form.Text = "DANG CHUYEN SOURCE QUA O $($Global:SourceDrive): ..."
-            $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
-            $DestDir = "$($Global:SourceDrive):\WinInstall_Source"; New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
-            $WimSrc = "$Drive\sources\install.wim"; if (!(Test-Path $WimSrc)) { $WimSrc = "$Drive\sources\install.esd" }
-            Copy-FileWithProgress $WimSrc "$DestDir\install.wim"
+            $DestDir = "$($Global:SourceDrive):\WinInstall_Source"
         } else {
-            # MODE: SINGLE DRIVE (CHEP VAO THU MUC AN $WINDOWS.~BT)
+            # MODE: 1 O DUY NHAT -> FORCE OVERWRITE (NO FORMAT)
             $SrcPath = "$env:SystemDrive\`$WINDOWS.~BT\Sources\install.wim"
             $Content = $Content.Replace("%SOURCEPATH_PLACEHOLDER%", "<InstallFrom><Path>$SrcPath</Path><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>")
-            $Content = $Content.Replace("__INDEX__", $Idx.ToString())
             
-            # TAT LENH WIPE DISK DE KHONG MAT SOURCE
-            $Content = $Content.Replace("<WillWipeDisk>true</WillWipeDisk>", "<WillWipeDisk>false</WillWipeDisk>")
-            $Content = $Content -replace "(?s)<CreatePartitions>.*?</CreatePartitions>", ""
-            $Content = $Content -replace "(?s)<ModifyPartitions>.*?</ModifyPartitions>", ""
-            
-            $Form.Text = "DANG COPY SOURCE VAO O C: ..."
-            $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
-            $DestDir = "$env:SystemDrive\`$WINDOWS.~BT\Sources"; New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
-            $WimSrc = "$Drive\sources\install.wim"; if (!(Test-Path $WimSrc)) { $WimSrc = "$Drive\sources\install.esd" }
-            Copy-FileWithProgress $WimSrc "$DestDir\install.wim"
+            # --- SAFETY OVERRIDE: TAT FORMAT O C NEU CHI CO 1 O ---
+            if ($Content.Contains("<WillWipeDisk>true</WillWipeDisk>")) {
+                $Content = $Content.Replace("<WillWipeDisk>true</WillWipeDisk>", "<WillWipeDisk>false</WillWipeDisk>")
+                $Content = $Content -replace "(?s)<CreatePartitions>.*?</CreatePartitions>", ""
+                $Content = $Content -replace "(?s)<ModifyPartitions>.*?</ModifyPartitions>", ""
+                [System.Windows.Forms.MessageBox]::Show("CANH BAO: Ban chon Format nhung may chi co 1 o dia.`nTool da chuyen sang che do GHI DE (khong Format) de bao ve file cai dat.", "Safety")
+            }
+            $DestDir = "$env:SystemDrive\`$WINDOWS.~BT\Sources"
         }
+        $Content = $Content.Replace("__INDEX__", $Idx.ToString())
 
         if ($CkSkipKey.Checked) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "") } 
         elseif ($DetectedKey) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>") } 
@@ -208,6 +200,14 @@ function Start-Boot-Install {
     }
 
     $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
+    
+    # COPY SOURCE
+    New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
+    $WimSrc = "$Drive\sources\install.wim"; if (!(Test-Path $WimSrc)) { $WimSrc = "$Drive\sources\install.esd" }
+    $Form.Text = "DANG COPY SOURCE VAO: $DestDir ..."
+    Copy-FileWithProgress $WimSrc "$DestDir\install.wim"
+
+    # COPY BOOT
     $Temp = "C:\WinInstall_Temp"; New-Item -ItemType Directory -Path $Temp -Force | Out-Null
     Copy-Item "$Drive\sources\boot.wim" "$Temp\boot.wim" -Force; Copy-Item "$Drive\boot\boot.sdi" "$Temp\boot.sdi" -Force
     Move-Item "$Temp\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force; Move-Item "$Temp\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
