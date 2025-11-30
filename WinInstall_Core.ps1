@@ -22,7 +22,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V32.0 (SAFETY FIRST) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V33.0 (AUTO DRIVE LETTER) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -59,7 +59,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V32.0)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V33.0)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -114,7 +114,7 @@ function Load-Partitions {
             $RowId = $GridPart.Rows.Add($P.DiskNumber, $P.PartitionNumber, $Let, $P.GptType, "$GB GB", $Info)
             if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$RowId].Selected = $true; $Global:SelectedDisk = $P.DiskNumber; $Global:SelectedPart = $P.PartitionNumber; $AutoSelected = $true }
             
-            # --- CHECK O CHUA SOURCE ---
+            # --- CHECK O CHUA SOURCE (WINTOHDD) ---
             if ($Let -ne $SysDrive -and $Let -ne "" -and $P.Size -gt 5GB) { $Global:SourceDrive = $Let }
         }
     } else {
@@ -165,27 +165,18 @@ function Start-Boot-Install {
     try {
         $Content = [IO.File]::ReadAllText($XML)
         $Content = $Content.Replace("__DISKID__", $D_ID.ToString()); $Content = $Content.Replace("__PARTID__", $P_ID.ToString())
-        
+        $Content = $Content.Replace("__INDEX__", $Idx.ToString())
+
         if ($Global:SourceDrive) {
-            # MODE: CO O PHU -> COPY SANG DO -> FORMAT O C
-            $SrcPath = "$($Global:SourceDrive):\WinInstall_Source\install.wim"
-            $Content = $Content.Replace("%SOURCEPATH_PLACEHOLDER%", "<InstallFrom><Path>$SrcPath</Path><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>")
+            # MODE: CO O PHU -> FORMAT O C (COPY VAO O PHU)
+            # Vi bo the <Path> roi nen Windows tu tim, khong can sua XML nua
+            # Chi can chep file vao o phu la duoc
             $DestDir = "$($Global:SourceDrive):\WinInstall_Source"
         } else {
-            # MODE: 1 O DUY NHAT -> FORCE OVERWRITE (NO FORMAT)
-            $SrcPath = "$env:SystemDrive\`$WINDOWS.~BT\Sources\install.wim"
-            $Content = $Content.Replace("%SOURCEPATH_PLACEHOLDER%", "<InstallFrom><Path>$SrcPath</Path><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>")
-            
-            # --- SAFETY OVERRIDE: TAT FORMAT O C NEU CHI CO 1 O ---
-            if ($Content.Contains("<WillWipeDisk>true</WillWipeDisk>")) {
-                $Content = $Content.Replace("<WillWipeDisk>true</WillWipeDisk>", "<WillWipeDisk>false</WillWipeDisk>")
-                $Content = $Content -replace "(?s)<CreatePartitions>.*?</CreatePartitions>", ""
-                $Content = $Content -replace "(?s)<ModifyPartitions>.*?</ModifyPartitions>", ""
-                [System.Windows.Forms.MessageBox]::Show("CANH BAO: Ban chon Format nhung may chi co 1 o dia.`nTool da chuyen sang che do GHI DE (khong Format) de bao ve file cai dat.", "Safety")
-            }
+            # MODE: 1 O -> GHI DE (COPY VAO O C)
+            # Bat buoc tat Format trong XML (da set o Config V33)
             $DestDir = "$env:SystemDrive\`$WINDOWS.~BT\Sources"
         }
-        $Content = $Content.Replace("__INDEX__", $Idx.ToString())
 
         if ($CkSkipKey.Checked) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "") } 
         elseif ($DetectedKey) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>") } 
@@ -215,7 +206,10 @@ function Start-Boot-Install {
     
     if (Test-Path "$env:SystemDrive\WinInstall_Boot.wim") {
         $Panther = "$env:SystemDrive\Windows\Panther"; if (!(Test-Path $Panther)) { New-Item -ItemType Directory -Path $Panther -Force | Out-Null }
-        Copy-Item $XML "$Panther\unattend.xml" -Force; Copy-Item $XML "$env:SystemDrive\autounattend.xml" -Force
+        
+        # COPY XML RA NHIEU CHO DE AUTO DETECT
+        Copy-Item $XML "$Panther\unattend.xml" -Force
+        Copy-Item $XML "$env:SystemDrive\autounattend.xml" -Force
         if ($Global:SourceDrive) { Copy-Item $XML "$($Global:SourceDrive):\autounattend.xml" -Force }
 
         if (Create-Boot-Entry "\WinInstall_Boot.wim") { if ([System.Windows.Forms.MessageBox]::Show("DA XONG! Restart ngay?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force } }
