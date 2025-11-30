@@ -3,7 +3,7 @@ try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE (V32.0 FORMAT MASTER)"
+$Form.Text = "CAU HINH FILE (V33.0 AUTO SEARCH)"
 $Form.Size = New-Object System.Drawing.Size(650, 550)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -32,44 +32,38 @@ $CkAutoLogon = New-Object System.Windows.Forms.CheckBox; $CkAutoLogon.Text = "Au
 $CkDefender = New-Object System.Windows.Forms.CheckBox; $CkDefender.Text = "Tat Defender"; $CkDefender.Location = "300,60"; $CkDefender.AutoSize=$true; $CkDefender.ForeColor="Orange"; $GBSet.Controls.Add($CkDefender)
 $CkUAC = New-Object System.Windows.Forms.CheckBox; $CkUAC.Text = "Tat UAC"; $CkUAC.Location = "300,90"; $CkUAC.AutoSize=$true; $CkUAC.ForeColor="Orange"; $GBSet.Controls.Add($CkUAC)
 
-$GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG (LUU Y)"; $GB.Location = "20,360"; $GB.Size = "580,100"; $GB.ForeColor = "Yellow"; $Form.Controls.Add($GB)
-$RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "FORMAT SACH O C: (Can co o phu de luu Source)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.ForeColor="Red"; $GB.Controls.Add($RadWipe)
-$RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "GHI DE (Windows.old) - An toan cho 1 o cung"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $RadDual.Checked=$true; $GB.Controls.Add($RadDual)
+$GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG"; $GB.Location = "20,360"; $GB.Size = "580,100"; $GB.ForeColor = "Yellow"; $Form.Controls.Add($GB)
+$RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "FORMAT SACH O C: (Can co o phu)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.ForeColor="Red"; $GB.Controls.Add($RadWipe)
+$RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "GHI DE (Windows.old)"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $RadDual.Checked=$true; $GB.Controls.Add($RadDual)
 
 $BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAO XML CAU HINH"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
 
 $BtnSave.Add_Click({
     $XMLPath = "$env:SystemDrive\autounattend.xml"
 
-    # --- 1. DATA PREP ---
     $User = $TxtUser.Text; $Pass = $TxtPass.Text; $PCName = $TxtPC.Text; $TZ = $CmbTZ.SelectedItem
     $PassBlock = ""; if (![string]::IsNullOrEmpty($Pass)) { $PassBlock = "<Password><Value>$Pass</Value><PlainText>true</PlainText></Password>" }
     $AutoLogon = ""; if ($CkAutoLogon.Checked) { $AutoLogon = "<AutoLogon><Username>$User</Username>$PassBlock<Enabled>true</Enabled><LogonCount>1</LogonCount></AutoLogon>" }
     $SkipWifi = if ($CkSkipWifi.Checked) { "true" } else { "false" }
     
-    # --- LOGIC DISK ---
     if ($RadWipe.Checked) {
         $Wipe = "true"
-        # Lenh Format C:
         $CreatePart = "<CreatePartitions><CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition></CreatePartitions><ModifyPartitions><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition></ModifyPartitions>"
     } else {
         $Wipe = "false"
-        $CreatePart = "" # Khong lam gi ca
+        $CreatePart = "" 
     }
 
-    # Registry Tricks
     $Regs = ""
     $i=1
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
-    # Bypass Disk Check
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassDiskSpaceCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
     
     if ($CkDefender.Checked) { $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SOFTWARE\Policies\Microsoft\Windows Defender`" /v DisableAntiSpyware /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++ }
     if ($CkUAC.Checked) { $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`" /v EnableLUA /t REG_DWORD /d 0 /f</Path></RunSynchronousCommand>"; $i++ }
 
-    # --- 2. GENERATE FUNCTIONS ---
     function Gen-Comp ($Arch) {
         return @"
         <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="$Arch" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
@@ -90,7 +84,7 @@ $BtnSave.Add_Click({
             </DiskConfiguration>
             <ImageInstall>
                 <OSImage>
-                    %SOURCEPATH_PLACEHOLDER%
+                    <InstallFrom><MetaData wcm:action="add"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>
                     <InstallTo><DiskID>__DISKID__</DiskID><PartitionID>__PARTID__</PartitionID></InstallTo>
                 </OSImage>
             </ImageInstall>
@@ -126,7 +120,7 @@ $BtnSave.Add_Click({
     try {
         $Utf8Bom = New-Object System.Text.UTF8Encoding $true
         [IO.File]::WriteAllText($XMLPath, $FinalXML, $Utf8Bom)
-        [System.Windows.Forms.MessageBox]::Show("DA TAO XML!", "Success")
+        [System.Windows.Forms.MessageBox]::Show("DA TAO XML (V33 AUTO SEARCH)!", "Success")
         $Form.Close()
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi ghi file: $($_.Exception.Message)", "Loi") }
 })
