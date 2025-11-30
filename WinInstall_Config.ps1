@@ -3,7 +3,7 @@ try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE (V31.0 SPACE BYPASS)"
+$Form.Text = "CAU HINH FILE (V32.0 FORMAT MASTER)"
 $Form.Size = New-Object System.Drawing.Size(650, 550)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -11,7 +11,7 @@ $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
-$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "THONG TIN TAI KHOAN & HE THONG"; $Lbl.Location = "20,20"; $Lbl.AutoSize=$true; $Lbl.Font=$FontBold; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
+$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "THONG TIN TAI KHOAN"; $Lbl.Location = "20,20"; $Lbl.AutoSize=$true; $Lbl.Font=$FontBold; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
 
 function Add-Input ($T, $Y, $D) {
     $L=New-Object System.Windows.Forms.Label; $L.Text=$T; $L.Location="20,$Y"; $L.AutoSize=$true; $L.Font=$FontNorm; $Form.Controls.Add($L)
@@ -32,11 +32,11 @@ $CkAutoLogon = New-Object System.Windows.Forms.CheckBox; $CkAutoLogon.Text = "Au
 $CkDefender = New-Object System.Windows.Forms.CheckBox; $CkDefender.Text = "Tat Defender"; $CkDefender.Location = "300,60"; $CkDefender.AutoSize=$true; $CkDefender.ForeColor="Orange"; $GBSet.Controls.Add($CkDefender)
 $CkUAC = New-Object System.Windows.Forms.CheckBox; $CkUAC.Text = "Tat UAC"; $CkUAC.Location = "300,90"; $CkUAC.AutoSize=$true; $CkUAC.ForeColor="Orange"; $GBSet.Controls.Add($CkUAC)
 
-$GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG"; $GB.Location = "20,360"; $GB.Size = "580,100"; $GB.ForeColor = "Yellow"; $Form.Controls.Add($GB)
-$RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "XOA SACH (Clean Install)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.ForeColor="White"; $RadWipe.Checked=$true; $GB.Controls.Add($RadWipe)
-$RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "DUAL BOOT (Giu nguyen Partition)"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $GB.Controls.Add($RadDual)
+$GB = New-Object System.Windows.Forms.GroupBox; $GB.Text = "CHIA O CUNG (LUU Y)"; $GB.Location = "20,360"; $GB.Size = "580,100"; $GB.ForeColor = "Yellow"; $Form.Controls.Add($GB)
+$RadWipe = New-Object System.Windows.Forms.RadioButton; $RadWipe.Text = "FORMAT SACH O C: (Can co o phu de luu Source)"; $RadWipe.Location = "20,30"; $RadWipe.AutoSize=$true; $RadWipe.ForeColor="Red"; $GB.Controls.Add($RadWipe)
+$RadDual = New-Object System.Windows.Forms.RadioButton; $RadDual.Text = "GHI DE (Windows.old) - An toan cho 1 o cung"; $RadDual.Location = "20,60"; $RadDual.AutoSize=$true; $RadDual.ForeColor="White"; $RadDual.Checked=$true; $GB.Controls.Add($RadDual)
 
-$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAO FILE XML (FIX SPACE CHECK)"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
+$BtnSave = New-Object System.Windows.Forms.Button; $BtnSave.Text = "TAO XML CAU HINH"; $BtnSave.Location = "20,480"; $BtnSave.Size = "580,50"; $BtnSave.BackColor = "Cyan"; $BtnSave.ForeColor = "Black"; $BtnSave.Font=$FontBold
 
 $BtnSave.Add_Click({
     $XMLPath = "$env:SystemDrive\autounattend.xml"
@@ -47,26 +47,25 @@ $BtnSave.Add_Click({
     $AutoLogon = ""; if ($CkAutoLogon.Checked) { $AutoLogon = "<AutoLogon><Username>$User</Username>$PassBlock<Enabled>true</Enabled><LogonCount>1</LogonCount></AutoLogon>" }
     $SkipWifi = if ($CkSkipWifi.Checked) { "true" } else { "false" }
     
+    # --- LOGIC DISK ---
     if ($RadWipe.Checked) {
         $Wipe = "true"
+        # Lenh Format C:
         $CreatePart = "<CreatePartitions><CreatePartition wcm:action='add'><Order>1</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition></CreatePartitions><ModifyPartitions><ModifyPartition wcm:action='add'><Order>1</Order><PartitionID>1</PartitionID><Label>Windows</Label><Letter>C</Letter><Format>NTFS</Format></ModifyPartition></ModifyPartitions>"
     } else {
         $Wipe = "false"
-        $CreatePart = "" 
+        $CreatePart = "" # Khong lam gi ca
     }
 
-    # --- REGISTRY HACKS (THEM BYPASS DISK SPACE) ---
+    # Registry Tricks
     $Regs = ""
     $i=1
-    # Bypass 11 & Storage Check
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
-    
-    # === TRICK MOI: BYPASS CHECK DUNG LUONG ===
+    # Bypass Disk Check
     $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassDiskSpaceCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
-    $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SYSTEM\Setup\LabConfig`" /v BypassStorageCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++
-
+    
     if ($CkDefender.Checked) { $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SOFTWARE\Policies\Microsoft\Windows Defender`" /v DisableAntiSpyware /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>"; $i++ }
     if ($CkUAC.Checked) { $Regs += "<RunSynchronousCommand wcm:action='add'><Order>$i</Order><Path>reg.exe add `"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`" /v EnableLUA /t REG_DWORD /d 0 /f</Path></RunSynchronousCommand>"; $i++ }
 
@@ -127,7 +126,7 @@ $BtnSave.Add_Click({
     try {
         $Utf8Bom = New-Object System.Text.UTF8Encoding $true
         [IO.File]::WriteAllText($XMLPath, $FinalXML, $Utf8Bom)
-        [System.Windows.Forms.MessageBox]::Show("DA TAO XML FIX DUNG LUONG!", "Success")
+        [System.Windows.Forms.MessageBox]::Show("DA TAO XML!", "Success")
         $Form.Close()
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi ghi file: $($_.Exception.Message)", "Loi") }
 })
