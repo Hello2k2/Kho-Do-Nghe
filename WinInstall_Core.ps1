@@ -22,7 +22,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V34.0 (STANDARD FOLDER STRUCTURE) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V35.0 (ROOT COPY) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -59,7 +59,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V34.0 STANDARD)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V35.0)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -167,14 +167,11 @@ function Start-Boot-Install {
         $Content = $Content.Replace("__DISKID__", $D_ID.ToString()); $Content = $Content.Replace("__PARTID__", $P_ID.ToString())
         $Content = $Content.Replace("__INDEX__", $Idx.ToString())
 
-        # --- LOGIC MOI (V34): CHUAN HOA THU MUC \SOURCES ---
+        # --- LOGIC MOI (V35): COPY VAO C:\Windows\install.wim DE WINPE DE TIM ---
         if ($Global:SourceDrive) {
-            # MODE: CO O PHU -> COPY VAO \SOURCES CUA O PHU
-            # Vi du: E:\sources\install.wim
             $DestRoot = "$($Global:SourceDrive):"
         } else {
-            # MODE: 1 O -> COPY VAO \SOURCES CUA O C
-            # TAT WIPE
+            # MODE: 1 O -> COPY VAO \Windows CUA O C
             if ($Content.Contains("<WillWipeDisk>true</WillWipeDisk>")) {
                 $Content = $Content.Replace("<WillWipeDisk>true</WillWipeDisk>", "<WillWipeDisk>false</WillWipeDisk>")
                 $Content = $Content -replace "(?s)<CreatePartitions>.*?</CreatePartitions>", ""
@@ -183,7 +180,7 @@ function Start-Boot-Install {
             }
             $DestRoot = "$env:SystemDrive"
         }
-        $DestDir = "$DestRoot\sources"
+        $DestDir = "$DestRoot\Windows" # THU MUC NAY LUON DC GAN KY TU TRONG WINPE
 
         if ($CkSkipKey.Checked) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "") } 
         elseif ($DetectedKey) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>") } 
@@ -199,21 +196,17 @@ function Start-Boot-Install {
 
     $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
     
-    # COPY SOURCE (CHUAN \SOURCES)
-    New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
-    
+    # COPY SOURCE (CHUAN \Windows)
+    # Windows Setup luon quet thu muc \Windows tren moi o dia
     $WimSrc = "$Drive\sources\install.wim"; if (!(Test-Path $WimSrc)) { $WimSrc = "$Drive\sources\install.esd" }
     $Form.Text = "DANG COPY SOURCE VAO: $DestDir ..."
     Copy-FileWithProgress $WimSrc "$DestDir\install.wim"
     
-    # COPY BOOT VAO CUNG FOLDER (QUAN TRONG DE WIN SETUP TIM THAY)
-    Copy-Item "$Drive\sources\boot.wim" "$DestDir\boot.wim" -Force
-    Copy-Item "$Drive\boot\boot.sdi" "$DestDir\boot.sdi" -Force
-
-    # COPY BOOT RA ROOT DE TAO BCD (VI BCD CAN FILE O ROOT DE DE TIM)
-    # Nhung file boot.wim thuc su dung de boot se la file nay
-    Copy-Item "$DestDir\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force
-    Copy-Item "$DestDir\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
+    # COPY BOOT
+    $Temp = "C:\WinInstall_Temp"; New-Item -ItemType Directory -Path $Temp -Force | Out-Null
+    Copy-Item "$Drive\sources\boot.wim" "$Temp\boot.wim" -Force; Copy-Item "$Drive\boot\boot.sdi" "$Temp\boot.sdi" -Force
+    Move-Item "$Temp\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force; Move-Item "$Temp\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
+    Remove-Item $Temp -Recurse -Force
     
     if (Test-Path "$env:SystemDrive\WinInstall_Boot.wim") {
         $Panther = "$env:SystemDrive\Windows\Panther"; if (!(Test-Path $Panther)) { New-Item -ItemType Directory -Path $Panther -Force | Out-Null }
