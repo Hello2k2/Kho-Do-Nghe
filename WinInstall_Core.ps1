@@ -9,6 +9,7 @@ $ErrorActionPreference = "SilentlyContinue"
 $DebugLog = "C:\PhatTan_Debug.txt"
 $Global:SelectedDisk = 0
 $Global:SelectedPart = 0
+$Global:SourceDrive = ""
 
 # --- KEY DATABASE ---
 $KeyDB = @{
@@ -21,7 +22,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V24.0 (TEXT REPLACEMENT) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V30.0 (SINGLE DRIVE MASTER) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -32,8 +33,6 @@ function Mount-And-GetDrive ($IsoPath) {
     $Drives = Get-PSDrive -PSProvider FileSystem; foreach ($D in $Drives) { $R=$D.Root; if($R -in "C:\","A:\","B:\"){continue}; if((Test-Path "$R\setup.exe") -and (Test-Path "$R\bootmgr")){ return $R.TrimEnd("\") } }
     return $null
 }
-
-function Get-BiosMode { if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State") { return "UEFI" } return "Legacy" }
 
 function Get-SmartKey ($FullIndexName) {
     $Name = $FullIndexName.ToLower(); $VerGroup = $null; $Edition = $null
@@ -48,7 +47,7 @@ function Create-Boot-Entry ($WimPath) {
     try {
         $BcdList = bcdedit /enum /v | Out-String; $Lines = $BcdList -split "`r`n"
         for ($i=0; $i -lt $Lines.Count; $i++) { if ($Lines[$i] -match "description\s+CAI WIN TAM THOI") { for ($j=$i; $j -ge 0; $j--) { if ($Lines[$j] -match "identifier\s+{(.*)}") { cmd /c "bcdedit /delete {$($Matches[1])} /f"; break } } } }
-        $Name="CAI WIN TAM THOI (Phat Tan PC)"; $Mode=Get-BiosMode; $Drive=$env:SystemDrive
+        $Name="CAI WIN TAM THOI (Phat Tan PC)"; $Mode=if(Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State"){"UEFI"}else{"Legacy"}; $Drive=$env:SystemDrive
         cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`"" 2>$null
         cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"; cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \boot.sdi"
         $Output = cmd /c "bcdedit /create /d `"$Name`" /application osloader"; if ($Output -match '{([a-f0-9\-]+)}') { $ID = $matches[0] } else { return $false }
@@ -60,7 +59,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V24.0)"; $Form.Size = "850, 780"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (CORE V30.0 $WINDOWS.~BT)"; $Form.Size = "850, 800"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -81,10 +80,14 @@ $CkBackup = New-Object System.Windows.Forms.CheckBox; $CkBackup.Text = "Sao luu 
 $CkSkipKey = New-Object System.Windows.Forms.CheckBox; $CkSkipKey.Text = "BO QUA KEY (Tich vao neu bi loi Key XML)"; $CkSkipKey.Location = "20,60"; $CkSkipKey.AutoSize=$true; $CkSkipKey.Checked=$false; $CkSkipKey.ForeColor="Red"; $GBOpt.Controls.Add($CkSkipKey)
 $TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Text = "$env:SystemDrive\Drivers_Backup_Auto"; $TxtPath.Location = "300,30"; $TxtPath.Size = "350,25"; $GBOpt.Controls.Add($TxtPath)
 
-$BtnBoot = New-Object System.Windows.Forms.Button; $BtnBoot.Text = "TAO BOOT TAM (Khoi dong lai va Cai dat)"; $BtnBoot.Location = "20,540"; $BtnBoot.Size = "790,50"; $BtnBoot.BackColor = "Magenta"; $BtnBoot.ForeColor = "White"; $BtnBoot.Font = $FontBold
+# --- PROGRESS BAR COPY FILE ---
+$PbCopy = New-Object System.Windows.Forms.ProgressBar; $PbCopy.Location = "20,530"; $PbCopy.Size = "790,25"; $PbCopy.Visible=$false; $Form.Controls.Add($PbCopy)
+$LblCopyStatus = New-Object System.Windows.Forms.Label; $LblCopyStatus.Text = "Trang thai..."; $LblCopyStatus.Location = "20,560"; $LblCopyStatus.AutoSize=$true; $LblCopyStatus.ForeColor="Yellow"; $LblCopyStatus.Visible=$false; $Form.Controls.Add($LblCopyStatus)
+
+$BtnBoot = New-Object System.Windows.Forms.Button; $BtnBoot.Text = "TAO BOOT TAM (Khoi dong lai va Cai dat)"; $BtnBoot.Location = "20,590"; $BtnBoot.Size = "790,50"; $BtnBoot.BackColor = "Magenta"; $BtnBoot.ForeColor = "White"; $BtnBoot.Font = $FontBold
 $BtnBoot.Add_Click({ Start-Boot-Install }); $Form.Controls.Add($BtnBoot)
 
-$BtnWTH = New-Object System.Windows.Forms.Button; $BtnWTH.Text = "DUNG WINTOHDD (Neu cach tren loi)"; $BtnWTH.Location = "20,600"; $BtnWTH.Size = "790,40"; $BtnWTH.BackColor = "Orange"; $BtnWTH.ForeColor = "Black"; $BtnWTH.Font = $FontBold
+$BtnWTH = New-Object System.Windows.Forms.Button; $BtnWTH.Text = "DUNG WINTOHDD (Neu cach tren loi)"; $BtnWTH.Location = "20,650"; $BtnWTH.Size = "790,40"; $BtnWTH.BackColor = "Orange"; $BtnWTH.ForeColor = "Black"; $BtnWTH.Font = $FontBold
 $BtnWTH.Add_Click({ $P="$env:TEMP\WinToHDD.exe"; if(!(Test-Path $P)){(New-Object Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe", $P)}; Start-Process $P }); $Form.Controls.Add($BtnWTH)
 
 function Load-WimInfo {
@@ -110,6 +113,7 @@ function Load-Partitions {
             $Info = ""; if ($P.IsSystem) { $Info = "[BOOT/EFI]" }; if ($P.DriveLetter -eq $SysDrive) { $Info = "[WINDOWS HIEN TAI]" }
             $RowId = $GridPart.Rows.Add($P.DiskNumber, $P.PartitionNumber, $Let, $P.GptType, "$GB GB", $Info)
             if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$RowId].Selected = $true; $Global:SelectedDisk = $P.DiskNumber; $Global:SelectedPart = $P.PartitionNumber; $AutoSelected = $true }
+            if ($Let -ne $SysDrive -and $Let -ne "" -and $P.Size -gt 5GB) { $Global:SourceDrive = $Let }
         }
     } else {
         try {
@@ -120,63 +124,101 @@ function Load-Partitions {
                 $Info = ""; if ($Letter -eq $SysDrive) { $Info = "[WINDOWS HIEN TAI]" }
                 $RowId = $GridPart.Rows.Add($DiskIdx, $PartIdx, $Letter, $P.Type, "$SizeGB GB", $Info)
                 if ($Letter -eq $SysDrive) { $GridPart.Rows[$RowId].Selected = $true; $Global:SelectedDisk = $DiskIdx; $Global:SelectedPart = $PartIdx; $AutoSelected = $true }
+                if ($Letter -ne $SysDrive -and $Letter -ne "" -and $SizeGB -gt 5) { $Global:SourceDrive = $Letter }
             }
         } catch {}
     }
 }
 
+function Copy-FileWithProgress ($Source, $Dest) {
+    $SrcFile = [IO.File]::OpenRead($Source); $DestFile = [IO.File]::Create($Dest)
+    $Buffer = New-Object byte[] (1024 * 1024); $Total = $SrcFile.Length; $Read = 0; $SoFar = 0
+    $PbCopy.Visible = $true; $LblCopyStatus.Visible = $true
+    do {
+        $Read = $SrcFile.Read($Buffer, 0, $Buffer.Length); $DestFile.Write($Buffer, 0, $Read); $SoFar += $Read
+        if ($Total -gt 0) {
+            $Percent = [Math]::Min(100, [Math]::Round(($SoFar / $Total) * 100))
+            $PbCopy.Value = $Percent
+            $LblCopyStatus.Text = "Dang copy source: $Percent% ($([Math]::Round($SoFar/1GB, 2)) GB / $([Math]::Round($Total/1GB, 2)) GB)"
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+    } while ($Read -gt 0)
+    $SrcFile.Close(); $DestFile.Close(); $SrcFile.Dispose(); $DestFile.Dispose()
+    $PbCopy.Visible = $false; $LblCopyStatus.Visible = $false
+}
+
 function Start-Boot-Install {
-    $ISO = $CmbISO.SelectedItem
-    if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
-    if ($Global:SelectedPart -eq 0) { [System.Windows.Forms.MessageBox]::Show("LOI: BAN CHUA CHON O CUNG!", "Loi"); return }
-    
+    $ISO = $CmbISO.SelectedItem; if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!", "Loi"); return }
     $XML = "$env:SystemDrive\autounattend.xml"
-    if (!(Test-Path $XML)) { [System.Windows.Forms.MessageBox]::Show("Chua co file XML! Vui long chay Tool Config truoc.", "Error"); return }
+    if (!(Test-Path $XML)) { [System.Windows.Forms.MessageBox]::Show("Chua co XML Config!", "Error"); return }
 
     if ($CmbEd.SelectedItem) { $FullString = $CmbEd.SelectedItem.ToString(); $Idx = $FullString.Split("-")[0].Trim(); $DetectedKey = Get-SmartKey $FullString } else { $Idx = 1; $DetectedKey = $null }
     $D_ID = $Global:SelectedDisk; $P_ID = $Global:SelectedPart
     
-    # --- FINAL TEXT REPLACEMENT (SAFE & SIMPLE) ---
     try {
         $Content = [IO.File]::ReadAllText($XML)
-        
-        # Thay the cac Placeholder ma Config da tao ra
-        $Content = $Content.Replace("__DISKID__", $D_ID.ToString())
-        $Content = $Content.Replace("__PARTID__", $P_ID.ToString())
+        $Content = $Content.Replace("__DISKID__", $D_ID.ToString()); $Content = $Content.Replace("__PARTID__", $P_ID.ToString())
         $Content = $Content.Replace("__INDEX__", $Idx.ToString())
 
-        # Logic Key
-        if ($CkSkipKey.Checked) {
-            $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "")
-        } elseif ($DetectedKey) {
-            $KeyBlock = "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>"
-            $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", $KeyBlock)
+        if ($Global:SourceDrive) {
+            # CO O KHAC -> CAI DEP, FORMAT O C:
+            Write-DebugLog "Mode: Dual Drive (Safe Wipe)" "MODE"
+            $SrcPath = "$($Global:SourceDrive):\WinInstall_Source\install.wim"
+            $Content = $Content.Replace("%SOURCEPATH_PLACEHOLDER%", "<InstallFrom><Path>$SrcPath</Path><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>")
+            $DestDir = "$($Global:SourceDrive):\WinInstall_Source"
         } else {
-            $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "")
+            # CHI CO 1 O C: -> CHE DO $WINDOWS.~BT (NO WIPE)
+            Write-DebugLog "Mode: Single Drive (In-Place / No Wipe)" "MODE"
+            # 1. Doi duong dan ve folder chuan cua Win
+            $SrcPath = "$env:SystemDrive\`$WINDOWS.~BT\Sources\install.wim"
+            $Content = $Content.Replace("%SOURCEPATH_PLACEHOLDER%", "<InstallFrom><Path>$SrcPath</Path><MetaData wcm:action=`"add`"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>")
+            
+            # 2. QUAN TRONG: TAT FORMAT (Tu dong go bo lenh WipeDisk)
+            $Content = $Content.Replace("<WillWipeDisk>true</WillWipeDisk>", "<WillWipeDisk>false</WillWipeDisk>")
+            # Xoa luon cac lenh chia dia neu co, de Windows tu xu ly Windows.old
+            $Content = $Content -replace "(?s)<CreatePartitions>.*?</CreatePartitions>", ""
+            $Content = $Content -replace "(?s)<ModifyPartitions>.*?</ModifyPartitions>", ""
+            
+            $DestDir = "$env:SystemDrive\`$WINDOWS.~BT\Sources"
         }
+        $Content = $Content.Replace("__INDEX__", $Idx.ToString())
 
-        # SAVE (UTF8 BOM)
-        $Utf8Bom = New-Object System.Text.UTF8Encoding $true
-        [IO.File]::WriteAllText($XML, $Content, $Utf8Bom)
-        Write-DebugLog "XML Finalized with Data." "SUCCESS"
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi Inject Data: $($_.Exception.Message)", "Error"); return }
+        if ($CkSkipKey.Checked) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "") } 
+        elseif ($DetectedKey) { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "<ProductKey><Key>$DetectedKey</Key><WillShowUI>OnError</WillShowUI></ProductKey>") } 
+        else { $Content = $Content.Replace("%PRODUCTKEY_PLACEHOLDER%", "") }
+
+        $Utf8Bom = New-Object System.Text.UTF8Encoding $true; [IO.File]::WriteAllText($XML, $Content, $Utf8Bom)
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi: $($_.Exception.Message)", "Error"); return }
 
     if ($CkBackup.Checked) {
         $Path = $TxtPath.Text; if (!(Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
         Start-Process "pnputil.exe" -ArgumentList "/export-driver * `"$Path`"" -Wait -NoNewWindow
     }
 
-    $Form.Text = "DANG TAO BOOT TAM..."
     $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
+    
+    # COPY SOURCE (DA FIX PATH)
+    New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
+    $WimSrc = "$Drive\sources\install.wim"; if (!(Test-Path $WimSrc)) { $WimSrc = "$Drive\sources\install.esd" }
+    $Form.Text = "DANG COPY SOURCE VAO: $DestDir ..."
+    Copy-FileWithProgress $WimSrc "$DestDir\install.wim"
+
+    # COPY BOOT
     $Temp = "C:\WinInstall_Temp"; New-Item -ItemType Directory -Path $Temp -Force | Out-Null
     Copy-Item "$Drive\sources\boot.wim" "$Temp\boot.wim" -Force; Copy-Item "$Drive\boot\boot.sdi" "$Temp\boot.sdi" -Force
     Move-Item "$Temp\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force; Move-Item "$Temp\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     Remove-Item $Temp -Recurse -Force
+    
     if (Test-Path "$env:SystemDrive\WinInstall_Boot.wim") {
         $Panther = "$env:SystemDrive\Windows\Panther"; if (!(Test-Path $Panther)) { New-Item -ItemType Directory -Path $Panther -Force | Out-Null }
+        
+        # FIX CUOI: COPY XML RA NHIEU CHO CHO CHAC
         Copy-Item $XML "$Panther\unattend.xml" -Force
+        Copy-Item $XML "$env:SystemDrive\autounattend.xml" -Force
+        if ($Global:SourceDrive) { Copy-Item $XML "$($Global:SourceDrive):\autounattend.xml" -Force }
+
         if (Create-Boot-Entry "\WinInstall_Boot.wim") { if ([System.Windows.Forms.MessageBox]::Show("DA XONG! Restart ngay?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force } }
-    } else { [System.Windows.Forms.MessageBox]::Show("Loi copy boot!", "Loi") }
+    }
 }
 
 $Form.Add_Shown({ 
