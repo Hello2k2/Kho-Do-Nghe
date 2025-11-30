@@ -3,7 +3,7 @@ try { Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CAU HINH FILE (V34.0 STANDARD FIX)"
+$Form.Text = "CAU HINH FILE (V35.0 MOUNT FIX)"
 $Form.Size = New-Object System.Drawing.Size(650, 550)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
@@ -84,7 +84,10 @@ $BtnSave.Add_Click({
             </DiskConfiguration>
             <ImageInstall>
                 <OSImage>
-                    <InstallFrom><MetaData wcm:action="add"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData></InstallFrom>
+                    <InstallFrom>
+                        <Path>\Windows\install.wim</Path>
+                        <MetaData wcm:action="add"><Key>/IMAGE/INDEX</Key><Value>__INDEX__</Value></MetaData>
+                    </InstallFrom>
                     <InstallTo><DiskID>__DISKID__</DiskID><PartitionID>__PARTID__</PartitionID></InstallTo>
                 </OSImage>
             </ImageInstall>
@@ -120,7 +123,7 @@ $BtnSave.Add_Click({
     try {
         $Utf8Bom = New-Object System.Text.UTF8Encoding $true
         [IO.File]::WriteAllText($XMLPath, $FinalXML, $Utf8Bom)
-        [System.Windows.Forms.MessageBox]::Show("DA TAO XML (V34 AUTO SOURCE)!", "Success")
+        [System.Windows.Forms.MessageBox]::Show("DA TAO XML (V35 HARD PATH)!", "Success")
         $Form.Close()
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi ghi file: $($_.Exception.Message)", "Loi") }
 })
