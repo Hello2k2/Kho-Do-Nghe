@@ -3,7 +3,7 @@ Add-Type -AssemblyName System.Drawing
 
 # --- CẤU HÌNH GIAO DIỆN ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC - RAM DOWNLOADER V2.0"
+$Form.Text = "PHAT TAN PC - RAM DOWNLOADER V2.1 (PRO)"
 $Form.Size = New-Object System.Drawing.Size(600, 350)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 20) # Màu đen Hacker
@@ -44,21 +44,33 @@ $LogLabel.AutoSize = $true
 $LogLabel.Location = New-Object System.Drawing.Point(40, 180)
 $Form.Controls.Add($LogLabel)
 
-# Nút Bấm
+# Nút Bấm: DOWNLOAD
 $Btn = New-Object System.Windows.Forms.Button
 $Btn.Text = "DOWNLOAD MORE RAM"
-$Btn.Font = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
-$Btn.Size = New-Object System.Drawing.Size(250, 60)
-$Btn.Location = New-Object System.Drawing.Point(170, 220)
+$Btn.Font = New-Object System.Drawing.Font("Arial", 11, [System.Drawing.FontStyle]::Bold)
+$Btn.Size = New-Object System.Drawing.Size(240, 50)
+$Btn.Location = New-Object System.Drawing.Point(40, 230)
 $Btn.BackColor = [System.Drawing.Color]::LimeGreen
 $Btn.ForeColor = [System.Drawing.Color]::Black
 $Btn.FlatStyle = "Flat"
 $Btn.Cursor = [System.Windows.Forms.Cursors]::Hand
 $Form.Controls.Add($Btn)
 
-# --- LOGIC CHẠY ---
+# Nút Bấm: REVERT (HOÀN TÁC) - Mới thêm
+$BtnRevert = New-Object System.Windows.Forms.Button
+$BtnRevert.Text = "RESET DEFAULT (UNINSTALL)"
+$BtnRevert.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
+$BtnRevert.Size = New-Object System.Drawing.Size(240, 50)
+$BtnRevert.Location = New-Object System.Drawing.Point(300, 230)
+$BtnRevert.BackColor = [System.Drawing.Color]::Firebrick
+$BtnRevert.ForeColor = [System.Drawing.Color]::White
+$BtnRevert.FlatStyle = "Flat"
+$BtnRevert.Cursor = [System.Windows.Forms.Cursors]::Hand
+$Form.Controls.Add($BtnRevert)
+
+# --- LOGIC CHẠY (DOWNLOAD) ---
 $Btn.Add_Click({
-    $Btn.Enabled = $false
+    $Btn.Enabled = $false; $BtnRevert.Enabled = $false
     $Btn.Text = "PROCESSING..."
     
     # --- BƯỚC 1: CHECK PHẦN CỨNG (0-20%) ---
@@ -84,25 +96,19 @@ $Btn.Add_Click({
     
     if ($Drives.Count -eq 0) {
         [System.Windows.Forms.MessageBox]::Show("O cung day qua, khong du cho de tai RAM!", "Loi", "OK", "Error")
-        $Btn.Enabled = $true; $Btn.Text = "RETRY"; return
+        $Btn.Enabled = $true; $Btn.Text = "DOWNLOAD MORE RAM"; $BtnRevert.Enabled = $true; return
     }
     
     $Bar.Value = 30
     $Form.Refresh()
     Start-Sleep -Milliseconds 500
 
-    # --- BƯỚC 3: GIẢ LẬP DOWNLOAD (30-80%) - QUAN TRỌNG NHẤT ---
-    # Khúc này làm màu để khách sướng
+    # --- BƯỚC 3: GIẢ LẬP DOWNLOAD (30-80%) ---
     for ($i = 30; $i -le 80; $i += 2) {
         $Bar.Value = $i
-        
-        # Random text cho nguy hiểm
         $Kbs = Get-Random -Minimum 1024 -Maximum 5120
         $LogLabel.Text = "Downloading RAM Segments... Speed: $Kbs MB/s | Chunk: $i%"
-        
         $Form.Refresh()
-        
-        # Random tốc độ delay để nhìn cho thật
         $Delay = Get-Random -Minimum 50 -Maximum 150
         Start-Sleep -Milliseconds $Delay
     }
@@ -144,17 +150,44 @@ $Btn.Add_Click({
             
              $LogLabel.Text = "Injecting 100% to Drive $($D1.Name)"
         }
+        [System.Windows.Forms.MessageBox]::Show("SUCCESS!`nDa tai them $TargetSwapMB MB RAM Ao thanh cong.`nKhoi dong lai may de trai nghiem toc do!", "PHAT TAN PC", "OK", "Information")
     }
     catch {
         $LogLabel.Text = "Error optimizing pagefile."
+        [System.Windows.Forms.MessageBox]::Show("Loi roi: $($_.Exception.Message)", "Error", "OK", "Error")
     }
 
     $Bar.Value = 100
-    $Form.Refresh()
-    Start-Sleep -Seconds 1
-    
-    [System.Windows.Forms.MessageBox]::Show("SUCCESS!`nDa tai them $TargetSwapMB MB RAM Ao thanh cong.`nKhoi dong lai may de trai nghiem toc do!", "PHAT TAN PC", "OK", "Information")
-    $Form.Close()
+    $Btn.Text = "DOWNLOAD COMPLETED"
+    $Btn.Enabled = $true; $BtnRevert.Enabled = $true
+})
+
+# --- LOGIC HOÀN TÁC (RESET) ---
+$BtnRevert.Add_Click({
+    if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon xoa RAM ao da tai va dua ve mac dinh Windows?", "Xac nhan", "YesNo", "Question") -eq "Yes") {
+        $Btn.Enabled = $false; $BtnRevert.Enabled = $false
+        $LogLabel.Text = "Restoring System defaults..."
+        $Form.Refresh()
+        Start-Sleep -Seconds 1
+        
+        try {
+            # Bật lại chế độ Auto Manage (Hệ thống tự quản lý)
+            $Sys = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
+            $Sys.AutomaticManagedPagefile = $true
+            $Sys.Put() | Out-Null
+            
+            $Bar.Value = 0
+            $InfoLabel.Text = "System Analysis: Default (System Managed)"
+            $LogLabel.Text = "Restored successfully."
+            [System.Windows.Forms.MessageBox]::Show("Da xoa RAM ao! He thong da tro ve mac dinh.", "PHAT TAN PC", "OK", "Information")
+        }
+        catch {
+             [System.Windows.Forms.MessageBox]::Show("Loi khi reset: $($_.Exception.Message)", "Error", "OK", "Error")
+        }
+        
+        $Btn.Enabled = $true; $BtnRevert.Enabled = $true
+        $Btn.Text = "DOWNLOAD MORE RAM"
+    }
 })
 
 $Form.ShowDialog() | Out-Null
