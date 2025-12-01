@@ -13,7 +13,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V40.2 (ANTI-FREEZE) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V41.0 (DISM RESCUE) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -41,7 +41,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V40.2 ANTI-FREEZE)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V41.0 DISM RESCUE)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -88,14 +88,23 @@ function Copy-FileWithProgress ($Source, $Dest) {
     $SrcFile.Close(); $DestFile.Close(); $SrcFile.Dispose(); $DestFile.Dispose(); $PbCopy.Visible = $false
 }
 
+function Clean-DismState ($Dir) {
+    Write-DebugLog "Cleaning DISM state..." "CLEAN"
+    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+    if (Test-Path $Dir) {
+        # Force unmount if stuck
+        Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Dir`" /Discard" -Wait -NoNewWindow
+    }
+}
+
 function Start-Dism-Inject {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!"); return }
     if ($CmbEd.SelectedItem) { $Idx = $CmbEd.SelectedItem.ToString().Split("-")[0].Trim() } else { $Idx = 1 }
 
     $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
     
-    # 1. PREPARE DIRS
-    $WorkDir = "C:\WinInstall_Work"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+    # 1. PREPARE DIRS (RANDOM NAME TO AVOID LOCK)
+    $WorkDir = "C:\WinInstall_Work_$($PID)"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     $MountDir = "$WorkDir\Mount"; New-Item -ItemType Directory -Path $MountDir -Force | Out-Null
     $SourceDir = if ($Global:SourceDrive) { "$($Global:SourceDrive)\WinSource" } else { "$env:SystemDrive\`$WINDOWS.~BT\Sources" }
     New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
@@ -108,31 +117,30 @@ function Start-Dism-Inject {
     $XML = "$env:TEMP\unattend.xml"
     if (Test-Path $XML) { Copy-Item $XML "$SourceDir\unattend.xml" -Force }
 
-    # 4. PREPARE BOOT.WIM (NO WAIT LOGIC)
-    $LblStatus.Text = "Dang xu ly file Boot (Mounting)..."
+    # 4. PREPARE BOOT.WIM & FIX LOCKS
+    $LblStatus.Text = "Dang xu ly file Boot..."
     
-    # Cleanup old mounts
-    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+    # Clean Truoc khi lam
+    Clean-DismState $MountDir
 
     Copy-Item "$Drive\sources\boot.wim" "$WorkDir\boot.wim" -Force
     Set-ItemProperty -Path "$WorkDir\boot.wim" -Name IsReadOnly -Value $false
     Copy-Item "$Drive\boot\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     
-    # MOUNT KHONG DUNG -WAIT MA DUNG VONG LAP CHECK
-    $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -PassThru -NoNewWindow
-    
-    # Doi cho den khi thu muc Windows xuat hien trong MountDir (Toi da 60s)
-    $Counter = 0
-    while (!(Test-Path "$MountDir\Windows\System32") -and $Counter -lt 60) {
-        Start-Sleep -Seconds 1; $Counter++
-        $LblStatus.Text = "Mounting... ($Counter s)"
-        [System.Windows.Forms.Application]::DoEvents()
+    # MOUNT (RETRY LOGIC)
+    $MountSuccess = $false
+    for ($i=1; $i -le 3; $i++) {
+        $LblStatus.Text = "Mounting Boot.wim (Attempt $i)..."
+        $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -NoNewWindow -PassThru
+        if ($Proc.ExitCode -eq 0) { $MountSuccess = $true; break }
+        else { 
+            Write-DebugLog "Mount failed ($($Proc.ExitCode)). Cleaning up..." "WARN"
+            Clean-DismState $MountDir
+            Start-Sleep -Seconds 2
+        }
     }
 
-    if (!(Test-Path "$MountDir\Windows\System32")) {
-        [System.Windows.Forms.MessageBox]::Show("LOI MOUNT: Qua thoi gian cho!", "Timeout")
-        return
-    }
+    if (!$MountSuccess) { [System.Windows.Forms.MessageBox]::Show("LOI MOUNT: Khong the mount file boot.wim sau 3 lan thu.", "Fatal Error"); return }
     
     # 5. INJECT AUTO SCRIPT
     $ScriptContent = @"
@@ -209,13 +217,19 @@ wpeutil reboot
     $IniContent = "[LaunchApps]`r`n%SystemDrive%\Windows\System32\AutoSetup.cmd"
     [IO.File]::WriteAllText("$MountDir\Windows\System32\winpeshl.ini", $IniContent)
 
-    # 6. UNMOUNT & COMMIT (NO WAIT)
+    # 6. UNMOUNT & COMMIT (ANTI-LOCK)
     $LblStatus.Text = "Dang luu file Boot (Unmounting)..."
+    # Change dir to root to release handle
+    Set-Location "C:\"
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    
     Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Commit" -Wait -NoNewWindow
     
     # 7. MOVE TO C:
-    Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force
-    Remove-Item $WorkDir -Recurse -Force
+    if (Test-Path "$WorkDir\boot.wim") {
+        Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force
+        Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
     
     # 8. BCD ENTRY
     if (Create-Boot-Entry "\WinInstall_Boot.wim") {
