@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 9.0 (JSON Cloud Engine)
+    Version: 9.5 (Ultimate Suite)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -19,11 +19,11 @@ $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.jso
 $TempDir = "$env:TEMP\PhatTan_Tool"
 if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir | Out-Null }
 
-# Tối ưu mạng
+# Tối ưu mạng (Max Speed)
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 [System.Net.ServicePointManager]::DefaultConnectionLimit = 100
 
-# --- HACK GIAO DIỆN (BLUR) ---
+# --- HACK GIAO DIỆN (BLUR EFFECT) ---
 $ConsoleCode = @'
 using System; using System.Runtime.InteropServices;
 public class ConsoleEffects {
@@ -45,8 +45,8 @@ $Host.UI.RawUI.WindowTitle = "PHÁT TẤN - LOG WINDOW (Zalo: 0823.883.028)"
 [Console]::BackgroundColor = "Black"; [Console]::ForegroundColor = "Cyan"; Clear-Host
 
 # --- LOGO ---
-Write-Host " PHAT TAN PC TOOLKIT V9.0 (JSON CLOUD)" -ForegroundColor Cyan
-Write-Host " -------------------------------------" -ForegroundColor Gray
+Write-Host " PHAT TAN PC TOOLKIT V9.5 (ULTIMATE)" -ForegroundColor Cyan
+Write-Host " ------------------------------------" -ForegroundColor Gray
 
 # --- HÀM LOGIC ---
 function Log-Msg ($Msg, $Color="Cyan") { Write-Host " $Msg" -ForegroundColor $Color }
@@ -91,8 +91,8 @@ try {
 
 # --- GUI CHÍNH ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHÁT TẤN PC - TOOLKIT V9.0 (JSON ENGINE)"
-$Form.Size = New-Object System.Drawing.Size(850, 700) # Form to hơn chút để chứa nhiều Tab
+$Form.Text = "PHÁT TẤN PC - TOOLKIT V9.5 (ULTIMATE SUITE)"
+$Form.Size = New-Object System.Drawing.Size(900, 720) # Form to hơn chút
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $Form.ForeColor = "White"
@@ -100,14 +100,13 @@ $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
 # Header
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "PHAT TAN PC TOOLKIT"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = "Cyan"; $LblT.AutoSize = $true; $LblT.Location = "20, 10"; $Form.Controls.Add($LblT)
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Cloud App Store - Updated: $(Get-Date -Format 'dd/MM/yyyy')"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25, 45"; $Form.Controls.Add($LblS)
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Professional IT Rescue Suite - Updated: $(Get-Date -Format 'dd/MM/yyyy')"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25, 45"; $Form.Controls.Add($LblS)
 
 # Tab Control
-$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = "20, 80"; $TabControl.Size = "790, 420"; $Form.Controls.Add($TabControl)
+$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = "20, 80"; $TabControl.Size = "840, 440"; $Form.Controls.Add($TabControl)
 
 # --- ENGINE TẠO TAB TỰ ĐỘNG TỪ JSON ---
 $TabNames = $AppData | Select-Object -ExpandProperty tab -Unique
-$Y_Start = 30
 $TabObjects = @{}
 
 foreach ($TName in $TabNames) {
@@ -130,41 +129,51 @@ foreach ($TName in $TabNames) {
     }
 }
 
-# --- TAB ADVANCED TOOLS (MODULES) ---
-# Tab này vẫn giữ nguyên logic cũ vì dùng Button chứ không phải Checkbox
-$AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "Advanced Tools (Modules)"; $AdvTab.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 40); $TabControl.Controls.Add($AdvTab)
-function Add-AdvBtn ($P, $Txt, $X, $Y, $Col, $Cmd) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="$X,$Y"; $B.Size="220,40"
-    $B.BackColor=$Col; $B.ForeColor="White"; if($Col -match "Yellow|Lime|Orange"){$B.ForeColor="Black"}; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9, Bold"; $B.Add_Click($Cmd); $P.Controls.Add($B)
-}
-# Cột 1
-Add-AdvBtn $AdvTab "CHECK INFO & DRIVER" 30 30 "Purple" { Load-Module "SystemInfo.ps1" }
-Add-AdvBtn $AdvTab "SYSTEM SCAN (SFC/DISM)" 30 80 "Orange" { Load-Module "SystemScan.ps1" }
-Add-AdvBtn $AdvTab "SYSTEM CLEANER PRO" 30 130 "Green" { Load-Module "SystemCleaner.ps1" }
-Add-AdvBtn $AdvTab "DATA RECOVERY" 30 180 "Red" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
-# Cột 2
-Add-AdvBtn $AdvTab "NETWORK MASTER (DNS)" 280 30 "Teal" { Load-Module "NetworkMaster.ps1" }
-Add-AdvBtn $AdvTab "WIN UPDATE MANAGER" 280 80 "Firebrick" { Load-Module "WinUpdateMgr.ps1" }
-Add-AdvBtn $AdvTab "DEFENDER CONTROL" 280 130 "DarkSlateBlue" { Load-Module "DefenderMgr.ps1" }
-Add-AdvBtn $AdvTab "BROWSER PRIVACY" 280 180 "DarkRed" { Load-Module "BrowserPrivacy.ps1" }
-# Cột 3
-Add-AdvBtn $AdvTab "CÀI WIN TỰ ĐỘNG (ISO)" 530 30 "Pink" { Load-Module "WinInstall.ps1" }
-Add-AdvBtn $AdvTab "ISO DOWNLOADER" 530 80 "Yellow" { Load-Module "ISODownloader.ps1" }
-Add-AdvBtn $AdvTab "BACKUP & RESTORE" 530 130 "Cyan" { Load-Module "BackupCenter.ps1" }
-Add-AdvBtn $AdvTab "APP STORE (WINGET)" 530 180 "LightGreen" { Load-Module "AppStore.ps1" }
+# --- TAB ADVANCED TOOLS (MODULES - FULL OPTION) ---
+$AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "Advanced Tools (Modules)"; $AdvTab.BackColor = [System.Drawing.Color]::FromArgb(35, 35, 35); $TabControl.Controls.Add($AdvTab)
 
+function Add-AdvBtn ($P, $Txt, $X, $Y, $Col, $Cmd) {
+    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="$X,$Y"; $B.Size="250,45" # Nút to hơn chút cho dễ bấm
+    $B.BackColor=$Col; $B.ForeColor="White"; if($Col -match "Yellow|Lime|Orange"){$B.ForeColor="Black"}
+    $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9, Bold"; $B.Add_Click($Cmd); $P.Controls.Add($B)
+}
+
+# Tiêu đề cột (Label)
+function Add-Header ($P, $T, $X) { $L=New-Object System.Windows.Forms.Label; $L.Text=$T; $L.Location="$X,20"; $L.AutoSize=$true; $L.ForeColor="Gray"; $L.Font="Segoe UI, 10, Bold, Underline"; $P.Controls.Add($L) }
+
+# === CỘT 1: SYSTEM & MAINTENANCE (X=20) ===
+Add-Header $AdvTab "1. SYSTEM & MAINTENANCE" 20
+Add-AdvBtn $AdvTab "CHECK INFO & DRIVER" 20 50 "Purple" { Load-Module "SystemInfo.ps1" }
+Add-AdvBtn $AdvTab "SYSTEM SCAN (SFC/DISM)" 20 105 "Orange" { Load-Module "SystemScan.ps1" }
+Add-AdvBtn $AdvTab "SYSTEM CLEANER PRO" 20 160 "Green" { Load-Module "SystemCleaner.ps1" }
+Add-AdvBtn $AdvTab "DATA RECOVERY (HDD)" 20 215 "Red" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+
+# === CỘT 2: SECURITY & NETWORK (X=290) ===
+Add-Header $AdvTab "2. SECURITY & NETWORK" 290
+Add-AdvBtn $AdvTab "NETWORK MASTER (DNS/FIX)" 290 50 "Teal" { Load-Module "NetworkMaster.ps1" }
+Add-AdvBtn $AdvTab "WIN UPDATE PRO (QUAN LY)" 290 105 "Firebrick" { Load-Module "WinUpdatePro.ps1" } # Module Xịn
+Add-AdvBtn $AdvTab "DEFENDER CONTROL" 290 160 "DarkSlateBlue" { Load-Module "DefenderMgr.ps1" }
+Add-AdvBtn $AdvTab "BROWSER PRIVACY (BLOCK)" 290 215 "DarkRed" { Load-Module "BrowserPrivacy.ps1" }
+
+# === CỘT 3: DEPLOYMENT & TOOLS (X=560) ===
+Add-Header $AdvTab "3. DEPLOYMENT & UTILITIES" 560
+Add-AdvBtn $AdvTab "CÀI WIN TỰ ĐỘNG (ISO)" 560 50 "Pink" { Load-Module "WinInstall.ps1" }
+Add-AdvBtn $AdvTab "WIN AIO BUILDER (TAO ISO)" 560 105 "OrangeRed" { Load-Module "WinAIOBuilder.ps1" } # Module Mới
+Add-AdvBtn $AdvTab "ISO DOWNLOADER (CLOUD)" 560 160 "Yellow" { Load-Module "ISODownloader.ps1" }
+Add-AdvBtn $AdvTab "BACKUP & RESTORE PRO" 560 215 "Cyan" { Load-Module "BackupCenter.ps1" }
+Add-AdvBtn $AdvTab "APP STORE (WINGET)" 560 270 "LightGreen" { Load-Module "AppStore.ps1" }
 
 # --- FOOTER BUTTONS ---
-$BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = "30, 520"; $BtnSelectAll.Size = "100, 30"; $BtnSelectAll.BackColor = "Gray"; $Form.Controls.Add($BtnSelectAll)
+$BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = "30, 540"; $BtnSelectAll.Size = "100, 35"; $BtnSelectAll.BackColor = "Gray"; $Form.Controls.Add($BtnSelectAll)
 $BtnSelectAll.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $true } } } })
 
-$BtnUncheck = New-Object System.Windows.Forms.Button; $BtnUncheck.Text = "Bo Chon"; $BtnUncheck.Location = "140, 520"; $BtnUncheck.Size = "100, 30"; $BtnUncheck.BackColor = "Gray"; $Form.Controls.Add($BtnUncheck)
+$BtnUncheck = New-Object System.Windows.Forms.Button; $BtnUncheck.Text = "Bo Chon"; $BtnUncheck.Location = "140, 540"; $BtnUncheck.Size = "100, 35"; $BtnUncheck.BackColor = "Gray"; $Form.Controls.Add($BtnUncheck)
 $BtnUncheck.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $false } } } })
 
-# --- NÚT CÀI ĐẶT (XỬ LÝ THÔNG MINH TỪ JSON) ---
+# --- NÚT CÀI ĐẶT (PROCESS BUTTON) ---
 $BtnInstall = New-Object System.Windows.Forms.Button
-$BtnInstall.Text = "CAI DAT DA CHON"; $BtnInstall.Font = "Segoe UI, 14, Bold"
-$BtnInstall.Size = "250, 60"; $BtnInstall.Location = "560, 520"; $BtnInstall.BackColor = "LimeGreen"; $BtnInstall.ForeColor = "Black"; $BtnInstall.FlatStyle = "Flat"
+$BtnInstall.Text = "TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font = "Segoe UI, 14, Bold"
+$BtnInstall.Size = "300, 60"; $BtnInstall.Location = "560, 540"; $BtnInstall.BackColor = "LimeGreen"; $BtnInstall.ForeColor = "Black"; $BtnInstall.FlatStyle = "Flat"
 
 $BtnInstall.Add_Click({
     $BtnInstall.Enabled = $false; $BtnInstall.Text = "DANG XU LY..."
@@ -195,15 +204,22 @@ $BtnInstall.Add_Click({
     }
     
     [System.Windows.Forms.MessageBox]::Show("Da hoan tat tat ca tac vu!", "Phat Tan PC")
-    $BtnInstall.Text = "CAI DAT DA CHON"; $BtnInstall.Enabled = $true
+    $BtnInstall.Text = "TIEN HANH CAI DAT DA CHON"; $BtnInstall.Enabled = $true
 })
 $Form.Controls.Add($BtnInstall)
 
-# --- MINI TOOLBAR ---
-function Add-Mini ($T, $C, $X, $Y, $Cmd) { $b=New-Object System.Windows.Forms.Button; $b.Text=$T; $b.BackColor=$C; $b.Location="$X,$Y"; $b.Size="110,30"; $b.FlatStyle="Flat"; $b.Add_Click($Cmd); $Form.Controls.Add($b) }
-Add-Mini "RAM BOOSTER" "Orange" 30 600 { Load-Module "RamBooster.ps1" }
-Add-Mini "WINPE RESCUE" "Yellow" 150 600 { Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }
-Add-Mini "ACTIVE WIN" "Magenta" 270 600 { irm https://get.activated.win | iex }
+# --- MINI TOOLBAR (BOTTOM) ---
+function Add-Mini ($T, $C, $X, $Y, $Cmd) { $b=New-Object System.Windows.Forms.Button; $b.Text=$T; $b.BackColor=$C; $b.Location="$X,$Y"; $b.Size="120,35"; $b.FlatStyle="Flat"; $b.Add_Click($Cmd); $Form.Controls.Add($b) }
+
+Add-Mini "RAM BOOSTER" "Orange" 30 620 { Load-Module "RamBooster.ps1" }
+Add-Mini "WINPE RESCUE" "Yellow" 160 620 { Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }
+Add-Mini "ACTIVE WIN" "Magenta" 290 620 { irm https://get.activated.win | iex }
+Add-Mini "DONATE" "Gold" 420 620 { 
+    $DonForm = New-Object System.Windows.Forms.Form; $DonForm.Text = "DONATE"; $DonForm.Size="400,550"; $DonForm.StartPosition="CenterScreen"
+    $PB=New-Object System.Windows.Forms.PictureBox; $PB.Size="350,400"; $PB.Location="15,10"; $PB.SizeMode="Zoom"
+    try{$PB.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{}
+    $DonForm.Controls.Add($PB); $DonForm.ShowDialog() 
+}
 
 $Form.ShowDialog() | Out-Null
 Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
