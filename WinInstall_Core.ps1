@@ -13,7 +13,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V40.1 (DISM PERMISSION FIX) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V40.2 (ANTI-FREEZE) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -41,7 +41,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V40.1 DISM FIX)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V40.2 ANTI-FREEZE)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -108,24 +108,29 @@ function Start-Dism-Inject {
     $XML = "$env:TEMP\unattend.xml"
     if (Test-Path $XML) { Copy-Item $XML "$SourceDir\unattend.xml" -Force }
 
-    # 4. PREPARE BOOT.WIM & FIX PERMISSIONS
+    # 4. PREPARE BOOT.WIM (NO WAIT LOGIC)
     $LblStatus.Text = "Dang xu ly file Boot (Mounting)..."
     
-    # Fix Cleanup truoc khi lam gi
+    # Cleanup old mounts
     Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
 
     Copy-Item "$Drive\sources\boot.wim" "$WorkDir\boot.wim" -Force
-    
-    # --- QUAN TRONG: GO BO READ-ONLY ATTRIBUTE ---
     Set-ItemProperty -Path "$WorkDir\boot.wim" -Name IsReadOnly -Value $false
-    
     Copy-Item "$Drive\boot\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     
-    # Mount Boot.wim
-    $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -NoNewWindow -PassThru
+    # MOUNT KHONG DUNG -WAIT MA DUNG VONG LAP CHECK
+    $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -PassThru -NoNewWindow
     
-    if ($Proc.ExitCode -ne 0) {
-        [System.Windows.Forms.MessageBox]::Show("LOI DISM MOUNT! Ma loi: $($Proc.ExitCode)`n(Da tu dong thu fix loi Read-Only).", "Error")
+    # Doi cho den khi thu muc Windows xuat hien trong MountDir (Toi da 60s)
+    $Counter = 0
+    while (!(Test-Path "$MountDir\Windows\System32") -and $Counter -lt 60) {
+        Start-Sleep -Seconds 1; $Counter++
+        $LblStatus.Text = "Mounting... ($Counter s)"
+        [System.Windows.Forms.Application]::DoEvents()
+    }
+
+    if (!(Test-Path "$MountDir\Windows\System32")) {
+        [System.Windows.Forms.MessageBox]::Show("LOI MOUNT: Qua thoi gian cho!", "Timeout")
         return
     }
     
@@ -204,7 +209,7 @@ wpeutil reboot
     $IniContent = "[LaunchApps]`r`n%SystemDrive%\Windows\System32\AutoSetup.cmd"
     [IO.File]::WriteAllText("$MountDir\Windows\System32\winpeshl.ini", $IniContent)
 
-    # 6. UNMOUNT & COMMIT
+    # 6. UNMOUNT & COMMIT (NO WAIT)
     $LblStatus.Text = "Dang luu file Boot (Unmounting)..."
     Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Commit" -Wait -NoNewWindow
     
