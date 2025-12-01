@@ -13,7 +13,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V40.0 (DISM SCRIPT INJECTOR) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V40.1 (DISM PERMISSION FIX) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -41,7 +41,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V40.0 DISM AUTO)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V40.1 DISM FIX)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -67,7 +67,6 @@ function Load-WimInfo {
     $Wim = "$Drive\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Drive\sources\install.esd" }
     try { $Info = dism /Get-WimInfo /WimFile:$Wim; $Indexes = $Info | Select-String "Index :"; $Names = $Info | Select-String "Name :"; for ($i=0; $i -lt $Indexes.Count; $i++) { $Idx = $Indexes[$i].ToString().Split(":")[1].Trim(); $Nam = $Names[$i].ToString().Split(":")[1].Trim(); $CmbEd.Items.Add("$Idx - $Nam") }; if ($CmbEd.Items.Count -gt 0) { $CmbEd.SelectedIndex = 0 } } catch {}
     
-    # Detect Source Drive (Not C:)
     $Parts = Get-PSDrive -PSProvider FileSystem
     foreach ($P in $Parts) { if ($P.Name -ne "C" -and $P.Free -gt 6GB) { $Global:SourceDrive = $P.Name + ":"; break } }
     $Form.Cursor = "Default"
@@ -109,15 +108,28 @@ function Start-Dism-Inject {
     $XML = "$env:TEMP\unattend.xml"
     if (Test-Path $XML) { Copy-Item $XML "$SourceDir\unattend.xml" -Force }
 
-    # 4. PREPARE BOOT.WIM & MOUNT
+    # 4. PREPARE BOOT.WIM & FIX PERMISSIONS
     $LblStatus.Text = "Dang xu ly file Boot (Mounting)..."
+    
+    # Fix Cleanup truoc khi lam gi
+    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+
     Copy-Item "$Drive\sources\boot.wim" "$WorkDir\boot.wim" -Force
+    
+    # --- QUAN TRONG: GO BO READ-ONLY ATTRIBUTE ---
+    Set-ItemProperty -Path "$WorkDir\boot.wim" -Name IsReadOnly -Value $false
+    
     Copy-Item "$Drive\boot\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     
-    # Mount Boot.wim (Index 2 is usually Setup, but we hijack it)
-    Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -NoNewWindow
+    # Mount Boot.wim
+    $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -NoNewWindow -PassThru
     
-    # 5. INJECT AUTO SCRIPT (THE MAGIC)
+    if ($Proc.ExitCode -ne 0) {
+        [System.Windows.Forms.MessageBox]::Show("LOI DISM MOUNT! Ma loi: $($Proc.ExitCode)`n(Da tu dong thu fix loi Read-Only).", "Error")
+        return
+    }
+    
+    # 5. INJECT AUTO SCRIPT
     $ScriptContent = @"
 @echo off
 title PHAT TAN PC - AUTO INSTALLER
@@ -142,32 +154,29 @@ echo [OK] DA THAY SOURCE TAI: %INSTALL_WIM%
 
 :: 2. FIND TARGET (C:)
 set TARGET=
-:: Trick: Tim o dia co thu muc Windows hoac Users de biet la o he thong cu
 for %%d in (C D E F G H) do (
     if exist "%%d:\Users" (
         if /i "%%d:" NEQ "%SRC_DRV%" ( set "TARGET=%%d:" & goto FoundTarget )
     )
 )
-:: Fallback: Neu khong tim thay o khac, thu cai de len chinh o chua source (Single Drive)
 set TARGET=%SRC_DRV%
 
 :FoundTarget
 echo [OK] O DIA MUC TIEU: %TARGET%
 
-:: 3. WIPE / CLEANUP (SAFETY)
+:: 3. WIPE / CLEANUP
 if /i "%TARGET%" NEQ "%SRC_DRV%" (
     echo [INFO] DANG FORMAT O %TARGET%...
     format %TARGET% /q /y /fs:ntfs
 ) else (
-    echo [INFO] CHE DO 1 O CUNG -> SE GHI DE (KHONG FORMAT)
-    echo Dang xoa thu muc Windows cu...
+    echo [INFO] CHE DO 1 O CUNG -> GHI DE (KHONG FORMAT)
     rd /s /q %TARGET%\Windows
     rd /s /q "%TARGET%\Program Files"
     rd /s /q "%TARGET%\Program Files (x86)"
     rd /s /q "%TARGET%\ProgramData"
 )
 
-:: 4. APPLY IMAGE (DISM)
+:: 4. APPLY IMAGE
 echo.
 echo  ===================================================
 echo    DANG BUNG FILE WIN (DISM)... KHONG TAT MAY!
@@ -192,8 +201,6 @@ timeout /t 5
 wpeutil reboot
 "@
     [IO.File]::WriteAllText("$MountDir\Windows\System32\AutoSetup.cmd", $ScriptContent)
-
-    # Create winpeshl.ini to auto-start
     $IniContent = "[LaunchApps]`r`n%SystemDrive%\Windows\System32\AutoSetup.cmd"
     [IO.File]::WriteAllText("$MountDir\Windows\System32\winpeshl.ini", $IniContent)
 
