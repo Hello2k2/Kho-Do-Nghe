@@ -1,85 +1,164 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# --- DANH SÁCH ISO ---
-$IsoList = [ordered]@{
-    "1. Windows 11 24H2 (Moi nhat - Goc MS)"          = "https://archive.org/download/WIN11_24H2/Win11_24H2_EnglishInternational_x64.iso"
-    "2. Windows 11 23H2 (On dinh - Goc MS)"           = "https://archive.org/download/win11-23h2-english-international-x-64v-2_202406/Win11_23H2_EnglishInternational_x64v2.iso"
-    "3. Windows 10 22H2 (Consumer - Goc MS)"          = "https://archive.org/download/en-us_windows_10_consumer_editions_version_22h2_updated_feb_2023_x64_dvd_c29e4bb3/en-us_windows_10_consumer_editions_version_22h2_updated_feb_2023_x64_dvd_c29e4bb3.iso"
-    "4. Windows 10 Enterprise LTSC 2021 (Sieu Nhe)"   = "https://archive.org/download/windows-10-enterprise-ltsc-2021_202111/Windows%2010%20Enterprise%20LTSC%202021.iso"
-    "5. Windows 8.1 Pro x64 (Goc MS)"                 = "https://archive.org/download/win8.1_english_iso/Win8.1_EnglishInternational_x64.iso"
-    "6. Windows 8.1 Pro x32 (Cho may yeu)"            = "https://archive.org/download/win8.1_english_iso/Win8.1_EnglishInternational_x32.iso"
-    "7. Windows 7 Ultimate SP1 x64 (Goc 2013)"        = "https://archive.org/download/win7-sp1-x64-en-us-oct2013/Win7.SP1.x64.en-US.Oct2013.iso"
-    "8. Windows XP SP3 (Huyen thoai)"                 = "https://archive.org/download/win-xp-sp-unknown-0_202103/Win%20XP%20%28SP%20Unknown0.iso"
-    "---------------------------------------"         = ""
-    "9. Office 2021 Pro Plus (Img Goc)"               = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2021Retail.img"
-    "10. Office 2019 Pro Plus (Img Goc)"              = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2019Retail.img"
-}
+# --- CẤU HÌNH ONLINE ---
+# SỬA LINK NÀY THÀNH LINK RAW GITHUB FILE JSON CỦA BẠN
+$JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list.json"
+
+# --- TỐI ƯU TỐC ĐỘ MẠNG (QUAN TRỌNG) ---
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+[System.Net.ServicePointManager]::DefaultConnectionLimit = 100 # Mở giới hạn kết nối
+[System.Net.ServicePointManager]::Expect100Continue = $false
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ISO DOWNLOADER - PHAT TAN PC"
-$Form.Size = New-Object System.Drawing.Size(650, 400)
+$Form.Text = "CLOUD ISO DOWNLOADER - PHAT TAN PC (JSON SYNC)"
+$Form.Size = New-Object System.Drawing.Size(700, 450)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
+# Biến toàn cục chứa data
+$Global:IsoData = @()
+
+# Tiêu đề
 $Lbl = New-Object System.Windows.Forms.Label
-$Lbl.Text = "CHON PHIEN BAN WINDOWS / OFFICE CAN TAI:"
-$Lbl.AutoSize = $true; $Lbl.Location = New-Object System.Drawing.Point(20, 20)
-$Lbl.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$Lbl.Text = "KHO TAI NGUYEN WINDOWS / OFFICE / DRIVER"
+$Lbl.AutoSize = $true; $Lbl.Location = New-Object System.Drawing.Point(20, 15)
+$Lbl.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $Lbl.ForeColor = "Cyan"
 $Form.Controls.Add($Lbl)
 
-$Combo = New-Object System.Windows.Forms.ComboBox
-$Combo.Location = New-Object System.Drawing.Point(20, 60); $Combo.Size = New-Object System.Drawing.Size(590, 35)
-$Combo.Font = New-Object System.Drawing.Font("Segoe UI", 11)
-$Combo.DropDownStyle = "DropDownList"
-foreach ($Key in $IsoList.Keys) { $Combo.Items.Add($Key) }
-$Combo.SelectedIndex = 0
-$Form.Controls.Add($Combo)
+# --- KHU VỰC LỌC (FILTER) ---
+$GbFilter = New-Object System.Windows.Forms.GroupBox
+$GbFilter.Text = "Bo Loc Tim Kiem"
+$GbFilter.Location = "20, 50"; $GbFilter.Size = "640, 70"; $GbFilter.ForeColor = "Yellow"
+$Form.Controls.Add($GbFilter)
 
+# Combo Type
+$CbType = New-Object System.Windows.Forms.ComboBox; $CbType.Location = "20, 30"; $CbType.Size = "150, 30"; $CbType.DropDownStyle = "DropDownList"
+$GbFilter.Controls.Add($CbType)
+
+# Combo Bit
+$CbBit = New-Object System.Windows.Forms.ComboBox; $CbBit.Location = "190, 30"; $CbBit.Size = "100, 30"; $CbBit.DropDownStyle = "DropDownList"
+$CbBit.Items.AddRange(@("All", "x64", "x86", "arm64"))
+$CbBit.SelectedIndex = 0
+$GbFilter.Controls.Add($CbBit)
+
+# Nút Lọc
+$BtnLoad = New-Object System.Windows.Forms.Button; $BtnLoad.Text = "LAM MOI DS"; $BtnLoad.Location = "500, 25"; $BtnLoad.Size = "120, 35"
+$BtnLoad.BackColor = "DimGray"; $BtnLoad.ForeColor = "White"
+$GbFilter.Controls.Add($BtnLoad)
+
+# --- DANH SÁCH KẾT QUẢ ---
+$LblRes = New-Object System.Windows.Forms.Label; $LblRes.Text = "Chon File Can Tai:"; $LblRes.Location = "20, 130"; $LblRes.AutoSize=$true
+$Form.Controls.Add($LblRes)
+
+$CbResult = New-Object System.Windows.Forms.ComboBox
+$CbResult.Location = "20, 155"; $CbResult.Size = "640, 35"
+$CbResult.Font = New-Object System.Drawing.Font("Segoe UI", 11)
+$CbResult.DropDownStyle = "DropDownList"
+$Form.Controls.Add($CbResult)
+
+# --- THANH TIẾN TRÌNH ---
 $Bar = New-Object System.Windows.Forms.ProgressBar
-$Bar.Location = New-Object System.Drawing.Point(20, 180); $Bar.Size = New-Object System.Drawing.Size(590, 30)
+$Bar.Location = New-Object System.Drawing.Point(20, 250); $Bar.Size = New-Object System.Drawing.Size(640, 30)
 $Form.Controls.Add($Bar)
 
 $Status = New-Object System.Windows.Forms.Label
-$Status.Text = "Trang thai: San sang."
-$Status.AutoSize = $true; $Status.Location = New-Object System.Drawing.Point(20, 150); $Status.Font = "Segoe UI, 10"; $Status.ForeColor = "Yellow"
+$Status.Text = "Trang thai: Dang cho du lieu..."
+$Status.AutoSize = $true; $Status.Location = New-Object System.Drawing.Point(20, 220); $Status.Font = "Segoe UI, 10"; $Status.ForeColor = "Lime"
 $Form.Controls.Add($Status)
 
-$Btn = New-Object System.Windows.Forms.Button
-$Btn.Text = "BAT DAU TAI (WEB CLIENT)"
-$Btn.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-$Btn.Location = New-Object System.Drawing.Point(180, 240); $Btn.Size = New-Object System.Drawing.Size(280, 50)
-$Btn.BackColor = "LimeGreen"; $Btn.ForeColor = "Black"; $Btn.FlatStyle = "Flat"
+$BtnDown = New-Object System.Windows.Forms.Button
+$BtnDown.Text = "DOWNLOAD NGAY (MAX SPEED)"
+$BtnDown.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$BtnDown.Location = New-Object System.Drawing.Point(180, 310); $BtnDown.Size = New-Object System.Drawing.Size(340, 50)
+$BtnDown.BackColor = "LimeGreen"; $BtnDown.ForeColor = "Black"; $BtnDown.FlatStyle = "Flat"
+$BtnDown.Enabled = $false
 
-# --- LOGIC TẢI (WEBCLIENT ASYNC) ---
-$Btn.Add_Click({
-    $SelectedName = $Combo.SelectedItem
-    $Url = $IsoList[$SelectedName]
-    if ($Url -eq "" -or $Url -eq $null) { return }
+# --- HÀM XỬ LÝ ---
+
+# 1. Hàm tải JSON
+function Load-JsonData {
+    $Status.Text = "Dang tai danh sach tu Github..."
+    $Form.Cursor = "WaitCursor"
+    try {
+        $JsonContent = Invoke-RestMethod -Uri "$JsonUrl?t=$(Get-Date -UFormat %s)" -ErrorAction Stop
+        $Global:IsoData = $JsonContent
+        
+        # Nạp dữ liệu vào bộ lọc Type
+        $CbType.Items.Clear()
+        $CbType.Items.Add("All")
+        $Types = $Global:IsoData | Select-Object -ExpandProperty type -Unique | Sort-Object
+        foreach ($t in $Types) { $CbType.Items.Add($t) }
+        $CbType.SelectedIndex = 0
+        
+        Filter-List
+        $Status.Text = "Da tai xong danh sach! (" + $Global:IsoData.Count + " muc)"
+    } catch {
+        $Status.Text = "Loi tai JSON! Kiem tra mang hoac Link Github."
+        [System.Windows.Forms.MessageBox]::Show("Khong tai được danh sach ISO!`nLoi: $($_.Exception.Message)", "Error")
+    }
+    $Form.Cursor = "Default"
+}
+
+# 2. Hàm lọc danh sách
+function Filter-List {
+    $CbResult.Items.Clear()
+    $SelType = $CbType.SelectedItem
+    $SelBit = $CbBit.SelectedItem
     
-    $DefaultName = "Windows.iso"
-    if ($SelectedName -match "Win 11") { $DefaultName = "Windows11.iso" }
-    elseif ($SelectedName -match "Win 10") { $DefaultName = "Windows10.iso" }
-    elseif ($SelectedName -match "Win 7") { $DefaultName = "Windows7.iso" }
-    elseif ($SelectedName -match "XP") { $DefaultName = "WindowsXP.iso" }
+    $Filtered = $Global:IsoData
+    if ($SelType -ne "All") { $Filtered = $Filtered | Where-Object { $_.type -eq $SelType } }
+    if ($SelBit -ne "All") { $Filtered = $Filtered | Where-Object { $_.bit -eq $SelBit } }
+    
+    foreach ($Item in $Filtered) {
+        $CbResult.Items.Add($Item.name)
+    }
+    
+    if ($CbResult.Items.Count -gt 0) { 
+        $CbResult.SelectedIndex = 0; $BtnDown.Enabled = $true 
+    } else { 
+        $CbResult.Text = ""; $BtnDown.Enabled = $false 
+    }
+}
+
+# Sự kiện thay đổi bộ lọc
+$CbType.Add_SelectedIndexChanged({ Filter-List })
+$CbBit.Add_SelectedIndexChanged({ Filter-List })
+$BtnLoad.Add_Click({ Load-JsonData })
+
+# 3. Hàm tải file (WebClient Optimized)
+$BtnDown.Add_Click({
+    $SelectedName = $CbResult.SelectedItem
+    # Tìm object trong mảng gốc dựa theo tên
+    $TargetItem = $Global:IsoData | Where-Object { $_.name -eq $SelectedName } | Select-Object -First 1
+    
+    if (!$TargetItem) { return }
+    $Url = $TargetItem.link
+    
+    # Tạo tên file gợi ý
+    $FileName = "Download.iso"
+    if ($Url -match "/([^/]+\.iso)$") { $FileName = $Matches[1] }
+    elseif ($Url -match "/([^/]+\.img)$") { $FileName = $Matches[1] }
+    else { $FileName = "$($TargetItem.type)_$($TargetItem.bit).iso" }
 
     $SaveDlg = New-Object System.Windows.Forms.SaveFileDialog
-    $SaveDlg.FileName = $DefaultName
-    $SaveDlg.Filter = "ISO Image (*.iso)|*.iso|All Files (*.*)|*.*"
+    $SaveDlg.FileName = $FileName
+    $SaveDlg.Filter = "Disk Image (*.iso;*.img)|*.iso;*.img|All Files (*.*)|*.*"
     
     if ($SaveDlg.ShowDialog() -eq "OK") {
         $LocalPath = $SaveDlg.FileName
-        $Btn.Enabled = $false; $Combo.Enabled = $false
+        $BtnDown.Enabled = $false; $CbResult.Enabled = $false
         
         try {
             $WebClient = New-Object System.Net.WebClient
+            # Thêm Header để Server không chặn
+            $WebClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
             
-            # Sự kiện khi thanh % thay đổi
             $WebClient.Add_DownloadProgressChanged({
                 $Percent = $_.ProgressPercentage
                 $Bar.Value = $Percent
@@ -88,24 +167,27 @@ $Btn.Add_Click({
                 $Status.Text = "Dang tai... $Percent% ($DaTai MB / $Tong MB)"
             })
             
-            # Sự kiện khi tải xong
             $WebClient.Add_DownloadFileCompleted({
                 $Bar.Value = 100
-                $Status.Text = "Tai thanh cong! Luu tai: $LocalPath"
-                $Btn.Enabled = $true; $Combo.Enabled = $true
-                [System.Windows.Forms.MessageBox]::Show("Da tai xong!", "Phat Tan PC")
+                $Status.Text = "HOAN TAT! Luu tai: $LocalPath"
+                $BtnDown.Enabled = $true; $CbResult.Enabled = $true
+                [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!`nFile: $LocalPath", "Phat Tan PC")
                 Invoke-Item (Split-Path $LocalPath)
             })
             
-            $Status.Text = "Dang ket noi Server..."
+            $Status.Text = "Dang ket noi Server (High Speed)..."
             $WebClient.DownloadFileAsync($Url, $LocalPath)
             
         } catch {
             $Status.Text = "Loi: $($_.Exception.Message)"
-            $Btn.Enabled = $true; $Combo.Enabled = $true
+            $BtnDown.Enabled = $true; $CbResult.Enabled = $true
+            [System.Windows.Forms.MessageBox]::Show("Loi Download: $($_.Exception.Message)", "Error")
         }
     }
 })
 
-$Form.Controls.Add($Btn)
+$Form.Controls.Add($BtnDown)
+
+# Tự động tải JSON khi mở Form
+$Form.Add_Shown({ Load-JsonData })
 $Form.ShowDialog() | Out-Null
