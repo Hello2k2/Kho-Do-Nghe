@@ -1,0 +1,136 @@
+[
+  {
+    "tab": "Hệ Thống & Driver",
+    "name": "JUKI Tool (Auto Soft + Optimize)",
+    "link": "JUKI.exe",
+    "filename": "JUKI.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Hệ Thống & Driver",
+    "name": "Driver Mang (3DP Net)",
+    "link": "3DP.Net.exe",
+    "filename": "3DPNet.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Hệ Thống & Driver",
+    "name": "Fix Loi Game (DirectX + Visual C++)",
+    "link": "DirectX.repack.exe",
+    "filename": "DX.exe",
+    "type": "Portable",
+    "irm": "Tai-Va-Chay 'vcredist.all.in.one.by.MMT.Windows.Tech.exe' 'VC.exe' 'Portable'"
+  },
+  {
+    "tab": "Hệ Thống & Driver",
+    "name": "Hien thi file an (Registry Mod)",
+    "type": "Script",
+    "irm": "Set-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' 'Hidden' 1; Set-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' 'HideFileExt' 0; Stop-Process -Name explorer -Force"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "Google Chrome Enterprise",
+    "link": "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi",
+    "filename": "Chrome.msi",
+    "type": "Msi"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "IDM Full Toolkit (Auto Fix)",
+    "link": "IDM.MMT.WINDOWS.TECH.exe",
+    "filename": "IDM.exe",
+    "type": "Portable",
+    "irm": "iex (irm is.gd/IDMFIX)"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "Unikey / EVKey (Gõ Tiếng Việt)",
+    "link": "EVKey.Setup.exe",
+    "filename": "EVKey.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "AnyDesk (Remote PC)",
+    "link": "Anydesk.6.2.1.exe",
+    "filename": "AnyDesk.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Tien Ich (Utilities)",
+    "name": "WinRAR Full",
+    "link": "WinRAR.7.13.exe",
+    "filename": "WinRAR.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Tien Ich (Utilities)",
+    "name": "HiBit Uninstaller (Gở Sạch)",
+    "link": "HiBitUninstaller.exe",
+    "filename": "HiBit.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Thiết Kế & Edit Video",
+    "name": "Photoshop 2023 (Repack)",
+    "link": "Photoshop.2023.Repack.exe",
+    "filename": "PTS2023.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Thiết Kế & Edit Video",
+    "name": "CapCut PC (Video Editor)",
+    "link": "CapCut_Setup.exe",
+    "filename": "CapCut.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Thiết Kế & Edit Video",
+    "name": "OBS Studio (Livestream)",
+    "link": "OBS-Studio-Full-Installer-x64.exe",
+    "filename": "OBS.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Anti-Virus & Security",
+    "name": "Kaspersky Free Antivirus",
+    "link": "https://dm.kaspersky-labs.com/en-US/Kaspersky4Win/21.3.10.391/startup.exe",
+    "filename": "KavSetup.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Anti-Virus & Security",
+    "name": "Malwarebytes Premium",
+    "link": "MBSetup.exe",
+    "filename": "MBSetup.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Windows Repair",
+    "name": "Tweaking.com (All-in-One Repair)",
+    "link": "tweaking.com_windows_repair_aio_setup.exe",
+    "filename": "WinRepair.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Windows Repair",
+    "name": "SSD Booster (Tang toc SSD)",
+    "link": "SSDBooster.exe",
+    "filename": "SSDBooster.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Install Drivers",
+    "name": "NVCleanstall (Driver NVIDIA Sach)",
+    "link": "NVCleanstall.exe",
+    "filename": "NVClean.exe",
+    "type": "Portable"
+  },
+  {
+    "tab": "Install Drivers",
+    "name": "Snappy Driver Installer (Lite)",
+    "link": "SDI_Lite.exe",
+    "filename": "SDI.exe",
+    "type": "Portable"
+  }
+]
