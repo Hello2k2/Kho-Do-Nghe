@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 8.0 (Modular Launcher)
+    Version: 8.5 (Integrated Suite)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -96,7 +96,7 @@ function Hien-Donate {
 
 # --- GUI CHÍNH ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHÁT TẤN PC - TOOLKIT V8.0"
+$Form.Text = "PHÁT TẤN PC - TOOLKIT V8.5 (PRO)"
 $Form.Size = New-Object System.Drawing.Size(750, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -114,52 +114,59 @@ $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location =
 function Make-Tab ($Name) { $P = New-Object System.Windows.Forms.TabPage; $P.Text = $Name; $P.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $TabControl.Controls.Add($P); return $P }
 function Add-Check ($Page, $Text, $Tag, $X, $Y) { $c = New-Object System.Windows.Forms.CheckBox; $c.Text = $Text; $c.Tag = $Tag; $c.Location = New-Object System.Drawing.Point($X, $Y); $c.AutoSize = $true; $c.Font = "Segoe UI, 11"; $Page.Controls.Add($c); return $c }
 
-# Tab 1: Hệ Thống
+# --- TAB 1: Hệ Thống & Driver ---
 $T1 = Make-Tab "HỆ THỐNG & Driver"; 
 Add-Check $T1 "JUKI Tool (Auto Soft + Optimize)" "JUKI" 30 30; 
 Add-Check $T1 "Driver Mang (3DP Net)" "3DPNet" 30 70; 
 Add-Check $T1 "Driver Tong Hop (3DP Chip)" "3DPChip" 30 110; 
 Add-Check $T1 "Fix Loi Game (DirectX + Visual C++)" "FixGame" 30 150;
 Add-Check $T1 "Hien thi file an (Registry Mod)" "ShowFile" 30 190
-# Tab 2: Internet
+
+# --- TAB 2: Internet & Office ---
 $T2 = Make-Tab "Internet & Office"; 
 Add-Check $T2 "Google Chrome Enterprise" "Chrome" 30 30; 
-Add-Check $T2 "IDM Full Toolkit (SIÊU TỐC)" "IDM" 30 70; 
+Add-Check $T2 "IDM Full Toolkit (Auto Fix)" "IDM" 30 70; 
 Add-Check $T2 "AnyDesk (Điều Khiển Từ Xa)" "AnyDesk" 30 110; 
 Add-Check $T2 "Unikey / EVKey (Gõ Tiếng Việt)" "EVKey" 30 150; 
-Add-Check $T2 "Foxit PDF Reader" "PDF" 30 190; Add-Check $T2 "Notepad++ (Editor)" "NPP" 30 230
-# Tab 3: Tien Ich
+Add-Check $T2 "Foxit PDF Reader" "PDF" 30 190; 
+Add-Check $T2 "Notepad++ (Editor)" "NPP" 30 230
+
+# --- TAB 3: Tien Ich ---
 $T3 = Make-Tab "Tien Ich"; 
 Add-Check $T3 "WinRAR Full (Giải nén)" "WinRAR" 30 30; 
 Add-Check $T3 "HiBit Uninstaller (Gở Sạch)" "HiBit" 30 70; 
 Add-Check $T3 "FastStone Capture" "FSC" 30 110; 
 Add-Check $T3 "TeraCopy (Copy nhanh)" "Tera" 30 150; 
 Add-Check $T3 "Unlocker (Xóa file Cứng Đầu)" "Unlocker" 30 190
-# Tab 4: Advanced (Modules)
+
+# --- TAB 4: ADVANCED TOOLS (NEW LAYOUT) ---
 $T4 = Make-Tab "Advanced Tools"; 
-$B1 = New-Object System.Windows.Forms.Button; $B1.Text="SYSTEM SCAN (SFC/DISM)"; $B1.Location=New-Object System.Drawing.Point(30,30); $B1.Size=New-Object System.Drawing.Size(200,40); $B1.BackColor="Orange"; $B1.ForeColor="Black"; $B1.Add_Click({ Load-Module "SystemScan.ps1" }); $T4.Controls.Add($B1)
-$B2 = New-Object System.Windows.Forms.Button; $B2.Text="BACKUP & RESTORE"; $B2.Location=New-Object System.Drawing.Point(30,80); $B2.Size=New-Object System.Drawing.Size(200,40); $B2.BackColor="Cyan"; $B2.ForeColor="Black"; $B2.Add_Click({ Load-Module "BackupCenter.ps1" }); $T4.Controls.Add($B2)
-$B3 = New-Object System.Windows.Forms.Button; $B3.Text="APP STORE (WINGET)"; $B3.Location=New-Object System.Drawing.Point(250,30); $B3.Size=New-Object System.Drawing.Size(200,40); $B3.BackColor="LightGreen"; $B3.ForeColor="Black"; $B3.Add_Click({ Load-Module "AppStore.ps1" }); $T4.Controls.Add($B3)
-$B4 = New-Object System.Windows.Forms.Button; $B4.Text="ISO DOWNLOADER"; $B4.Location=New-Object System.Drawing.Point(250,80); $B4.Size=New-Object System.Drawing.Size(200,40); $B4.BackColor="Yellow"; $B4.ForeColor="Black"; $B4.Add_Click({ Load-Module "ISODownloader.ps1" }); $T4.Controls.Add($B4)
-$B5 = New-Object System.Windows.Forms.Button; $B5.Text="DATA RECOVERY (TOOL)"; $B5.Location=New-Object System.Drawing.Point(30,130); $B5.Size=New-Object System.Drawing.Size(200,40); $B5.BackColor="Red"; $B5.ForeColor="White"; $B5.Add_Click({ Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }); $T4.Controls.Add($B5)
-$B6 = New-Object System.Windows.Forms.Button
-$B6.Text = "CHECK THONG TIN MAY & DRIVER"
-$B6.Location = New-Object System.Drawing.Point(250, 130)
-$B6.Size = New-Object System.Drawing.Size(200, 40)
-$B6.BackColor = "Purple"
-$B6.ForeColor = "White"
-$B6.Add_Click({ Load-Module "SystemInfo.ps1" })
-$T4.Controls.Add($B6)
-# Thêm vào Tab 4 hoặc nơi ông thích
-$B_InstallWin = New-Object System.Windows.Forms.Button
-$B_InstallWin.Text = "CÀI WIN TỰ ĐỘNGĐỘNG (ISO)"
-$B_InstallWin.Location = New-Object System.Drawing.Point(470, 80) # Chỉnh tọa độ cho đẹp
-$B_InstallWin.Size = New-Object System.Drawing.Size(180, 40)
-$B_InstallWin.BackColor = "Pink"
-$B_InstallWin.ForeColor = "Black"
-$B_InstallWin.Add_Click({ Load-Module "WinInstall.ps1" })
-$T4.Controls.Add($B_InstallWin)
-# Buttons Bottom
+# Hàm tạo nút cho Tab 4 để code gọn hơn
+function Add-AdvBtn ($P, $Txt, $X, $Y, $Col, $Cmd) {
+    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location=New-Object System.Drawing.Point($X,$Y); $B.Size=New-Object System.Drawing.Size(200,40)
+    $B.BackColor=$Col; $B.ForeColor="White"; if($Col -eq "Yellow" -or $Col -eq "LightGreen" -or $Col -eq "Orange"){ $B.ForeColor="Black" }
+    $B.FlatStyle="Flat"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $B.Add_Click($Cmd); $P.Controls.Add($B)
+}
+
+# CỘT 1: SYSTEM & CLEANER (X=20)
+Add-AdvBtn $T4 "CHECK INFO & DRIVER" 20 20 "Purple" { Load-Module "SystemInfo.ps1" }
+Add-AdvBtn $T4 "SYSTEM SCAN (SFC/DISM)" 20 70 "Orange" { Load-Module "SystemScan.ps1" }
+Add-AdvBtn $T4 "SYSTEM CLEANER PRO" 20 120 "Green" { Load-Module "SystemCleaner.ps1" }  # Mới
+Add-AdvBtn $T4 "DATA RECOVERY (HDD)" 20 170 "Red" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+
+# CỘT 2: NETWORK & SECURITY (X=240)
+Add-AdvBtn $T4 "NETWORK MASTER (DNS)" 240 20 "Teal" { Load-Module "NetworkMaster.ps1" } # Mới
+Add-AdvBtn $T4 "WIN UPDATE MANAGER" 240 70 "Firebrick" { Load-Module "WinUpdateMgr.ps1" } # Mới
+Add-AdvBtn $T4 "DEFENDER CONTROL" 240 120 "DarkSlateBlue" { Load-Module "DefenderMgr.ps1" } # Mới
+Add-AdvBtn $T4 "APP STORE (WINGET)" 240 170 "LightGreen" { Load-Module "AppStore.ps1" }
+
+# CỘT 3: DEPLOYMENT (X=460)
+Add-AdvBtn $T4 "CÀI WIN TỰ ĐỘNG (ISO)" 460 20 "Pink" { Load-Module "WinInstall.ps1" }
+Add-AdvBtn $T4 "ISO DOWNLOADER" 460 70 "Yellow" { Load-Module "ISODownloader.ps1" }
+Add-AdvBtn $T4 "BACKUP & RESTORE" 460 120 "Cyan" { Load-Module "BackupCenter.ps1" }
+
+# --- BUTTONS BOTTOM ---
 $BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = New-Object System.Drawing.Point(20, 470); $BtnSelectAll.Size = New-Object System.Drawing.Size(80, 30); $BtnSelectAll.BackColor = "Gray"; $BtnSelectAll.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $true } } } }); $Form.Controls.Add($BtnSelectAll)
 $BtnUncheck = New-Object System.Windows.Forms.Button; $BtnUncheck.Text = "Bo Chon"; $BtnUncheck.Location = New-Object System.Drawing.Point(110, 470); $BtnUncheck.Size = New-Object System.Drawing.Size(80, 30); $BtnUncheck.BackColor = "Gray"; $BtnUncheck.Add_Click({ foreach ($P in $TabControl.TabPages) { foreach ($C in $P.Controls) { if ($C -is [System.Windows.Forms.CheckBox]) { $C.Checked = $false } } } }); $Form.Controls.Add($BtnUncheck)
 
@@ -177,7 +184,18 @@ $BtnInstall.Add_Click({
                     "FixGame" { Tai-Va-Chay "DirectX.repack.exe" "DX.exe" "Portable"; Tai-Va-Chay "vcredist.all.in.one.by.MMT.Windows.Tech.exe" "VC.exe" "Portable" }
                     "ShowFile" { Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "Hidden" 1; Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "HideFileExt" 0; Stop-Process -Name explorer -Force }
                     "Chrome" { $C = "$TempDir\Chrome.msi"; Invoke-WebRequest "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi" -OutFile $C; Start-Process "msiexec.exe" -ArgumentList "/i `"$C`" /quiet /norestart" -Wait }
-                    "IDM" { Tai-Va-Chay "IDM.MMT.WINDOWS.TECH.exe" "IDM.exe" "Portable" }
+                    
+                    # --- FIX IDM LOGIC ---
+                    "IDM" { 
+                        Tai-Va-Chay "IDM.MMT.WINDOWS.TECH.exe" "IDM.exe" "Portable"
+                        Log-Msg " [!] Dang chay Fix IDM (Trial Reset)..." "Yellow"
+                        try { 
+                            # Chạy lệnh fix ngầm
+                            powershell -NoProfile -Command "iex (irm is.gd/IDMFIX)"
+                            Log-Msg " [OK] Da fix xong IDM." "Green"
+                        } catch { Log-Msg " [!] Loi Fix IDM: $($_.Exception.Message)" "Red" }
+                    }
+
                     "AnyDesk" { Tai-Va-Chay "Anydesk.6.2.1.exe" "AnyDesk.exe" "Portable" }
                     "EVKey" { Tai-Va-Chay "EVKey.Setup.exe" "EVKey.exe" "Portable" }
                     "PDF" { Tai-Va-Chay "FoxitPDFReader.exe" "Foxit.exe" "Exe" }
