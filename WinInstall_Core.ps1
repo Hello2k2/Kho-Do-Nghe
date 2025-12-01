@@ -13,7 +13,7 @@ function Write-DebugLog ($Message, $Type="INFO") {
     $Line = "[$(Get-Date -Format 'HH:mm:ss')] [$Type] $Message"; $Line | Out-File -FilePath $DebugLog -Append -Encoding UTF8; Write-Host $Line -ForegroundColor Cyan
 }
 if (Test-Path $DebugLog) { Remove-Item $DebugLog -Force }
-Write-DebugLog "=== CORE MODULE V41.0 (DISM RESCUE) ===" "INIT"
+Write-DebugLog "=== CORE MODULE V42.0 (SMART MOUNT) ===" "INIT"
 
 # --- HELPER FUNCTIONS ---
 function Mount-And-GetDrive ($IsoPath) {
@@ -41,7 +41,7 @@ function Create-Boot-Entry ($WimPath) {
 }
 
 # --- GUI SETUP ---
-$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V41.0 DISM RESCUE)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form = New-Object System.Windows.Forms.Form; $Form.Text = "CAI DAT WINDOWS (V42.0 SMART MOUNT)"; $Form.Size = "850, 550"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
 
 $GBIso = New-Object System.Windows.Forms.GroupBox; $GBIso.Text = "1. CHON FILE ISO"; $GBIso.Location = "20,10"; $GBIso.Size = "790,80"; $GBIso.ForeColor = "Cyan"; $Form.Controls.Add($GBIso)
@@ -57,7 +57,7 @@ $LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text = "San sang.
 $BtnStart = New-Object System.Windows.Forms.Button; $BtnStart.Text = "BAT DAU CAI DAT (AUTO DISM)"; $BtnStart.Location = "20,300"; $BtnStart.Size = "790,60"; $BtnStart.BackColor = "Red"; $BtnStart.ForeColor = "White"; $BtnStart.Font = $FontBold
 $BtnStart.Add_Click({ Start-Dism-Inject }); $Form.Controls.Add($BtnStart)
 
-# --- LOGIC DETECT SOURCE DRIVE ---
+# --- LOGIC ---
 function Load-WimInfo {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { return }
     $Form.Cursor = "WaitCursor"; $CmbEd.Items.Clear()
@@ -88,61 +88,55 @@ function Copy-FileWithProgress ($Source, $Dest) {
     $SrcFile.Close(); $DestFile.Close(); $SrcFile.Dispose(); $DestFile.Dispose(); $PbCopy.Visible = $false
 }
 
-function Clean-DismState ($Dir) {
-    Write-DebugLog "Cleaning DISM state..." "CLEAN"
-    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
-    if (Test-Path $Dir) {
-        # Force unmount if stuck
-        Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Dir`" /Discard" -Wait -NoNewWindow
-    }
-}
-
 function Start-Dism-Inject {
     $ISO = $CmbISO.SelectedItem; if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO!"); return }
     if ($CmbEd.SelectedItem) { $Idx = $CmbEd.SelectedItem.ToString().Split("-")[0].Trim() } else { $Idx = 1 }
 
     $Drive = Mount-And-GetDrive $ISO; if ($Drive -match "([A-Z]:)") { $Drive = $matches[1] }
     
-    # 1. PREPARE DIRS (RANDOM NAME TO AVOID LOCK)
-    $WorkDir = "C:\WinInstall_Work_$($PID)"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
-    $MountDir = "$WorkDir\Mount"; New-Item -ItemType Directory -Path $MountDir -Force | Out-Null
+    # 1. PREPARE DIRS (USE SHORT PATH)
+    $WorkDir = "C:\MountTemp"; if (Test-Path $WorkDir) { cmd /c "rmdir /s /q $WorkDir" }
+    New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+    $MountDir = "$WorkDir\M"; New-Item -ItemType Directory -Path $MountDir -Force | Out-Null
+    
     $SourceDir = if ($Global:SourceDrive) { "$($Global:SourceDrive)\WinSource" } else { "$env:SystemDrive\`$WINDOWS.~BT\Sources" }
     New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
 
-    # 2. COPY INSTALL.WIM
+    # 2. COPY FILES
     $WimSrc = "$Drive\sources\install.wim"; if (!(Test-Path $WimSrc)) { $WimSrc = "$Drive\sources\install.esd" }
-    $LblStatus.Text = "Dang copy file cai dat vao $SourceDir..."; Copy-FileWithProgress $WimSrc "$SourceDir\install.wim"
+    $LblStatus.Text = "Dang copy file cai dat..."; Copy-FileWithProgress $WimSrc "$SourceDir\install.wim"
     
-    # 3. COPY OOBE XML
-    $XML = "$env:TEMP\unattend.xml"
-    if (Test-Path $XML) { Copy-Item $XML "$SourceDir\unattend.xml" -Force }
+    $XML = "$env:TEMP\unattend.xml"; if (Test-Path $XML) { Copy-Item $XML "$SourceDir\unattend.xml" -Force }
 
-    # 4. PREPARE BOOT.WIM & FIX LOCKS
     $LblStatus.Text = "Dang xu ly file Boot..."
     
-    # Clean Truoc khi lam
-    Clean-DismState $MountDir
-
+    # CLEANUP DISM
+    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+    
+    # COPY & UNBLOCK BOOT.WIM
     Copy-Item "$Drive\sources\boot.wim" "$WorkDir\boot.wim" -Force
-    Set-ItemProperty -Path "$WorkDir\boot.wim" -Name IsReadOnly -Value $false
+    cmd /c "attrib -r -s -h $WorkDir\boot.wim" # Force Remove ReadOnly by CMD
     Copy-Item "$Drive\boot\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     
-    # MOUNT (RETRY LOGIC)
-    $MountSuccess = $false
-    for ($i=1; $i -le 3; $i++) {
-        $LblStatus.Text = "Mounting Boot.wim (Attempt $i)..."
-        $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -NoNewWindow -PassThru
-        if ($Proc.ExitCode -eq 0) { $MountSuccess = $true; break }
-        else { 
-            Write-DebugLog "Mount failed ($($Proc.ExitCode)). Cleaning up..." "WARN"
-            Clean-DismState $MountDir
-            Start-Sleep -Seconds 2
-        }
+    # 3. MOUNT WITH AUTO-INDEX
+    $Mounted = $false
+    # Try Index 2 first (Standard Setup)
+    Write-DebugLog "Trying Mount Index 2..." "MOUNT"
+    $P1 = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -NoNewWindow -PassThru
+    
+    if ($P1.ExitCode -eq 0) { 
+        $Mounted = $true 
+    } else {
+        # If failed, Try Index 1 (PE)
+        Write-DebugLog "Index 2 Failed. Trying Index 1..." "MOUNT_RETRY"
+        Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+        $P2 = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:1 /MountDir:`"$MountDir`"" -Wait -NoNewWindow -PassThru
+        if ($P2.ExitCode -eq 0) { $Mounted = $true }
     }
 
-    if (!$MountSuccess) { [System.Windows.Forms.MessageBox]::Show("LOI MOUNT: Khong the mount file boot.wim sau 3 lan thu.", "Fatal Error"); return }
-    
-    # 5. INJECT AUTO SCRIPT
+    if (!$Mounted) { [System.Windows.Forms.MessageBox]::Show("Khong the Mount boot.wim (Ca Index 1 va 2 deu loi).`nFile ISO nay co the bi loi!", "Fatal"); return }
+
+    # 4. INJECT SCRIPT
     $ScriptContent = @"
 @echo off
 title PHAT TAN PC - AUTO INSTALLER
@@ -177,19 +171,18 @@ set TARGET=%SRC_DRV%
 :FoundTarget
 echo [OK] O DIA MUC TIEU: %TARGET%
 
-:: 3. WIPE / CLEANUP
+:: 3. CLEANUP
 if /i "%TARGET%" NEQ "%SRC_DRV%" (
     echo [INFO] DANG FORMAT O %TARGET%...
     format %TARGET% /q /y /fs:ntfs
 ) else (
-    echo [INFO] CHE DO 1 O CUNG -> GHI DE (KHONG FORMAT)
+    echo [INFO] CHE DO 1 O CUNG -> GHI DE
     rd /s /q %TARGET%\Windows
     rd /s /q "%TARGET%\Program Files"
-    rd /s /q "%TARGET%\Program Files (x86)"
     rd /s /q "%TARGET%\ProgramData"
 )
 
-:: 4. APPLY IMAGE
+:: 4. APPLY
 echo.
 echo  ===================================================
 echo    DANG BUNG FILE WIN (DISM)... KHONG TAT MAY!
@@ -197,41 +190,32 @@ echo  ===================================================
 echo.
 dism /Apply-Image /ImageFile:"%INSTALL_WIM%" /Index:$Idx /ApplyDir:%TARGET%\
 
-:: 5. BOOT & XML
+:: 5. BOOT & CONFIG
 echo Dang cai Bootloader...
 bcdboot %TARGET%\Windows /s %TARGET%
 if exist "%SRC_DRV%\WinSource\unattend.xml" (
-    echo Dang copy file cau hinh...
+    echo Dang copy cau hinh...
     mkdir %TARGET%\Windows\Panther
     copy "%SRC_DRV%\WinSource\unattend.xml" "%TARGET%\Windows\Panther\unattend.xml" /y
 )
 
 echo.
 echo  ===================================================
-echo    XONG! MAY SE KHOI DONG LAI TRONG 5 GIAY...
+echo    XONG! KHOI DONG LAI SAU 5 GIAY...
 echo  ===================================================
 timeout /t 5
 wpeutil reboot
 "@
     [IO.File]::WriteAllText("$MountDir\Windows\System32\AutoSetup.cmd", $ScriptContent)
-    $IniContent = "[LaunchApps]`r`n%SystemDrive%\Windows\System32\AutoSetup.cmd"
-    [IO.File]::WriteAllText("$MountDir\Windows\System32\winpeshl.ini", $IniContent)
+    [IO.File]::WriteAllText("$MountDir\Windows\System32\winpeshl.ini", "[LaunchApps]`r`n%SystemDrive%\Windows\System32\AutoSetup.cmd")
 
-    # 6. UNMOUNT & COMMIT (ANTI-LOCK)
-    $LblStatus.Text = "Dang luu file Boot (Unmounting)..."
-    # Change dir to root to release handle
-    Set-Location "C:\"
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
-    
+    # 5. UNMOUNT
+    $LblStatus.Text = "Dang luu file Boot..."
     Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Commit" -Wait -NoNewWindow
     
-    # 7. MOVE TO C:
-    if (Test-Path "$WorkDir\boot.wim") {
-        Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force
-        Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall_Boot.wim" -Force
+    Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
     
-    # 8. BCD ENTRY
     if (Create-Boot-Entry "\WinInstall_Boot.wim") {
          if ([System.Windows.Forms.MessageBox]::Show("DA XONG! KHOI DONG LAI NGAY?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force }
     }
