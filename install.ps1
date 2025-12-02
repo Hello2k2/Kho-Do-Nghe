@@ -82,11 +82,31 @@ function Load-Module ($ScriptName) {
 }
 
 # --- TẢI JSON DATA ---
-Log-Msg "Dang tai danh sach phan mem tu Cloud..." "Yellow"
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
 try {
-    $AppData = Invoke-RestMethod -Uri "$JsonUrl?t=$(Get-Date -UFormat %s)" -ErrorAction Stop
+    # 1. Tạo timestamp để tránh cache (Dùng UnixTimeSeconds chuẩn hơn %s)
+    $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
+    
+    # 2. Thêm User-Agent giả lập trình duyệt để GitHub không chặn
+    $Headers = @{
+        "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PowerShell/9.5"
+        "Cache-Control" = "no-cache"
+    }
+
+    # 3. Tải dữ liệu
+    $AppData = Invoke-RestMethod -Uri "$JsonUrl?t=$Ts" -Headers $Headers -ErrorAction Stop
+    
+    # 4. Kiểm tra dữ liệu
+    if (!$AppData -or $AppData.Count -eq 0) { throw "File JSON rong hoac khong dung dinh dang." }
+    
+    Log-Msg " [OK] Da tai danh sach: $($AppData.Count) ung dung." "Green"
+
 } catch {
-    [System.Windows.Forms.MessageBox]::Show("Khong tai duoc file JSON Apps!", "Loi Mang"); Exit
+    # 5. Hiện nguyên văn lỗi để debug (Quan trọng)
+    $RealError = $_.Exception.Message
+    [System.Windows.Forms.MessageBox]::Show("KHONG TAI DUOC FILE APPS.JSON!`n`nNguyen nhan chi tiet:`n$RealError`n`nLink: $JsonUrl", "Loi Debug", "OK", "Error")
+    Exit
 }
 
 # --- GUI CHÍNH ---
