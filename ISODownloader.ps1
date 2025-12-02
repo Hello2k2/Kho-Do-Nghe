@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # --- CẤU HÌNH ONLINE ---
-# SỬA LINK RAW GITHUB CỦA BẠN (Link này phải chuẩn nhé, test trên trình duyệt trước)
+# Link file JSON (Đã sửa lại link chuẩn main)
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list.json"
 
 # --- TỐI ƯU TỐC ĐỘ MẠNG ---
@@ -12,7 +12,7 @@ $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CLOUD ISO DOWNLOADER - PHAT TAN PC (FIXED)"
+$Form.Text = "CLOUD ISO DOWNLOADER - PHAT TAN PC (TRIM FIXED)"
 $Form.Size = New-Object System.Drawing.Size(700, 450)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -79,27 +79,28 @@ $BtnDown.Location = New-Object System.Drawing.Point(180, 310); $BtnDown.Size = N
 $BtnDown.BackColor = "LimeGreen"; $BtnDown.ForeColor = "Black"; $BtnDown.FlatStyle = "Flat"
 $BtnDown.Enabled = $false
 
-# --- HÀM XỬ LÝ (FIXED LOGIC) ---
+# --- HÀM XỬ LÝ (FIXED TRIM) ---
 
 # 1. Hàm tải JSON
 function Load-JsonData {
     $Status.Text = "Dang tai danh sach tu Github..."
     $Form.Cursor = "WaitCursor"
     
-    # Bật lại TLS 1.2 cho chắc cú
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
     try {
-        # Tạo Timestamp chuẩn để né Cache
         $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
         
-        # HEADER QUAN TRỌNG ĐỂ NÉ CHẶN BOT
         $Headers = @{
             "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PowerShell/ISODownloader"
             "Cache-Control" = "no-cache"
         }
 
-        $JsonContent = Invoke-RestMethod -Uri "$JsonUrl?t=$Ts" -Headers $Headers -ErrorAction Stop
+        # === FIX LỖI HOSTNAME: THÊM .Trim() VÀO ĐÂY ===
+        $CleanUrl = "$($JsonUrl.Trim())?t=$Ts"
+        
+        # Tải dữ liệu
+        $JsonContent = Invoke-RestMethod -Uri $CleanUrl -Headers $Headers -ErrorAction Stop
         
         if (!$JsonContent) { throw "File JSON rong hoac sai dinh dang." }
 
@@ -115,10 +116,10 @@ function Load-JsonData {
         Filter-List
         $Status.Text = "Da tai xong danh sach! (" + $Global:IsoData.Count + " muc)"
     } catch {
-        # Hiện lỗi chi tiết
         $Err = $_.Exception.Message
         $Status.Text = "Loi: $Err"
-        [System.Windows.Forms.MessageBox]::Show("KHONG TAI DUOC DANH SACH ISO!`n`nLoi chi tiet: $Err`n`nLink: $JsonUrl", "Loi Mang", "OK", "Error")
+        # Hiện link CleanUrl để debug xem đã sạch chưa
+        [System.Windows.Forms.MessageBox]::Show("LOI TAI DANH SACH ISO!`n`nLoi: $Err`n`nLink Debug: [$CleanUrl]", "Loi Mang", "OK", "Error")
     }
     $Form.Cursor = "Default"
 }
@@ -149,10 +150,9 @@ $CbType.Add_SelectedIndexChanged({ Filter-List })
 $CbBit.Add_SelectedIndexChanged({ Filter-List })
 $BtnLoad.Add_Click({ Load-JsonData })
 
-# 3. Hàm tải file (WebClient Optimized)
+# 3. Hàm tải file
 $BtnDown.Add_Click({
     $SelectedName = $CbResult.SelectedItem
-    # Tìm object trong mảng gốc dựa theo tên
     $TargetItem = $Global:IsoData | Where-Object { $_.name -eq $SelectedName } | Select-Object -First 1
     
     if (!$TargetItem) { return }
@@ -174,7 +174,6 @@ $BtnDown.Add_Click({
         
         try {
             $WebClient = New-Object System.Net.WebClient
-            # Thêm Header User-Agent cho phần tải file luôn (phòng hờ server bên kia chặn)
             $WebClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
             
             $WebClient.Add_DownloadProgressChanged({
