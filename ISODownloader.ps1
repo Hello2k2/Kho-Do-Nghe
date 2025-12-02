@@ -2,12 +2,11 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # --- CẤU HÌNH ---
-# Link JSON chuẩn (Đã fix lỗi Hostname)
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list.json"
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ISO DOWNLOADER V5.0 - BITS ENGINE (MICROSOFT TECHNOLOGY)"
+$Form.Text = "ISO DOWNLOADER V5.1 - BITS ENGINE (FIXED UI)"
 $Form.Size = New-Object System.Drawing.Size(700, 480)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -17,8 +16,13 @@ $Form.MaximizeBox = $false
 
 $Global:IsoData = @()
 
+# FONT CHUẨN (Fix lỗi font)
+$FontBold = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
+
 # Header
-$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (BITS ENGINE)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.Font="Segoe UI, 12, Bold"; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
+$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (BITS ENGINE)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
+$Lbl.Font = $FontBold
 
 # Filter
 $GbFilter = New-Object System.Windows.Forms.GroupBox; $GbFilter.Text="Bo Loc"; $GbFilter.Location="20,50"; $GbFilter.Size="640,70"; $GbFilter.ForeColor="Yellow"; $Form.Controls.Add($GbFilter)
@@ -32,12 +36,13 @@ $CbResult = New-Object System.Windows.Forms.ComboBox; $CbResult.Location="20,155
 
 # Progress
 $Bar = New-Object System.Windows.Forms.ProgressBar; $Bar.Location="20,250"; $Bar.Size="640,30"; $Form.Controls.Add($Bar)
-$Status = New-Object System.Windows.Forms.Label; $Status.Text="San sang."; $Status.AutoSize=$true; $Status.Location="20,220"; $Status.ForeColor="Lime"; $Form.Controls.Add($Status)
+$Status = New-Object System.Windows.Forms.Label; $Status.Text="San sang."; $Status.AutoSize=$true; $Status.Location="20,220"; $Status.ForeColor="Lime"; $Status.Font=$FontNorm; $Form.Controls.Add($Status)
 
 # Button
-$BtnDown = New-Object System.Windows.Forms.Button; $BtnDown.Text="DOWNLOAD BITS (ON DINH NHAT)"; $BtnDown.Font="Segoe UI, 12, Bold"; $BtnDown.Location="180,310"; $BtnDown.Size="340,50"; $BtnDown.BackColor="LimeGreen"; $BtnDown.ForeColor="Black"; $BtnDown.FlatStyle="Flat"; $BtnDown.Enabled=$false; $Form.Controls.Add($BtnDown)
+$BtnDown = New-Object System.Windows.Forms.Button; $BtnDown.Text="DOWNLOAD BITS (ON DINH NHAT)"; $BtnDown.Location="180,310"; $BtnDown.Size="340,50"; $BtnDown.BackColor="LimeGreen"; $BtnDown.ForeColor="Black"; $BtnDown.FlatStyle="Flat"; $BtnDown.Enabled=$false; $Form.Controls.Add($BtnDown)
+$BtnDown.Font = $FontBold
 
-# --- BITS ENGINE CORE ---
+# --- BITS ENGINE CORE (FIXED) ---
 function Start-BitsDownload ($Url, $DestPath) {
     Import-Module BitsTransfer
     $Status.Text = "Dang khoi tao BITS Transfer..."
@@ -45,32 +50,43 @@ function Start-BitsDownload ($Url, $DestPath) {
     [System.Windows.Forms.Application]::DoEvents()
 
     try {
-        # Bắt đầu tải BITS (Asynchronous - Không treo máy)
-        # Priority Foreground = Ép mạng chạy max tốc độ (mặc định BITS chạy nền sẽ chậm)
+        # Bắt đầu tải BITS (Asynchronous)
         $Job = Start-BitsTransfer -Source $Url -Destination $DestPath -Asynchronous -Priority Foreground -DisplayName "PhatTan_ISO_Download"
         
         # Vòng lặp cập nhật tiến độ
-        while ($Job.JobState -eq "Transferring" -or $Job.JobState -eq "Connecting" -or $Job.JobState -eq "Queued") {
+        do {
+            # Refresh Job Object để lấy trạng thái mới nhất
             $Job = Get-BitsTransfer -JobId $Job.JobId
-            
-            if ($Job.TotalBytes -gt 0) {
-                $Percent = [Math]::Min(100, [Math]::Round(($Job.BytesTransferred / $Job.TotalBytes) * 100))
-                $Bar.Value = [int]$Percent
-                
-                $MB_Trans = [Math]::Round($Job.BytesTransferred / 1MB, 2)
-                $MB_Total = [Math]::Round($Job.TotalBytes / 1MB, 2)
-                
-                $Status.Text = "BITS Running... $Percent% ($MB_Trans MB / $MB_Total MB)"
-            } else {
-                $Status.Text = "Dang ket noi Server..."
+            $State = $Job.JobState
+
+            if ($State -eq "Transferring" -or $State -eq "Transferred") {
+                if ($Job.TotalBytes -gt 0) {
+                    $Percent = [Math]::Min(100, [Math]::Round(($Job.BytesTransferred / $Job.TotalBytes) * 100))
+                    $Bar.Value = [int]$Percent
+                    
+                    $MB_Trans = [Math]::Round($Job.BytesTransferred / 1MB, 2)
+                    $MB_Total = [Math]::Round($Job.TotalBytes / 1MB, 2)
+                    
+                    $Status.Text = "Downloading... $Percent% ($MB_Trans MB / $MB_Total MB)"
+                } else {
+                    $Status.Text = "Dang ket noi & cap phat dung luong..."
+                }
+            } 
+            elseif ($State -eq "Connecting") {
+                $Status.Text = "Dang ket noi Server (Connecting)..."
             }
-            
-            # Giữ cho giao diện không bị đơ
+            elseif ($State -eq "Error" -or $State -eq "TransientError") {
+                break # Thoát vòng lặp để xử lý lỗi
+            }
+
             [System.Windows.Forms.Application]::DoEvents()
-            Start-Sleep -Milliseconds 250
-        }
+            Start-Sleep -Milliseconds 500
+
+        } while ($Job.JobState -ne "Transferred" -and $Job.JobState -ne "Error" -and $Job.JobState -ne "TransientError")
         
-        # Kiểm tra kết quả
+        # Xử lý kết quả
+        $Job = Get-BitsTransfer -JobId $Job.JobId # Lấy trạng thái cuối cùng
+        
         if ($Job.JobState -eq "Transferred") {
             Complete-BitsTransfer -JobId $Job.JobId
             $Bar.Value = 100
@@ -79,11 +95,18 @@ function Start-BitsDownload ($Url, $DestPath) {
             Invoke-Item (Split-Path $DestPath)
         }
         else {
-            # Nếu lỗi
-            $Err = $Job | Select-Object -ExpandProperty Error
-            $Msg = if ($Err) { $Err.Message } else { $Job.JobState }
+            # Lấy thông tin lỗi an toàn hơn
+            $Msg = "Unknown Error"
+            try { 
+                # Cách lấy lỗi chuẩn của BITS object
+                if ($Job.ErrorCount -gt 0) {
+                     $Msg = $Job.ErrorDescription
+                } else {
+                     $Msg = $Job.JobState 
+                }
+            } catch { $Msg = $Job.JobState }
+            
             $Status.Text = "Loi: $Msg"
-            # Hủy job lỗi để không treo
             Remove-BitsTransfer -JobId $Job.JobId -ErrorAction SilentlyContinue
             [System.Windows.Forms.MessageBox]::Show("Loi BITS: $Msg", "Error")
         }
@@ -93,7 +116,7 @@ function Start-BitsDownload ($Url, $DestPath) {
     }
 }
 
-# --- HANDLERS ---
+# --- HANDLERS (FIXED TRIM) ---
 function Load-JsonData {
     $Status.Text = "Dang tai danh sach..."
     $Form.Cursor = "WaitCursor"
@@ -102,7 +125,6 @@ function Load-JsonData {
         $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
         $Headers = @{ "User-Agent" = "Mozilla/5.0"; "Cache-Control" = "no-cache" }
         
-        # Link JSON đã fix lỗi khoảng trắng
         $JsonContent = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts" -Headers $Headers -ErrorAction Stop
         
         if (!$JsonContent) { throw "JSON Empty" }
