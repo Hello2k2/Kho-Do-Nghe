@@ -14,7 +14,7 @@ $ErrorActionPreference = "SilentlyContinue"
 $BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
 $RawUrl  = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/"
 # QUAN TRỌNG: LINK FILE JSON CỦA BẠN
-$JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.json" 
+$JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.json"
 
 $TempDir = "$env:TEMP\PhatTan_Tool"
 if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir | Out-Null }
