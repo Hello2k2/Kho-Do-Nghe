@@ -95,7 +95,7 @@ try {
     }
 
     # 3. Tải dữ liệu
-    $AppData = Invoke-RestMethod -Uri "$JsonUrl?t=$Ts" -Headers $Headers -ErrorAction Stop
+    $AppData = Invoke-RestMethod -Uri $JsonUrl.Trim() -Headers $Headers -ErrorAction Stop
     
     # 4. Kiểm tra dữ liệu
     if (!$AppData -or $AppData.Count -eq 0) { throw "File JSON rong hoac khong dung dinh dang." }
