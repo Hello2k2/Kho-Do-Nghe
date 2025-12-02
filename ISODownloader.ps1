@@ -4,77 +4,69 @@ Add-Type -AssemblyName System.Drawing
 # --- CẤU HÌNH ---
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list.json"
 
-# --- TỐI ƯU KẾT NỐI ---
+# Tối ưu mạng (Cực mạnh)
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-[System.Net.ServicePointManager]::DefaultConnectionLimit = 1000
+[System.Net.ServicePointManager]::DefaultConnectionLimit = 10000
 [System.Net.ServicePointManager]::Expect100Continue = $false
+[System.Net.ServicePointManager]::UseNagleAlgorithm = $false # Tat Nagle de giam do tre goi tin
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ISO DOWNLOADER V6.0 - HYBRID ENGINE (IDM STYLE)"
-$Form.Size = New-Object System.Drawing.Size(750, 550)
+$Form.Text = "ISO DOWNLOADER V4.0 - MAX SPEED ENGINE"
+$Form.Size = New-Object System.Drawing.Size(700, 520)
 $Form.StartPosition = "CenterScreen"
-$Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+$Form.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25)
 $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 $Global:IsoData = @()
 
-# Fonts
-$FontBold = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-$FontNorm = New-Object System.Drawing.Font("Segoe UI", 10)
-
 # Header
-$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (MULTI-ENGINE)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.ForeColor="Cyan"; $Lbl.Font=$FontBold; $Form.Controls.Add($Lbl)
+$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (OPTIMIZED CORE)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.Font="Segoe UI, 12, Bold"; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
 
-# --- CONFIG GROUP ---
-$GbCfg = New-Object System.Windows.Forms.GroupBox; $GbCfg.Text="Cau Hinh Tai Xuong"; $GbCfg.Location="20,50"; $GbCfg.Size="690,80"; $GbCfg.ForeColor="Yellow"; $Form.Controls.Add($GbCfg)
+# Filter
+$GbFilter = New-Object System.Windows.Forms.GroupBox; $GbFilter.Text="Bo Loc & Cau Hinh"; $GbFilter.Location="20,50"; $GbFilter.Size="640,80"; $GbFilter.ForeColor="Yellow"; $Form.Controls.Add($GbFilter)
 
-# Engine Selector
-$LblEng = New-Object System.Windows.Forms.Label; $LblEng.Text="Chon Engine:"; $LblEng.Location="20,30"; $LblEng.AutoSize=$true; $GbCfg.Controls.Add($LblEng)
-$CbEngine = New-Object System.Windows.Forms.ComboBox; $CbEngine.Location="110,27"; $CbEngine.Size="150,30"; $CbEngine.DropDownStyle="DropDownList"
-$CbEngine.Items.AddRange(@("TURBO (Nhanh - IDM)", "BITS (On dinh)")); $CbEngine.SelectedIndex=0; $GbCfg.Controls.Add($CbEngine)
+$CbType = New-Object System.Windows.Forms.ComboBox; $CbType.Location="20,30"; $CbType.Size="130,30"; $CbType.DropDownStyle="DropDownList"; $GbFilter.Controls.Add($CbType)
+$CbBit = New-Object System.Windows.Forms.ComboBox; $CbBit.Location="160,30"; $CbBit.Size="80,30"; $CbBit.DropDownStyle="DropDownList"; $CbBit.Items.AddRange(@("All", "x64", "x86", "arm64")); $CbBit.SelectedIndex=0; $GbFilter.Controls.Add($CbBit)
 
-# Thread Selector
-$LblTh = New-Object System.Windows.Forms.Label; $LblTh.Text="So Luong:"; $LblTh.Location="280,30"; $LblTh.AutoSize=$true; $GbCfg.Controls.Add($LblTh)
-$CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location="350,27"; $CbThread.Size="60,30"; $CbThread.DropDownStyle="DropDownList"
-$CbThread.Items.AddRange(@("1", "4", "8", "16", "32")); $CbThread.SelectedIndex=2; $GbCfg.Controls.Add($CbThread) # Default 8
+# --- THREAD SELECTOR ---
+$LblThread = New-Object System.Windows.Forms.Label; $LblThread.Text="So Luong:"; $LblThread.Location="260,33"; $LblThread.AutoSize=$true; $GbFilter.Controls.Add($LblThread)
+$CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location="320,30"; $CbThread.Size="60,30"; $CbThread.DropDownStyle="DropDownList"
+$CbThread.Items.AddRange(@("4", "8", "16", "32")); $CbThread.SelectedItem="16"; $GbFilter.Controls.Add($CbThread)
 
-# Filter Bit
-$LblBit = New-Object System.Windows.Forms.Label; $LblBit.Text="He:"; $LblBit.Location="430,30"; $LblBit.AutoSize=$true; $GbCfg.Controls.Add($LblBit)
-$CbBit = New-Object System.Windows.Forms.ComboBox; $CbBit.Location="460,27"; $CbBit.Size="80,30"; $CbBit.DropDownStyle="DropDownList"; $CbBit.Items.AddRange(@("All", "x64", "x86", "arm64")); $CbBit.SelectedIndex=0; $GbCfg.Controls.Add($CbBit)
-
-$BtnRef = New-Object System.Windows.Forms.Button; $BtnRef.Text="REFRESH"; $BtnRef.Location="570,25"; $BtnRef.Size="100,32"; $BtnRef.BackColor="DimGray"; $BtnRef.ForeColor="White"; $GbCfg.Controls.Add($BtnRef)
+$BtnLoad = New-Object System.Windows.Forms.Button; $BtnLoad.Text="LAM MOI"; $BtnLoad.Location="500,25"; $BtnLoad.Size="120,35"; $BtnLoad.BackColor="DimGray"; $BtnLoad.ForeColor="White"; $GbFilter.Controls.Add($BtnLoad)
 
 # List
-$LblRes = New-Object System.Windows.Forms.Label; $LblRes.Text="Danh Sach File:"; $LblRes.Location="20,145"; $LblRes.AutoSize=$true; $Form.Controls.Add($LblRes)
-$CbResult = New-Object System.Windows.Forms.ComboBox; $CbResult.Location="20,170"; $CbResult.Size="690,35"; $CbResult.Font=$FontNorm; $CbResult.DropDownStyle="DropDownList"; $Form.Controls.Add($CbResult)
+$LblRes = New-Object System.Windows.Forms.Label; $LblRes.Text="Chon File:"; $LblRes.Location="20,140"; $LblRes.AutoSize=$true; $Form.Controls.Add($LblRes)
+$CbResult = New-Object System.Windows.Forms.ComboBox; $CbResult.Location="20,165"; $CbResult.Size="640,35"; $CbResult.Font="Segoe UI, 11"; $CbResult.DropDownStyle="DropDownList"; $Form.Controls.Add($CbResult)
 
 # Progress
-$Bar = New-Object System.Windows.Forms.ProgressBar; $Bar.Location="20,270"; $Bar.Size="690,30"; $Form.Controls.Add($Bar)
-$Status = New-Object System.Windows.Forms.Label; $Status.Text="Trang thai: Cho lenh..."; $Status.AutoSize=$true; $Status.Location="20,240"; $Status.ForeColor="Lime"; $Form.Controls.Add($Status)
+$Bar = New-Object System.Windows.Forms.ProgressBar; $Bar.Location="20,260"; $Bar.Size="640,30"; $Form.Controls.Add($Bar)
+$Status = New-Object System.Windows.Forms.Label; $Status.Text="San sang."; $Status.AutoSize=$true; $Status.Location="20,230"; $Status.ForeColor="Lime"; $Form.Controls.Add($Status)
 
 # Button
-$BtnDown = New-Object System.Windows.Forms.Button; $BtnDown.Text="BAT DAU TAI (START DOWNLOAD)"; $BtnDown.Location="180,330"; $BtnDown.Size="380,60"; $BtnDown.BackColor="LimeGreen"; $BtnDown.ForeColor="Black"; $BtnDown.FlatStyle="Flat"; $BtnDown.Enabled=$false; $BtnDown.Font=$FontBold; $Form.Controls.Add($BtnDown)
+$BtnDown = New-Object System.Windows.Forms.Button; $BtnDown.Text="BAT DAU TAI NGAY"; $BtnDown.Font="Segoe UI, 12, Bold"; $BtnDown.Location="180,320"; $BtnDown.Size="340,50"; $BtnDown.BackColor="LimeGreen"; $BtnDown.ForeColor="Black"; $BtnDown.FlatStyle="Flat"; $BtnDown.Enabled=$false; $Form.Controls.Add($BtnDown)
 
-# ==========================================
-# ENGINE 1: TURBO (HttpWebRequest + Runspaces)
-# ==========================================
-$ScriptBlock_Turbo = {
+# --- WORKER SCRIPT BLOCK (OPTIMIZED) ---
+$ScriptBlock = {
     param($Url, $Start, $End, $Path)
     try {
         $Req = [System.Net.HttpWebRequest]::Create($Url)
         $Req.Method = "GET"
-        # Fake User-Agent nhu Chrome de khong bi chan
         $Req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         $Req.AddRange($Start, $End)
-        $Req.Timeout = 60000
-        $Req.ReadWriteTimeout = 60000
+        $Req.Timeout = 30000 # 30s Timeout
+        $Req.ReadWriteTimeout = 30000
+        $Req.KeepAlive = $true
+        $Req.Proxy = $null # Bo qua Proxy de nhanh hon
+        
         $Resp = $Req.GetResponse()
         $Stream = $Resp.GetResponseStream()
         
-        $Buffer = New-Object byte[] 65536 # 64KB Buffer
+        # Buffer lon 64KB de giam I/O Disk
+        $Buffer = New-Object byte[] 65536 
         $Fs = [System.IO.File]::Create($Path)
         
         while (($Read = $Stream.Read($Buffer, 0, $Buffer.Length)) -gt 0) {
@@ -84,146 +76,154 @@ $ScriptBlock_Turbo = {
     } catch { return $_.Exception.Message }
 }
 
-function Start-Turbo ($Url, $DestPath, $ThreadCount) {
-    $Status.Text = "Dang ket noi Server (Turbo Mode)..."
+# --- CORE TẢI ĐA LUỒNG ---
+function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
+    $Status.Text = "Dang khoi tao ket noi ($ThreadCount Luong)..."
     [System.Windows.Forms.Application]::DoEvents()
 
-    # 1. Get File Size
+    # 1. Lay kich thuoc file
     try {
         $ReqHead = [System.Net.HttpWebRequest]::Create($Url)
         $ReqHead.Method = "HEAD"
-        $ReqHead.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        $ReqHead.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         $RespHead = $ReqHead.GetResponse()
         $TotalSize = $RespHead.ContentLength
         $RespHead.Close()
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi ket noi: $($_.Exception.Message)", "Error"); return }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi ket noi Server: $($_.Exception.Message)", "Error"); return }
 
     if ($TotalSize -lt 10MB) { $Threads = 1 } else { $Threads = [int]$ThreadCount }
     $PartSize = [Math]::Floor($TotalSize / $Threads)
     
-    $Pool = [runspacefactory]::CreateRunspacePool(1, $Threads); $Pool.Open()
-    $PowerShells = @(); $Handles = @()
+    $Runspaces = @(); $PowerShells = @(); $Handles = @()
+    $Pool = [runspacefactory]::CreateRunspacePool(1, $Threads)
+    $Pool.Open()
 
-    $Status.Text = "Khoi tao $Threads luong tai xuong..."
+    $Status.Text = "Dang chia file thanh $Threads phan..."
     
-    # 2. Start Threads
+    # 2. Khoi tao cac luong (Threads)
     for ($i = 0; $i -lt $Threads; $i++) {
         $Start = $i * $PartSize
         $End = ($i + 1) * $PartSize - 1
         if ($i -eq $Threads - 1) { $End = $TotalSize - 1 }
         
         $PartPath = "$DestPath.part$i"
-        $Ps = [powershell]::Create(); $Ps.RunspacePool = $Pool
-        $Ps.AddScript($ScriptBlock_Turbo).AddArgument($Url).AddArgument($Start).AddArgument($End).AddArgument($PartPath) | Out-Null
+        
+        $Ps = [powershell]::Create()
+        $Ps.RunspacePool = $Pool
+        $Ps.AddScript($ScriptBlock).AddArgument($Url).AddArgument($Start).AddArgument($End).AddArgument($PartPath) | Out-Null
+        
         $PowerShells += $Ps
         $Handles += $Ps.BeginInvoke()
     }
 
-    # 3. Monitor
+    # 3. Vong lap theo doi
     $IsDone = $false
     while (-not $IsDone) {
-        $Downloaded = 0; $Completed = 0
+        $Downloaded = 0
+        $Completed = 0
+        
         for ($i = 0; $i -lt $Threads; $i++) {
             $P = "$DestPath.part$i"
-            if (Test-Path $P) { try{$Downloaded += (Get-Item $P).Length}catch{} }
+            if (Test-Path $P) { 
+                try { $Info = Get-Item $P; $Downloaded += $Info.Length } catch {}
+            }
             if ($Handles[$i].IsCompleted) { $Completed++ }
         }
 
         if ($TotalSize -gt 0) {
-            $Pct = [Math]::Min(100, [Math]::Round(($Downloaded / $TotalSize) * 100))
-            $Bar.Value = [int]$Pct
-            $MB_Cur = [Math]::Round($Downloaded/1MB, 2); $MB_Tot = [Math]::Round($TotalSize/1MB, 2)
-            $Status.Text = "TURBO Downloading ($Threads Threads)... $Pct% ($MB_Cur MB / $MB_Tot MB)"
+            $Percent = [Math]::Min(100, [Math]::Round(($Downloaded / $TotalSize) * 100))
+            $Bar.Value = $Percent
+            $MB = [Math]::Round($Downloaded / 1MB, 2)
+            $TotalMB = [Math]::Round($TotalSize / 1MB, 2)
+            $Status.Text = "Downloading ($Threads Threads)... $Percent% ($MB MB / $TotalMB MB)"
         }
+        
         if ($Completed -eq $Threads) { $IsDone = $true }
-        [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 500
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 500
     }
 
-    # 4. Merge
-    $Status.Text = "Dang ghep noi file... (Dung tat may)"
+    # 4. Ghep file
+    $Status.Text = "Dang ghep noi $Threads phan (Merging)..."
     [System.Windows.Forms.Application]::DoEvents()
-    $Out = [System.IO.File]::Create($DestPath)
+    
+    $OutStream = [System.IO.File]::Create($DestPath)
     for ($i = 0; $i -lt $Threads; $i++) {
-        $P = "$DestPath.part$i"
-        if (Test-Path $P) {
-            $Bytes = [System.IO.File]::ReadAllBytes($P); $Out.Write($Bytes, 0, $Bytes.Length); Remove-Item $P -Force
+        $PartPath = "$DestPath.part$i"
+        if (Test-Path $PartPath) {
+            $InBytes = [System.IO.File]::ReadAllBytes($PartPath)
+            $OutStream.Write($InBytes, 0, $InBytes.Length)
+            Remove-Item $PartPath -Force
         }
     }
-    $Out.Close(); $Pool.Close()
-    $Status.Text = "HOAN TAT!"; $Bar.Value = 100
-    [System.Windows.Forms.MessageBox]::Show("Tai xong (Turbo)!", "Success"); Invoke-Item (Split-Path $DestPath)
+    $OutStream.Close()
+    $Pool.Close()
+    
+    $Status.Text = "HOAN TAT! File luu tai: $DestPath"
+    $Bar.Value = 100
+    [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!", "Phat Tan PC")
+    Invoke-Item (Split-Path $DestPath)
 }
 
-# ==========================================
-# ENGINE 2: BITS (Microsoft)
-# ==========================================
-function Start-Bits ($Url, $DestPath) {
-    Import-Module BitsTransfer
-    $Status.Text = "Khoi tao BITS..."
-    try {
-        $Job = Start-BitsTransfer -Source $Url -Destination $DestPath -Asynchronous -Priority Foreground
-        
-        do {
-            $Job = Get-BitsTransfer -JobId $Job.JobId
-            if ($Job.JobState -eq "Transferring" -or $Job.JobState -eq "Transferred") {
-                if ($Job.TotalBytes -gt 0) {
-                    $Pct = [Math]::Min(100, [Math]::Round(($Job.BytesTransferred / $Job.TotalBytes) * 100))
-                    $Bar.Value = [int]$Pct
-                    $MB_Cur = [Math]::Round($Job.BytesTransferred/1MB, 2); $MB_Tot = [Math]::Round($Job.TotalBytes/1MB, 2)
-                    $Status.Text = "BITS Downloading... $Pct% ($MB_Cur MB / $MB_Tot MB)"
-                } else { $Status.Text = "Dang ket noi & cap phat dung luong..." }
-            }
-            [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 500
-        } while ($Job.JobState -ne "Transferred" -and $Job.JobState -ne "Error" -and $Job.JobState -ne "TransientError")
-        
-        if ($Job.JobState -eq "Transferred") {
-            Complete-BitsTransfer -JobId $Job.JobId
-            $Status.Text = "HOAN TAT!"; $Bar.Value = 100
-            [System.Windows.Forms.MessageBox]::Show("Tai xong (BITS)!", "Success"); Invoke-Item (Split-Path $DestPath)
-        } else {
-            Remove-BitsTransfer -JobId $Job.JobId
-            [System.Windows.Forms.MessageBox]::Show("Loi BITS: $($Job.ErrorDescription)", "Error")
-        }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi: $($_.Exception.Message)", "Error") }
-}
-
-# --- HANDLERS ---
-function Load-Json {
-    $Status.Text = "Dang lay danh sach..."; $Form.Cursor = "WaitCursor"
+# --- HANDLERS (FIXED TRIM URL) ---
+function Load-JsonData {
+    $Status.Text = "Dang tai danh sach tu Github..."
+    $Form.Cursor = "WaitCursor"
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     try {
         $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-        $H = @{ "User-Agent"="Mozilla/5.0"; "Cache-Control"="no-cache" }
-        $J = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts" -Headers $H -ErrorAction Stop
-        $Global:IsoData = $J
-        Filter-List; $Status.Text = "San sang."
-    } catch { $Status.Text="Loi JSON!"; [System.Windows.Forms.MessageBox]::Show($_.Exception.Message) }
+        $Headers = @{ "User-Agent" = "Mozilla/5.0"; "Cache-Control" = "no-cache" }
+        # FIX HOSTNAME ERROR HERE
+        $CleanUrl = "$($JsonUrl.Trim())?t=$Ts"
+        $JsonContent = Invoke-RestMethod -Uri $CleanUrl -Headers $Headers -ErrorAction Stop
+        $Global:IsoData = $JsonContent
+        
+        $CbType.Items.Clear(); $CbType.Items.Add("All")
+        $Types = $Global:IsoData | Select-Object -ExpandProperty type -Unique | Sort-Object
+        foreach ($t in $Types) { $CbType.Items.Add($t) }
+        $CbType.SelectedIndex = 0
+        Filter-List
+        $Status.Text = "San sang. ($($Global:IsoData.Count) muc)"
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Loi tai JSON: $($_.Exception.Message)", "Error")
+    }
     $Form.Cursor = "Default"
 }
 
 function Filter-List {
-    $CbResult.Items.Clear(); $B = $CbBit.SelectedItem
-    $L = $Global:IsoData | Where-Object { if ($B -ne "All") { $_.bit -eq $B } else { $true } }
-    foreach ($I in $L) { $CbResult.Items.Add($I.name) }
+    $CbResult.Items.Clear()
+    $T = $CbType.SelectedItem; $B = $CbBit.SelectedItem
+    $List = $Global:IsoData
+    if ($T -ne "All") { $List = $List | Where-Object { $_.type -eq $T } }
+    if ($B -ne "All") { $List = $List | Where-Object { $_.bit -eq $B } }
+    foreach ($I in $List) { $CbResult.Items.Add($I.name) }
     if ($CbResult.Items.Count -gt 0) { $CbResult.SelectedIndex=0; $BtnDown.Enabled=$true } else { $BtnDown.Enabled=$false }
 }
 
-$BtnRef.Add_Click({ Load-Json })
+$CbType.Add_SelectedIndexChanged({ Filter-List })
 $CbBit.Add_SelectedIndexChanged({ Filter-List })
+$BtnLoad.Add_Click({ Load-JsonData })
 
 $BtnDown.Add_Click({
-    $Item = $Global:IsoData | Where-Object { $_.name -eq $CbResult.SelectedItem } | Select-Object -First 1
+    $Sel = $CbResult.SelectedItem
+    $Item = $Global:IsoData | Where-Object { $_.name -eq $Sel } | Select-Object -First 1
     if (!$Item) { return }
-    $Name = "Download.iso"
-    if ($Item.link -match "/([^/]+\.iso)$") { $Name = $Matches[1] }
     
-    $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName=$Name; $Save.Filter="ISO Files|*.iso|All|*.*"
+    $FName = "Download.iso"
+    if ($Item.link -match "/([^/]+\.iso)$") { $FName = $Matches[1] }
+    elseif ($Item.link -match "/([^/]+\.img)$") { $FName = $Matches[1] }
+    elseif ($Item.link -match "/([^/]+\.exe)$") { $FName = $Matches[1] }
+    
+    $Save = New-Object System.Windows.Forms.SaveFileDialog
+    $Save.FileName = $FName; $Save.Filter = "All Files|*.*"
+    
     if ($Save.ShowDialog() -eq "OK") {
-        $BtnDown.Enabled=$false; $CbResult.Enabled=$false
-        if ($CbEngine.SelectedItem -match "TURBO") { Start-Turbo $Item.link $Save.FileName $CbThread.SelectedItem }
-        else { Start-Bits $Item.link $Save.FileName }
-        $BtnDown.Enabled=$true; $CbResult.Enabled=$true
+        $Threads = $CbThread.SelectedItem
+        $BtnDown.Enabled = $false; $CbResult.Enabled = $false
+        Start-TurboDownload $Item.link $Save.FileName $Threads
+        $BtnDown.Enabled = $true; $CbResult.Enabled = $true
     }
 })
 
-$Form.Add_Shown({ Load-Json })
+$Form.Add_Shown({ Load-JsonData })
 $Form.ShowDialog() | Out-Null
