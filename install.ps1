@@ -158,10 +158,15 @@ Add-AdvBtn $AdvTab "BROWSER PRIVACY (BLOCK)" 290 215 "DarkRed" { Load-Module "Br
 # === CỘT 3: DEPLOYMENT & TOOLS (X=560) ===
 Add-Header $AdvTab "3. DEPLOYMENT & UTILITIES" 560
 Add-AdvBtn $AdvTab "CÀI WIN TỰ ĐỘNG (ISO)" 560 50 "Pink" { Load-Module "WinInstall.ps1" }
-Add-AdvBtn $AdvTab "WIN AIO BUILDER (TAO ISO)" 560 105 "OrangeRed" { Load-Module "WinAIOBuilder.ps1" } # Module Mới
-Add-AdvBtn $AdvTab "ISO DOWNLOADER (CLOUD)" 560 160 "Yellow" { Load-Module "ISODownloader.ps1" }
-Add-AdvBtn $AdvTab "BACKUP & RESTORE PRO" 560 215 "Cyan" { Load-Module "BackupCenter.ps1" }
-Add-AdvBtn $AdvTab "APP STORE (WINGET)" 560 270 "LightGreen" { Load-Module "AppStore.ps1" }
+Add-AdvBtn $AdvTab "WIN AIO BUILDER (TAO ISO)" 560 105 "OrangeRed" { Load-Module "WinAIOBuilder.ps1" } 
+
+# THÊM NÚT NÀY VÀO ĐÂY (Vị trí hợp lý nhất)
+Add-AdvBtn $AdvTab "LTSC STORE INSTALLER" 560 160 "DeepSkyBlue" { Load-Module "StoreInstaller.ps1" }
+
+# Đẩy các nút cũ xuống
+Add-AdvBtn $AdvTab "ISO DOWNLOADER (CLOUD)" 560 215 "Yellow" { Load-Module "ISODownloader.ps1" }
+Add-AdvBtn $AdvTab "BACKUP & RESTORE PRO" 560 270 "Cyan" { Load-Module "BackupCenter.ps1" }
+Add-AdvBtn $AdvTab "APP STORE (WINGET)" 560 325 "LightGreen" { Load-Module "AppStore.ps1" }
 
 # --- FOOTER BUTTONS ---
 $BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = "30, 540"; $BtnSelectAll.Size = "100, 35"; $BtnSelectAll.BackColor = "Gray"; $Form.Controls.Add($BtnSelectAll)
