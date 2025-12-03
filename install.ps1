@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.2 (Stable - Fix Animation Crash)
+    Version: 11.3 (Fix Crash Timer + Animation Safe Mode)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -23,7 +23,7 @@ if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force 
 
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-# --- 3. THEME ENGINE (NEON STABLE) ---
+# --- 3. THEME ENGINE ---
 $Global:DarkMode = $true 
 
 $Theme = @{
@@ -33,8 +33,8 @@ $Theme = @{
         Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
         BtnBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)
         BtnHover  = [System.Drawing.Color]::FromArgb(80, 80, 80)
-        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Cyan Neon
-        Border    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # VIỀN NEON
+        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)
+        Border    = [System.Drawing.Color]::FromArgb(0, 255, 255)
     }
     Light = @{
         Back      = [System.Drawing.Color]::FromArgb(245, 245, 245)
@@ -42,7 +42,7 @@ $Theme = @{
         Text      = [System.Drawing.Color]::FromArgb(30, 30, 30)
         BtnBack   = [System.Drawing.Color]::FromArgb(230, 230, 230)
         BtnHover  = [System.Drawing.Color]::FromArgb(210, 210, 210)
-        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # Blue
+        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)
         Border    = [System.Drawing.Color]::FromArgb(0, 120, 215)
     }
 }
@@ -75,34 +75,31 @@ function Apply-Theme {
             }
         }
     }
-    
     $BtnTheme.Text = if ($Global:DarkMode) { "☀ LIGHT" } else { "🌙 DARK" }
     $BtnTheme.BackColor = if ($Global:DarkMode) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::Black }
     $BtnTheme.ForeColor = if ($Global:DarkMode) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
 }
 
-# --- 4. ANIMATION (FIXED CRASH) ---
+# --- 4. SAFE ANIMATION (FIXED) ---
 function Start-FadeIn {
     $Form.Opacity = 0
-    $Timer = New-Object System.Windows.Forms.Timer
-    $Timer.Interval = 20
+    # FIX: Dùng biến Script Scope để không bị Null
+    $Script:AnimTimer = New-Object System.Windows.Forms.Timer
+    $Script:AnimTimer.Interval = 15
     
-    # FIX LỖI CRASH Ở ĐÂY: Dùng $this thay vì $Timer
-    $Timer.Add_Tick({
+    $Script:AnimTimer.Add_Tick({
         try {
-            $Form.Opacity += 0.08 # Tăng tốc độ hiện lên
+            $Form.Opacity += 0.08
             if ($Form.Opacity -ge 1) { 
                 $Form.Opacity = 1
-                $this.Stop() 
-                $this.Dispose() # Hủy timer để giải phóng RAM
+                $Script:AnimTimer.Stop()
+                $Script:AnimTimer.Dispose()
             }
         } catch {
-            # Nếu lỗi thì hiện Form luôn, không crash
-            $Form.Opacity = 1
-            $this.Stop()
+            $Form.Opacity = 1; $Script:AnimTimer.Stop()
         }
     })
-    $Timer.Start()
+    $Script:AnimTimer.Start()
 }
 
 function Add-HoverEffect ($Btn) {
@@ -122,12 +119,14 @@ function Add-HoverEffect ($Btn) {
 
 $PaintHandler = {
     param($sender, $e)
-    $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
-    $Pen = New-Object System.Drawing.Pen($T.Border, 2)
-    $Rect = $sender.ClientRectangle
-    $Rect.Width -= 2; $Rect.Height -= 2; $Rect.X += 1; $Rect.Y += 1
-    $e.Graphics.DrawRectangle($Pen, $Rect)
-    $Pen.Dispose()
+    try {
+        $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
+        $Pen = New-Object System.Drawing.Pen($T.Border, 2)
+        $Rect = $sender.ClientRectangle
+        $Rect.Width -= 2; $Rect.Height -= 2; $Rect.X += 1; $Rect.Y += 1
+        $e.Graphics.DrawRectangle($Pen, $Rect)
+        $Pen.Dispose()
+    } catch {}
 }
 
 # --- 5. CORE FUNCTIONS ---
@@ -142,8 +141,13 @@ function Tai-Va-Chay {
         if (Test-Path $Dest) {
             if ($Type -eq "Msi") { Start-Process "msiexec.exe" "/i `"$Dest`" /quiet /norestart" -Wait }
             else { Start-Process $Dest -Wait }
+        } else {
+            throw "File downloaded but not found."
         }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi download: $Name", "Error") }
+    } catch { 
+        # Báo lỗi rõ ràng nếu file chưa up
+        [System.Windows.Forms.MessageBox]::Show("Loi download: $Name`n`nNguyen nhan: Link sai hoac File chua duoc Upload len Server.", "Error") 
+    }
 }
 
 function Load-Module ($Name) {
@@ -153,7 +157,7 @@ function Load-Module ($Name) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.2 (STABLE)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.3 (STABLE)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
