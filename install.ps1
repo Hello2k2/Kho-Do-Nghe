@@ -185,7 +185,7 @@ Add-AdvBtn $AdvTab "LTSC STORE INSTALLER" 600 215 "DeepSkyBlue" { Load-Module "S
 Add-AdvBtn $AdvTab "ISO DOWNLOADER (TURBO)" 600 270 "Yellow" { Load-Module "ISODownloader.ps1" } # Dời xuống
 Add-AdvBtn $AdvTab "BACKUP & RESTORE PRO" 600 325 "Cyan" { Load-Module "BackupCenter.ps1" } # Dời xuống
 Add-AdvBtn $AdvTab "APP STORE (WINGET)" 600 380 "LightGreen" { Load-Module "AppStore.ps1" } # Dời xuống
-
+Add-AdvBtn $AdvTab "GEMINI AI ASSISTANT" 600 435 "DeepPink" { Load-Module "GeminiAI.ps1" }
 
 
 # --- FOOTER BUTTONS ---
