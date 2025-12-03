@@ -176,18 +176,17 @@ Add-AdvBtn $AdvTab "DEFENDER CONTROL" 310 160 "DarkSlateBlue" { Load-Module "Def
 Add-AdvBtn $AdvTab "BITLOCKER MANAGER" 310 215 "Gold" { Load-Module "BitLockerMgr.ps1" }
 Add-AdvBtn $AdvTab "BROWSER PRIVACY (BLOCK)" 310 270 "DarkRed" { Load-Module "BrowserPrivacy.ps1" }
 
-# === CỘT 3: DEPLOYMENT & TOOLS (X=560) ===
-Add-Header $AdvTab "3. DEPLOYMENT & UTILITIES" 560
-Add-AdvBtn $AdvTab "CÀI WIN TỰ ĐỘNG (ISO)" 560 50 "Pink" { Load-Module "WinInstall.ps1" }
-Add-AdvBtn $AdvTab "WIN AIO BUILDER (TAO ISO)" 560 105 "OrangeRed" { Load-Module "WinAIOBuilder.ps1" } 
+# === CỘT 3: DEPLOYMENT & UTILITIES (X=600) ===
+Add-Header $AdvTab "3. DEPLOYMENT & UTILITIES" 600
+Add-AdvBtn $AdvTab "CÀI WIN TỰ ĐỘNG (ISO)" 600 50 "Pink" { Load-Module "WinInstall.ps1" }
+Add-AdvBtn $AdvTab "WIN AIO BUILDER (TAO ISO)" 600 105 "OrangeRed" { Load-Module "WinAIOBuilder.ps1" }
+Add-AdvBtn $AdvTab "WIN MODDER STUDIO (EDIT)" 600 160 "OrangeRed" { Load-Module "WinModder.ps1" } # Đã thêm lại nút này
+Add-AdvBtn $AdvTab "LTSC STORE INSTALLER" 600 215 "DeepSkyBlue" { Load-Module "StoreInstaller.ps1" } # Dời xuống
+Add-AdvBtn $AdvTab "ISO DOWNLOADER (TURBO)" 600 270 "Yellow" { Load-Module "ISODownloader.ps1" } # Dời xuống
+Add-AdvBtn $AdvTab "BACKUP & RESTORE PRO" 600 325 "Cyan" { Load-Module "BackupCenter.ps1" } # Dời xuống
+Add-AdvBtn $AdvTab "APP STORE (WINGET)" 600 380 "LightGreen" { Load-Module "AppStore.ps1" } # Dời xuống
 
-# THÊM NÚT NÀY VÀO ĐÂY (Vị trí hợp lý nhất)
-Add-AdvBtn $AdvTab "LTSC STORE INSTALLER" 560 160 "DeepSkyBlue" { Load-Module "StoreInstaller.ps1" }
 
-# Đẩy các nút cũ xuống
-Add-AdvBtn $AdvTab "ISO DOWNLOADER (CLOUD)" 560 215 "Yellow" { Load-Module "ISODownloader.ps1" }
-Add-AdvBtn $AdvTab "BACKUP & RESTORE PRO" 560 270 "Cyan" { Load-Module "BackupCenter.ps1" }
-Add-AdvBtn $AdvTab "APP STORE (WINGET)" 560 325 "LightGreen" { Load-Module "AppStore.ps1" }
 
 # --- FOOTER BUTTONS ---
 $BtnSelectAll = New-Object System.Windows.Forms.Button; $BtnSelectAll.Text = "Chon All"; $BtnSelectAll.Location = "30, 540"; $BtnSelectAll.Size = "100, 35"; $BtnSelectAll.BackColor = "Gray"; $Form.Controls.Add($BtnSelectAll)
