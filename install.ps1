@@ -205,7 +205,7 @@ Add-Btn $P1 "CHECK INFO" { Load-Module "SystemInfo.ps1" }
 Add-Btn $P1 "SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
 Add-Btn $P1 "CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
 Add-Btn $P1 "RAM BOOSTER" { Load-Module "RamBooster.ps1" }
-Add-Btn $P1 "ACTIVE WIN/OFF" { irm https://get.activated.win | iex }
+Add-Btn $P1 "ACTIVATION & ESU" { Load-Module "WinActivator.ps1" }
 Add-Btn $P1 "HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
 
 # CỘT 2: SECURITY
