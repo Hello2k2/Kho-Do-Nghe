@@ -49,32 +49,58 @@ $Status = New-Object System.Windows.Forms.Label; $Status.Text="San sang."; $Stat
 $BtnDown = New-Object System.Windows.Forms.Button; $BtnDown.Text="BAT DAU TAI NGAY"; $BtnDown.Font="Segoe UI, 12, Bold"; $BtnDown.Location="180,320"; $BtnDown.Size="340,50"; $BtnDown.BackColor="LimeGreen"; $BtnDown.ForeColor="Black"; $BtnDown.FlatStyle="Flat"; $BtnDown.Enabled=$false; $Form.Controls.Add($BtnDown)
 
 # --- WORKER SCRIPT BLOCK ---
+# --- 1. SCRIPT BLOCK: THÊM CƠ CHẾ KIỂM TRA SERVER (ANTI-CORRUPTION) ---
 $ScriptBlock = {
     param($Url, $Start, $End, $Path)
     try {
         $Req = [System.Net.HttpWebRequest]::Create($Url)
         $Req.Method = "GET"
         $Req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        $Req.AddRange($Start, $End)
+        # Yêu cầu tải từ byte Start đến byte End
+        $Req.AddRange([long]$Start, [long]$End) 
         $Resp = $Req.GetResponse()
-        $Stream = $Resp.GetResponseStream()
         
-        $Buffer = New-Object byte[] 32768 # Tang buffer len 32KB
+        # --- FIX QUAN TRỌNG: KIỂM TRA STATUS CODE ---
+        # Nếu server trả về 200 OK (Full File) thay vì 206 Partial Content (File cắt nhỏ)
+        # Nghĩa là server không hỗ trợ đa luồng hoặc đang bị chặn.
+        # Ta phải dừng ngay, nếu không file sẽ bị hỏng dữ liệu.
+        if ($Resp.StatusCode -eq [System.Net.HttpStatusCode]::OK) {
+             if ($Start -gt 0) {
+                 $Resp.Close()
+                 return "LOI: Server tu choi chia nho file (Tra ve 200 OK). Hay giam So Luong luong!"
+             }
+        }
+        # ---------------------------------------------
+
+        $Stream = $Resp.GetResponseStream()
+        $Buffer = New-Object byte[] 32768 
         $Fs = [System.IO.File]::Create($Path)
         
+        # Giới hạn chỉ ghi đúng dung lượng được yêu cầu (tránh ghi thừa)
+        $MaxBytes = ($End - $Start) + 1
+        $TotalWritten = 0
+
         while (($Read = $Stream.Read($Buffer, 0, $Buffer.Length)) -gt 0) {
+            # Nếu server lỡ gửi thừa, ta cắt bỏ phần thừa
+            if (($TotalWritten + $Read) -gt $MaxBytes) {
+                 $Read = $MaxBytes - $TotalWritten
+            }
+            
             $Fs.Write($Buffer, 0, $Read)
+            $TotalWritten += $Read
+            
+            if ($TotalWritten -ge $MaxBytes) { break }
         }
         $Fs.Close(); $Stream.Close(); $Resp.Close()
     } catch { return $_.Exception.Message }
 }
 
-# --- CORE TẢI ĐA LUỒNG ---
+# --- 2. FUNCTION CHÍNH: FIX TRÀN RAM & DỌN DẸP ---
 function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
     $Status.Text = "Dang khoi tao ket noi ($ThreadCount Luong)..."
     [System.Windows.Forms.Application]::DoEvents()
 
-    # 1. Lay kich thuoc file
+    # Lay kich thuoc file
     try {
         $ReqHead = [System.Net.HttpWebRequest]::Create($Url)
         $ReqHead.Method = "HEAD"
@@ -87,13 +113,13 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
     if ($TotalSize -lt 10MB) { $Threads = 1 } else { $Threads = [int]$ThreadCount }
     $PartSize = [Math]::Floor($TotalSize / $Threads)
     
-    $Runspaces = @(); $PowerShells = @(); $Handles = @()
     $Pool = [runspacefactory]::CreateRunspacePool(1, $Threads)
     $Pool.Open()
+    $PowerShells = @(); $Handles = @()
 
     $Status.Text = "Dang chia file thanh $Threads phan..."
     
-    # 2. Khoi tao cac luong (Threads)
+    # Khoi tao cac luong
     for ($i = 0; $i -lt $Threads; $i++) {
         $Start = $i * $PartSize
         $End = ($i + 1) * $PartSize - 1
@@ -109,25 +135,35 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
         $Handles += $Ps.BeginInvoke()
     }
 
-    # 3. Vong lap theo doi
+    # Vong lap theo doi
     $IsDone = $false
     while (-not $IsDone) {
-        $Downloaded = 0
-        $Completed = 0
-        
+        $Downloaded = 0; $Completed = 0
+        $ErrorMsg = $null
+
         for ($i = 0; $i -lt $Threads; $i++) {
             $P = "$DestPath.part$i"
-            if (Test-Path $P) { 
-                try { $Info = Get-Item $P; $Downloaded += $Info.Length } catch {}
+            if (Test-Path $P) { try { $Info = Get-Item $P; $Downloaded += $Info.Length } catch {} }
+            
+            if ($Handles[$i].IsCompleted) {
+                $Completed++
+                # Check loi tu thread
+                try { $Res = $PowerShells[$i].EndInvoke($Handles[$i]); if ($Res -match "LOI|Error") { $ErrorMsg = $Res } } catch {}
             }
-            if ($Handles[$i].IsCompleted) { $Completed++ }
+        }
+
+        # Nếu có lỗi (VD: Server từ chối chia nhỏ), dừng ngay lập tức
+        if ($ErrorMsg) {
+             $Status.Text = "DA XAY RA LOI: $ErrorMsg"
+             foreach ($Ps in $PowerShells) { $Ps.Dispose() }; $Pool.Close(); $Pool.Dispose()
+             [System.Windows.Forms.MessageBox]::Show($ErrorMsg, "Loi Download", "OK", "Error")
+             return
         }
 
         if ($TotalSize -gt 0) {
             $Percent = [Math]::Min(100, [Math]::Round(($Downloaded / $TotalSize) * 100))
             $Bar.Value = $Percent
-            $MB = [Math]::Round($Downloaded / 1MB, 2)
-            $TotalMB = [Math]::Round($TotalSize / 1MB, 2)
+            $MB = [Math]::Round($Downloaded / 1MB, 2); $TotalMB = [Math]::Round($TotalSize / 1MB, 2)
             $Status.Text = "Downloading ($Threads Threads)... $Percent% ($MB MB / $TotalMB MB)"
         }
         
@@ -136,16 +172,13 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
         Start-Sleep -Milliseconds 500
     }
 
-    # --- FIX START: GIẢI PHÓNG TIẾN TRÌNH TRƯỚC KHI GỘP ---
+    # Don dep tien trinh (Fix File Locking)
     $Status.Text = "Dang don dep tien trinh..."
     foreach ($Ps in $PowerShells) { $Ps.Dispose() }
-    $Pool.Close()
-    $Pool.Dispose()
-    [GC]::Collect() # Dọn rác bộ nhớ ngay lập tức
-    # --- FIX END ---
+    $Pool.Close(); $Pool.Dispose(); [GC]::Collect()
 
-    # 4. Ghep file (FIXED: DÙNG STREAM ĐỂ KHÔNG TRÀN RAM)
-    $Status.Text = "Dang ghep noi $Threads phan (Merging)..."
+    # Ghep file (Fix Tran RAM)
+    $Status.Text = "Dang ghep noi (Merging)..."
     [System.Windows.Forms.Application]::DoEvents()
     
     try {
@@ -153,24 +186,19 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
         for ($i = 0; $i -lt $Threads; $i++) {
             $PartPath = "$DestPath.part$i"
             if (Test-Path $PartPath) {
-                # Dùng Stream copy trực tiếp (Buffer) thay vì đọc hết vào RAM
                 $InStream = [System.IO.File]::OpenRead($PartPath)
                 $InStream.CopyTo($OutStream)
-                $InStream.Close()
-                $InStream.Dispose()
-                
+                $InStream.Close(); $InStream.Dispose()
                 Remove-Item $PartPath -Force -ErrorAction SilentlyContinue
             }
-            # Cập nhật tiến trình gộp cho người dùng đỡ sốt ruột
+            # Update Status
             $MergePercent = [Math]::Round((($i + 1) / $Threads) * 100)
             $Status.Text = "Dang ghep noi... $MergePercent%"
             [System.Windows.Forms.Application]::DoEvents()
         }
-        $OutStream.Close()
-        $OutStream.Dispose()
+        $OutStream.Close(); $OutStream.Dispose()
         
-        $Status.Text = "HOAN TAT! File luu tai: $DestPath"
-        $Bar.Value = 100
+        $Status.Text = "HOAN TAT! File: $DestPath"; $Bar.Value = 100
         [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!", "Phat Tan PC")
         Invoke-Item (Split-Path $DestPath)
     } catch {
