@@ -9,7 +9,7 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "BITLOCKER MANAGER V2.2 - DUAL SCAN ENGINE"
+$Form.Text = "BITLOCKER MANAGER V2.3 - FULL COMPATIBILITY"
 $Form.Size = New-Object System.Drawing.Size(900, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -18,13 +18,13 @@ $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 # Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "QUAN LY KHOA O CUNG (DUAL SCAN)"; $LblT.Font = "Impact, 18"; $LblT.ForeColor="Gold"; $LblT.AutoSize=$true; $LblT.Location="20,15"; $Form.Controls.Add($LblT)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "QUAN LY KHOA O CUNG (DUAL ENGINE)"; $LblT.Font = "Impact, 18"; $LblT.ForeColor="Gold"; $LblT.AutoSize=$true; $LblT.Location="20,15"; $Form.Controls.Add($LblT)
 
 # --- DANH SÁCH Ổ ĐĨA ---
 $GbList = New-Object System.Windows.Forms.GroupBox; $GbList.Text = "Danh Sach O Dia"; $GbList.Location="20,70"; $GbList.Size="845,200"; $GbList.ForeColor="Cyan"; $Form.Controls.Add($GbList)
 
 $Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location="15,25"; $Grid.Size="815,160"; $Grid.BackgroundColor="Black"; $Grid.ForeColor="Black"; $Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.AutoSizeColumnsMode="Fill"
-$Grid.Columns.Add("Mount", "O Dia"); $Grid.Columns.Add("Status", "Trang Thai"); $Grid.Columns.Add("Lock", "Khoa (Lock)"); $Grid.Columns.Add("Encrypt", "Tien Do"); $Grid.Columns.Add("Key", "ID Bao Ve")
+$Grid.Columns.Add("Mount", "O Dia"); $Grid.Columns.Add("Status", "Trang Thai"); $Grid.Columns.Add("Lock", "Khoa (Lock)"); $Grid.Columns.Add("Encrypt", "Tien Do"); $Grid.Columns.Add("Key", "Che Do (Mode)")
 $Grid.Columns[0].FillWeight=30; $Grid.Columns[3].FillWeight=40
 $GbList.Controls.Add($Grid)
 
@@ -55,7 +55,6 @@ Add-Btn $GbCtrl "MO CONTROL PANEL" 650 80 "Gray" { Start-Process "control" -Argu
 function Load-Drives {
     $Grid.Rows.Clear()
     $TxtKey.Text = ""
-    $ErrorOccurred = $false
     
     # --- CÁCH 1: POWERSHELL CMDLET (MODERN) ---
     try {
@@ -66,38 +65,28 @@ function Load-Drives {
                 $IsLocked = if($V.ProtectionStatus -eq "On") { "LOCKED (Khoa)" } else { "UNLOCKED (Mo)" }
                 if ($V.VolumeStatus -eq "FullyDecrypted") { $IsLocked = "OFF (Khong dung)" }
                 $Percent = "$($V.EncryptionPercentage)%"
-                $Ids = ($V.KeyProtector | Where {$_.KeyProtectorType -eq "RecoveryPassword"}).KeyProtectorId
-                
-                $Grid.Rows.Add($V.MountPoint, $V.VolumeStatus, $IsLocked, $Percent, "$Ids") | Out-Null
+                $Mode = "PowerShell Mode"
+                $Grid.Rows.Add($V.MountPoint, $V.VolumeStatus, $IsLocked, $Percent, $Mode) | Out-Null
             }
-            return # Thành công thì thoát luôn
+            return
         }
-    } catch { $ErrorOccurred = $true }
+    } catch {}
 
-    # --- CÁCH 2: WMI / CIM (LEGACY / FAILOVER) ---
-    # Chạy khi Cách 1 lỗi hoặc trả về rỗng
+    # --- CÁCH 2: WMI (LEGACY / FAILOVER) ---
     if ($Grid.Rows.Count -eq 0) {
         try {
             $WmiVols = Get-WmiObject -Namespace "root\CIMV2\Security\MicrosoftVolumeEncryption" -Class Win32_EncryptableVolume
             foreach ($W in $WmiVols) {
                 $DrvLetter = $W.DriveLetter
-                
-                # Conversion Status: 0=FullyDecrypted, 1=FullyEncrypted, 2=EncryptionInProgress...
                 $StatMap = @{0="FullyDecrypted"; 1="FullyEncrypted"; 2="Encrypting"; 3="Decrypting"; 4="Paused"}
                 $VolStat = if ($StatMap[$W.ConversionStatus]) { $StatMap[$W.ConversionStatus] } else { "Unknown" }
                 
-                # Protection Status: 0=Off, 1=On
                 $IsLocked = if ($W.ProtectionStatus -eq 1) { "LOCKED (Khoa)" } else { 
                     if ($W.ConversionStatus -eq 0) { "OFF (Khong dung)" } else { "UNLOCKED (Mo)" }
                 }
                 
-                # Percent (Cần tính toán thêm nếu đang chạy, nhưng lấy tạm 100 hoặc 0)
                 $Percent = if ($W.ConversionStatus -eq 1) { "100%" } else { "0%" }
-                
-                # Key ID (Phức tạp hơn để lấy qua WMI, nên để trống hoặc lấy đơn giản)
-                $KeyId = "WMI Mode" 
-                
-                $Grid.Rows.Add($DrvLetter, $VolStat, $IsLocked, $Percent, $KeyId) | Out-Null
+                $Grid.Rows.Add($DrvLetter, $VolStat, $IsLocked, $Percent, "WMI Mode") | Out-Null
             }
         } catch {
             [System.Windows.Forms.MessageBox]::Show("KHONG TIM THAY O DIA NAO!`nCa 2 phuong phap (Cmdlet & WMI) deu that bai.", "Error")
@@ -109,21 +98,19 @@ $BtnUnlock.Add_Click({
     $Key = $TxtKey.Text.Trim()
     if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 o dia truoc!", "Loi"); return }
     $Drv = $Grid.SelectedRows[0].Cells[0].Value
-    
     if (!$Key) { [System.Windows.Forms.MessageBox]::Show("Chua nhap Key!", "Loi"); return }
     
     try {
         $Form.Cursor = "WaitCursor"
-        # Thử Unlock bằng Cmdlet trước
+        # Thu 1: Cmdlet
         Unlock-BitLocker -MountPoint $Drv -RecoveryPassword $Key -ErrorAction Stop
         [System.Windows.Forms.MessageBox]::Show("DA MO KHOA THANH CONG! ($Drv)", "Success")
         Load-Drives
     } catch {
-        # Fallback: Thử Unlock bằng manage-bde (CMD)
+        # Thu 2: CMD
         $Proc = Start-Process "manage-bde" -ArgumentList "-unlock $Drv -rp $Key" -NoNewWindow -PassThru -Wait
         if ($Proc.ExitCode -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("DA MO KHOA (CMD MODE)! ($Drv)", "Success")
-            Load-Drives
+            [System.Windows.Forms.MessageBox]::Show("DA MO KHOA (CMD MODE)! ($Drv)", "Success"); Load-Drives
         } else {
             [System.Windows.Forms.MessageBox]::Show("MO KHOA THAT BAI!`nKiem tra lai Key.", "Error")
         }
@@ -135,51 +122,67 @@ function Action-BitLocker ($Action) {
     if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 o dia truoc!", "Loi"); return }
     $Drv = $Grid.SelectedRows[0].Cells[0].Value
     
-    try {
-        if ($Action -eq "Disable") {
-            if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon GIAI MA (Decrypt) toan bo o $Drv?", "Canh bao", "YesNo", "Warning") -eq "Yes") {
-                Disable-BitLocker -MountPoint $Drv -ErrorAction Stop
-                [System.Windows.Forms.MessageBox]::Show("Da gui lenh Giai Ma!", "Info")
-            }
+    # Fallback CMD cho chac an
+    if ($Action -eq "Disable") { 
+        if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon GIAI MA (Decrypt) o $Drv?", "Warning", "YesNo") -eq "Yes") {
+            Start-Process "manage-bde" "-off $Drv" -NoNewWindow -Wait
+            [System.Windows.Forms.MessageBox]::Show("Da gui lenh Giai Ma (CMD).", "Info")
         }
-        elseif ($Action -eq "Suspend") { Suspend-BitLocker -MountPoint $Drv -ErrorAction Stop; [System.Windows.Forms.MessageBox]::Show("Da Suspend.", "Info") }
-        elseif ($Action -eq "Resume") { Resume-BitLocker -MountPoint $Drv -ErrorAction Stop; [System.Windows.Forms.MessageBox]::Show("Da Resume.", "Info") }
-        Load-Drives
-    } catch { 
-        # Fallback CMD
-        if ($Action -eq "Disable") { Start-Process "manage-bde" "-off $Drv" -NoNewWindow -Wait }
-        if ($Action -eq "Suspend") { Start-Process "manage-bde" "-protectors -disable $Drv" -NoNewWindow -Wait }
-        if ($Action -eq "Resume") { Start-Process "manage-bde" "-protectors -enable $Drv" -NoNewWindow -Wait }
-        Load-Drives
     }
+    if ($Action -eq "Suspend") { Start-Process "manage-bde" "-protectors -disable $Drv" -NoNewWindow -Wait; [System.Windows.Forms.MessageBox]::Show("Da Suspend.", "Info") }
+    if ($Action -eq "Resume") { Start-Process "manage-bde" "-protectors -enable $Drv" -NoNewWindow -Wait; [System.Windows.Forms.MessageBox]::Show("Da Resume.", "Info") }
+    Load-Drives
 }
 
+# --- FIX LỖI BACKUP KEY (HỖ TRỢ CẢ WMI) ---
 function Backup-Key {
     if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 o dia truoc!", "Loi"); return }
     $Row = $Grid.SelectedRows[0]; $Drv = $Row.Cells[0].Value
     
-    # Logic backup cũ vẫn giữ nguyên vì WMI khó lấy Key Password clear-text hơn
+    $Pass = ""
+    $ID = "Unknown"
+    
+    # --- THỬ LẤY KEY BẰNG POWERSHELL ---
     try {
         $Vol = Get-BitLockerVolume -MountPoint $Drv -ErrorAction Stop
         $KeyObj = $Vol.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
-        
-        if (!$KeyObj) {
-             if ([System.Windows.Forms.MessageBox]::Show("Chua co Key 48 so. Tao moi?", "Tao Key", "YesNo") -eq "Yes") {
-                Add-BitLockerKeyProtector -MountPoint $Drv -RecoveryPassword
-                $Vol = Get-BitLockerVolume -MountPoint $Drv
-                $KeyObj = $Vol.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
-             } else { return }
-        }
-        
-        if ($KeyObj) {
-            $Pass = $KeyObj.RecoveryPassword; $ID = $KeyObj.KeyProtectorId
-            $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName = "BitLocker_Key_$($Drv.Replace(':','')).txt"
-            if ($Save.ShowDialog() -eq "OK") {
-                [IO.File]::WriteAllText($Save.FileName, "KEY: $Pass`r`nID: $ID")
-                [System.Windows.Forms.MessageBox]::Show("Da luu!", "Success"); Invoke-Item $Save.FileName
+        if ($KeyObj) { $Pass = $KeyObj.RecoveryPassword; $ID = $KeyObj.KeyProtectorId }
+    } catch {
+        # --- NẾU LỖI -> THỬ LẤY KEY BẰNG WMI (FIX CHO MÁY ẢO) ---
+        try {
+            $WmiVol = Get-WmiObject -Namespace "root\CIMV2\Security\MicrosoftVolumeEncryption" -Class Win32_EncryptableVolume -Filter "DriveLetter='$Drv'"
+            # Type 3 = Numerical Password (48 so)
+            $Res = $WmiVol.GetKeyProtectors(3) 
+            if ($Res.ReturnValue -eq 0 -and $Res.VolumeKeyProtectorID.Count -gt 0) {
+                $ID = $Res.VolumeKeyProtectorID[0]
+                $KeyRes = $WmiVol.GetKeyProtectorNumericalPassword($ID)
+                if ($KeyRes.ReturnValue -eq 0) { $Pass = $KeyRes.NumericalPassword }
+            } else {
+                # Neu chua co Key -> Tao moi bang WMI
+                if ([System.Windows.Forms.MessageBox]::Show("O dia nay chua co Recovery Key (48 so). Tao moi?", "Tao Key", "YesNo") -eq "Yes") {
+                    $WmiVol.ProtectKeyWithNumericalPassword() | Out-Null
+                    # Lay lai sau khi tao
+                    $Res2 = $WmiVol.GetKeyProtectors(3)
+                    if ($Res2.VolumeKeyProtectorID.Count -gt 0) {
+                        $ID = $Res2.VolumeKeyProtectorID[0]
+                        $KeyRes2 = $WmiVol.GetKeyProtectorNumericalPassword($ID)
+                        $Pass = $KeyRes2.NumericalPassword
+                    }
+                }
             }
+        } catch {}
+    }
+    
+    # LUU FILE
+    if ($Pass) {
+        $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName = "BitLocker_Key_$($Drv.Replace(':','')).txt"
+        if ($Save.ShowDialog() -eq "OK") {
+            [IO.File]::WriteAllText($Save.FileName, "--- BITLOCKER KEY ---`r`nDRIVE: $Drv`r`nID: $ID`r`nKEY: $Pass`r`nDATE: $(Get-Date)")
+            [System.Windows.Forms.MessageBox]::Show("Da luu!", "Success"); Invoke-Item $Save.FileName
         }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi Backup Key (Can PowerShell Mode)!", "Error") }
+    } else {
+        [System.Windows.Forms.MessageBox]::Show("Khong lay duoc Key! (Co the o dia chua duoc Ma Hoa hoac chua co Key 48 so)", "Error")
+    }
 }
 
 # Init
