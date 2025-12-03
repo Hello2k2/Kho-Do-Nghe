@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.1 (Neon Borders + Material Design)
+    Version: 11.2 (Stable - Fix Animation Crash)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -23,7 +23,7 @@ if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force 
 
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-# --- 3. THEME ENGINE (NEON EDITION) ---
+# --- 3. THEME ENGINE (NEON STABLE) ---
 $Global:DarkMode = $true 
 
 $Theme = @{
@@ -33,7 +33,7 @@ $Theme = @{
         Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
         BtnBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)
         BtnHover  = [System.Drawing.Color]::FromArgb(80, 80, 80)
-        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Cyan Neon cho Text
+        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Cyan Neon
         Border    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # VIỀN NEON
     }
     Light = @{
@@ -42,8 +42,8 @@ $Theme = @{
         Text      = [System.Drawing.Color]::FromArgb(30, 30, 30)
         BtnBack   = [System.Drawing.Color]::FromArgb(230, 230, 230)
         BtnHover  = [System.Drawing.Color]::FromArgb(210, 210, 210)
-        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # Blue Win 10
-        Border    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # VIỀN XANH DƯƠNG
+        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # Blue
+        Border    = [System.Drawing.Color]::FromArgb(0, 120, 215)
     }
 }
 
@@ -57,12 +57,9 @@ function Apply-Theme {
         $P.BackColor = $T.Back; $P.ForeColor = $T.Text
         
         foreach ($C in $P.Controls) {
-            # Update Card Panel
             if ($C -is [System.Windows.Forms.Panel] -and $C.Name -like "Card*") {
                 $C.BackColor = $T.Card
-                $C.Refresh() # Vẽ lại viền mới
-                
-                # Update controls inside Card
+                $C.Refresh() 
                 foreach ($Child in $C.Controls) {
                     if ($Child -is [System.Windows.Forms.Label]) { $Child.ForeColor = $T.Accent }
                     if ($Child -is [System.Windows.Forms.FlowLayoutPanel]) {
@@ -73,56 +70,62 @@ function Apply-Theme {
                     }
                 }
             }
-            # Update Checkboxes
             if ($C -is [System.Windows.Forms.FlowLayoutPanel]) {
                 foreach ($Chk in $C.Controls) { $Chk.ForeColor = $T.Text }
             }
         }
     }
     
-    # Footer
     $BtnTheme.Text = if ($Global:DarkMode) { "☀ LIGHT" } else { "🌙 DARK" }
     $BtnTheme.BackColor = if ($Global:DarkMode) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::Black }
     $BtnTheme.ForeColor = if ($Global:DarkMode) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
 }
 
-# --- 4. ANIMATION & PAINT ENGINE ---
+# --- 4. ANIMATION (FIXED CRASH) ---
 function Start-FadeIn {
     $Form.Opacity = 0
     $Timer = New-Object System.Windows.Forms.Timer
-    $Timer.Interval = 15
+    $Timer.Interval = 20
+    
+    # FIX LỖI CRASH Ở ĐÂY: Dùng $this thay vì $Timer
     $Timer.Add_Tick({
-        $Form.Opacity += 0.05
-        if ($Form.Opacity -ge 1) { $Form.Opacity = 1; $Timer.Stop() }
+        try {
+            $Form.Opacity += 0.08 # Tăng tốc độ hiện lên
+            if ($Form.Opacity -ge 1) { 
+                $Form.Opacity = 1
+                $this.Stop() 
+                $this.Dispose() # Hủy timer để giải phóng RAM
+            }
+        } catch {
+            # Nếu lỗi thì hiện Form luôn, không crash
+            $Form.Opacity = 1
+            $this.Stop()
+        }
     })
     $Timer.Start()
 }
 
 function Add-HoverEffect ($Btn) {
     $Btn.Add_MouseEnter({ 
-        $this.BackColor = $this.Tag.HoverColor
-        $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y - 2)
+        try {
+            $this.BackColor = $this.Tag.HoverColor
+            $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y - 2)
+        } catch {}
     })
     $Btn.Add_MouseLeave({ 
-        $this.BackColor = $this.Tag.BaseColor
-        $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y + 2)
+        try {
+            $this.BackColor = $this.Tag.BaseColor
+            $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y + 2)
+        } catch {}
     })
 }
 
-# HÀM VẼ VIỀN MÀU (CUSTOM BORDER PAINT)
 $PaintHandler = {
     param($sender, $e)
     $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
-    
-    # Tạo bút vẽ (Pen), độ dày 2px
     $Pen = New-Object System.Drawing.Pen($T.Border, 2)
-    
-    # Tính toán hình chữ nhật để vẽ viền
     $Rect = $sender.ClientRectangle
-    $Rect.Width -= 2; $Rect.Height -= 2 # Trừ đi để viền không bị cắt
-    $Rect.X += 1; $Rect.Y += 1
-    
-    # Vẽ
+    $Rect.Width -= 2; $Rect.Height -= 2; $Rect.X += 1; $Rect.Y += 1
     $e.Graphics.DrawRectangle($Pen, $Rect)
     $Pen.Dispose()
 }
@@ -150,11 +153,11 @@ function Load-Module ($Name) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.1 (NEON EDITION)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.2 (STABLE)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
-$Form.Opacity = 0
+$Form.Opacity = 0 # Ẩn để Fade-in
 
 # Header
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 20, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,10"; $Form.Controls.Add($LblTitle)
@@ -175,9 +178,7 @@ function Add-Card ($Title, $X, $Y, $W, $H) {
     $P = New-Object System.Windows.Forms.Panel
     $P.Name = "Card_$Title" 
     $P.Location = "$X,$Y"; $P.Size = "$W,$H"
-    $P.Padding = "1,1,1,1" # Padding để viền không đè nội dung
-    
-    # Gán sự kiện vẽ viền (Quan trọng)
+    $P.Padding = "1,1,1,1" 
     $P.Add_Paint($Global:PaintHandler)
     
     $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Location="15,15"; $L.AutoSize=$true; $L.Font="Segoe UI, 11, Bold"
@@ -185,7 +186,6 @@ function Add-Card ($Title, $X, $Y, $W, $H) {
     
     $F = New-Object System.Windows.Forms.FlowLayoutPanel; $F.Location="2,45"; $F.Size="$($W-4),$($H-47)"; $F.FlowDirection="TopDown"; $F.WrapContents=$true; $F.Padding="10,0,0,0"
     $P.Controls.Add($F)
-    
     $AdvTab.Controls.Add($P); return $F
 }
 
