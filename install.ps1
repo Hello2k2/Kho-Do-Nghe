@@ -168,12 +168,13 @@ Add-AdvBtn $AdvTab "SYSTEM SCAN (SFC/DISM)" 20 105 "Orange" { Load-Module "Syste
 Add-AdvBtn $AdvTab "SYSTEM CLEANER PRO" 20 160 "Green" { Load-Module "SystemCleaner.ps1" }
 Add-AdvBtn $AdvTab "DATA RECOVERY (HDD)" 20 215 "Red" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
 
-# === CỘT 2: SECURITY & NETWORK (X=290) ===
-Add-Header $AdvTab "2. SECURITY & NETWORK" 290
-Add-AdvBtn $AdvTab "NETWORK MASTER (DNS/FIX)" 290 50 "Teal" { Load-Module "NetworkMaster.ps1" }
-Add-AdvBtn $AdvTab "WIN UPDATE PRO (QUAN LY)" 290 105 "Firebrick" { Load-Module "WinUpdatePro.ps1" } # Module Xịn
-Add-AdvBtn $AdvTab "DEFENDER CONTROL" 290 160 "DarkSlateBlue" { Load-Module "DefenderMgr.ps1" }
-Add-AdvBtn $AdvTab "BROWSER PRIVACY (BLOCK)" 290 215 "DarkRed" { Load-Module "BrowserPrivacy.ps1" }
+# === CỘT 2: SECURITY & NETWORK (X=310) ===
+Add-Header $AdvTab "2. SECURITY & NETWORK" 310
+Add-AdvBtn $AdvTab "NETWORK MASTER (DNS)" 310 50 "Teal" { Load-Module "NetworkMaster.ps1" }
+Add-AdvBtn $AdvTab "WIN UPDATE PRO (QUAN LY)" 310 105 "Firebrick" { Load-Module "WinUpdatePro.ps1" }
+Add-AdvBtn $AdvTab "DEFENDER CONTROL" 310 160 "DarkSlateBlue" { Load-Module "DefenderMgr.ps1" }
+Add-AdvBtn $AdvTab "BITLOCKER MANAGER" 310 215 "Gold" { Load-Module "BitLockerMgr.ps1" }
+Add-AdvBtn $AdvTab "BROWSER PRIVACY (BLOCK)" 310 270 "DarkRed" { Load-Module "BrowserPrivacy.ps1" }
 
 # === CỘT 3: DEPLOYMENT & TOOLS (X=560) ===
 Add-Header $AdvTab "3. DEPLOYMENT & UTILITIES" 560
