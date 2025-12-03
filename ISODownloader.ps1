@@ -136,28 +136,47 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
         Start-Sleep -Milliseconds 500
     }
 
-    # 4. Ghep file
+    # --- FIX START: GIẢI PHÓNG TIẾN TRÌNH TRƯỚC KHI GỘP ---
+    $Status.Text = "Dang don dep tien trinh..."
+    foreach ($Ps in $PowerShells) { $Ps.Dispose() }
+    $Pool.Close()
+    $Pool.Dispose()
+    [GC]::Collect() # Dọn rác bộ nhớ ngay lập tức
+    # --- FIX END ---
+
+    # 4. Ghep file (FIXED: DÙNG STREAM ĐỂ KHÔNG TRÀN RAM)
     $Status.Text = "Dang ghep noi $Threads phan (Merging)..."
     [System.Windows.Forms.Application]::DoEvents()
     
-    $OutStream = [System.IO.File]::Create($DestPath)
-    for ($i = 0; $i -lt $Threads; $i++) {
-        $PartPath = "$DestPath.part$i"
-        if (Test-Path $PartPath) {
-            $InBytes = [System.IO.File]::ReadAllBytes($PartPath)
-            $OutStream.Write($InBytes, 0, $InBytes.Length)
-            Remove-Item $PartPath -Force
+    try {
+        $OutStream = [System.IO.File]::Create($DestPath)
+        for ($i = 0; $i -lt $Threads; $i++) {
+            $PartPath = "$DestPath.part$i"
+            if (Test-Path $PartPath) {
+                # Dùng Stream copy trực tiếp (Buffer) thay vì đọc hết vào RAM
+                $InStream = [System.IO.File]::OpenRead($PartPath)
+                $InStream.CopyTo($OutStream)
+                $InStream.Close()
+                $InStream.Dispose()
+                
+                Remove-Item $PartPath -Force -ErrorAction SilentlyContinue
+            }
+            # Cập nhật tiến trình gộp cho người dùng đỡ sốt ruột
+            $MergePercent = [Math]::Round((($i + 1) / $Threads) * 100)
+            $Status.Text = "Dang ghep noi... $MergePercent%"
+            [System.Windows.Forms.Application]::DoEvents()
         }
+        $OutStream.Close()
+        $OutStream.Dispose()
+        
+        $Status.Text = "HOAN TAT! File luu tai: $DestPath"
+        $Bar.Value = 100
+        [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!", "Phat Tan PC")
+        Invoke-Item (Split-Path $DestPath)
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Loi khi ghep file: $($_.Exception.Message)", "Error")
     }
-    $OutStream.Close()
-    $Pool.Close()
-    
-    $Status.Text = "HOAN TAT! File luu tai: $DestPath"
-    $Bar.Value = 100
-    [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!", "Phat Tan PC")
-    Invoke-Item (Split-Path $DestPath)
 }
-
 # --- HANDLERS (FIXED TRIM URL) ---
 function Load-JsonData {
     $Status.Text = "Dang tai danh sach tu Github..."
