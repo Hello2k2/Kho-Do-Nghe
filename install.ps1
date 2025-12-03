@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.0 (Material Design + Animation)
+    Version: 11.1 (Neon Borders + Material Design)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -23,27 +23,27 @@ if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force 
 
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-# --- 3. THEME ENGINE (MATERIAL DESIGN) ---
+# --- 3. THEME ENGINE (NEON EDITION) ---
 $Global:DarkMode = $true 
 
 $Theme = @{
     Dark = @{
-        Back      = [System.Drawing.Color]::FromArgb(30, 30, 30)      # Nền chính tối
-        Card      = [System.Drawing.Color]::FromArgb(45, 45, 48)      # Nền Card (sáng hơn nền chính)
-        Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)   # Chữ trắng sữa
-        BtnBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)      # Nút thường
-        BtnHover  = [System.Drawing.Color]::FromArgb(80, 80, 80)      # Nút khi Hover
-        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Cyan
-        Border    = [System.Drawing.Color]::FromArgb(80, 80, 80)      # Viền Card
+        Back      = [System.Drawing.Color]::FromArgb(30, 30, 30)
+        Card      = [System.Drawing.Color]::FromArgb(40, 40, 43)
+        Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
+        BtnBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)
+        BtnHover  = [System.Drawing.Color]::FromArgb(80, 80, 80)
+        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Cyan Neon cho Text
+        Border    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # VIỀN NEON
     }
     Light = @{
-        Back      = [System.Drawing.Color]::FromArgb(245, 245, 245)   # Nền xám rất nhạt
-        Card      = [System.Drawing.Color]::White                     # Nền Card trắng tinh
-        Text      = [System.Drawing.Color]::FromArgb(30, 30, 30)      # Chữ đen
-        BtnBack   = [System.Drawing.Color]::FromArgb(230, 230, 230)   # Nút thường
-        BtnHover  = [System.Drawing.Color]::FromArgb(210, 210, 210)   # Nút khi Hover
-        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # Xanh Win 10
-        Border    = [System.Drawing.Color]::FromArgb(200, 200, 200)   # Viền Card
+        Back      = [System.Drawing.Color]::FromArgb(245, 245, 245)
+        Card      = [System.Drawing.Color]::White
+        Text      = [System.Drawing.Color]::FromArgb(30, 30, 30)
+        BtnBack   = [System.Drawing.Color]::FromArgb(230, 230, 230)
+        BtnHover  = [System.Drawing.Color]::FromArgb(210, 210, 210)
+        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # Blue Win 10
+        Border    = [System.Drawing.Color]::FromArgb(0, 120, 215)     # VIỀN XANH DƯƠNG
     }
 }
 
@@ -53,28 +53,27 @@ function Apply-Theme {
     $Form.BackColor = $T.Back; $Form.ForeColor = $T.Text
     $LblTitle.ForeColor = $T.Accent
     
-    # Update Tabs
     foreach ($P in $TabControl.TabPages) {
         $P.BackColor = $T.Back; $P.ForeColor = $T.Text
         
-        # Update Cards (Panels)
         foreach ($C in $P.Controls) {
-            # Xử lý Card Panel
+            # Update Card Panel
             if ($C -is [System.Windows.Forms.Panel] -and $C.Name -like "Card*") {
                 $C.BackColor = $T.Card
-                # Update Title Label trong Card
-                foreach ($L in $C.Controls) { if ($L -is [System.Windows.Forms.Label]) { $L.ForeColor = $T.Accent } }
-                # Update FlowLayout Buttons
-                foreach ($F in $C.Controls) {
-                    if ($F -is [System.Windows.Forms.FlowLayoutPanel]) {
-                        foreach ($Btn in $F.Controls) {
+                $C.Refresh() # Vẽ lại viền mới
+                
+                # Update controls inside Card
+                foreach ($Child in $C.Controls) {
+                    if ($Child -is [System.Windows.Forms.Label]) { $Child.ForeColor = $T.Accent }
+                    if ($Child -is [System.Windows.Forms.FlowLayoutPanel]) {
+                        foreach ($Btn in $Child.Controls) {
                             $Btn.BackColor = $T.BtnBack; $Btn.ForeColor = $T.Text
-                            $Btn.Tag = @{ BaseColor = $T.BtnBack; HoverColor = $T.BtnHover } # Lưu màu để Animation dùng
+                            $Btn.Tag = @{ BaseColor = $T.BtnBack; HoverColor = $T.BtnHover }
                         }
                     }
                 }
             }
-            # Xử lý Tab JSON (Checkbox)
+            # Update Checkboxes
             if ($C -is [System.Windows.Forms.FlowLayoutPanel]) {
                 foreach ($Chk in $C.Controls) { $Chk.ForeColor = $T.Text }
             }
@@ -87,12 +86,11 @@ function Apply-Theme {
     $BtnTheme.ForeColor = if ($Global:DarkMode) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
 }
 
-# --- 4. ANIMATION ENGINE ---
-# Hiệu ứng Fade-in khi mở Form
+# --- 4. ANIMATION & PAINT ENGINE ---
 function Start-FadeIn {
     $Form.Opacity = 0
     $Timer = New-Object System.Windows.Forms.Timer
-    $Timer.Interval = 15 # Tốc độ (ms)
+    $Timer.Interval = 15
     $Timer.Add_Tick({
         $Form.Opacity += 0.05
         if ($Form.Opacity -ge 1) { $Form.Opacity = 1; $Timer.Stop() }
@@ -100,16 +98,33 @@ function Start-FadeIn {
     $Timer.Start()
 }
 
-# Hiệu ứng Hover cho Button (Sáng lên + Nhảy lên)
 function Add-HoverEffect ($Btn) {
     $Btn.Add_MouseEnter({ 
         $this.BackColor = $this.Tag.HoverColor
-        $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y - 2) # Nhảy lên 2px
+        $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y - 2)
     })
     $Btn.Add_MouseLeave({ 
         $this.BackColor = $this.Tag.BaseColor
-        $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y + 2) # Trả về chỗ cũ
+        $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y + 2)
     })
+}
+
+# HÀM VẼ VIỀN MÀU (CUSTOM BORDER PAINT)
+$PaintHandler = {
+    param($sender, $e)
+    $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
+    
+    # Tạo bút vẽ (Pen), độ dày 2px
+    $Pen = New-Object System.Drawing.Pen($T.Border, 2)
+    
+    # Tính toán hình chữ nhật để vẽ viền
+    $Rect = $sender.ClientRectangle
+    $Rect.Width -= 2; $Rect.Height -= 2 # Trừ đi để viền không bị cắt
+    $Rect.X += 1; $Rect.Y += 1
+    
+    # Vẽ
+    $e.Graphics.DrawRectangle($Pen, $Rect)
+    $Pen.Dispose()
 }
 
 # --- 5. CORE FUNCTIONS ---
@@ -135,11 +150,11 @@ function Load-Module ($Name) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.0 (ANIMATED UI)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.1 (NEON EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
-$Form.Opacity = 0 # Ẩn để Fade-in
+$Form.Opacity = 0
 
 # Header
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 20, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,10"; $Form.Controls.Add($LblTitle)
@@ -153,32 +168,30 @@ $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="
 $TabControl.Multiline=$true; $TabControl.SizeMode=[System.Windows.Forms.TabSizeMode]::FillToRight; $TabControl.ItemSize=New-Object System.Drawing.Size(0, 30)
 $Form.Controls.Add($TabControl)
 
-# > TAB 1: ADVANCED TOOLS (CARD UI LAYOUT)
+# > TAB 1: ADVANCED TOOLS
 $AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "  ★ ADVANCED MODULES ★  "; $AdvTab.AutoScroll = $true; $TabControl.Controls.Add($AdvTab)
 
-# Helper: Tạo "Card" (Panel thay vì GroupBox)
 function Add-Card ($Title, $X, $Y, $W, $H) {
     $P = New-Object System.Windows.Forms.Panel
-    $P.Name = "Card_$Title" # Đánh dấu để Theme Engine nhận diện
+    $P.Name = "Card_$Title" 
     $P.Location = "$X,$Y"; $P.Size = "$W,$H"
-    $P.BorderStyle = "FixedSingle" # Viền mỏng
+    $P.Padding = "1,1,1,1" # Padding để viền không đè nội dung
     
-    # Title Label cho Card
-    $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Location="10,10"; $L.AutoSize=$true; $L.Font="Segoe UI, 11, Bold"
+    # Gán sự kiện vẽ viền (Quan trọng)
+    $P.Add_Paint($Global:PaintHandler)
+    
+    $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Location="15,15"; $L.AutoSize=$true; $L.Font="Segoe UI, 11, Bold"
     $P.Controls.Add($L)
     
-    # FlowLayout cho nội dung
-    $F = New-Object System.Windows.Forms.FlowLayoutPanel; $F.Location="0,40"; $F.Size="$W,$($H-40)"; $F.FlowDirection="TopDown"; $F.WrapContents=$true; $F.Padding="10,0,0,0"
+    $F = New-Object System.Windows.Forms.FlowLayoutPanel; $F.Location="2,45"; $F.Size="$($W-4),$($H-47)"; $F.FlowDirection="TopDown"; $F.WrapContents=$true; $F.Padding="10,0,0,0"
     $P.Controls.Add($F)
     
-    $AdvTab.Controls.Add($P)
-    return $F
+    $AdvTab.Controls.Add($P); return $F
 }
 
 function Add-Btn ($Panel, $Txt, $Cmd) {
     $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Size="140,40"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9"; $B.Margin="5,5,5,5"; $B.Cursor="Hand"
-    $B.Add_Click($Cmd)
-    Add-HoverEffect $B # Kích hoạt Animation
+    $B.Add_Click($Cmd); Add-HoverEffect $B
     $Panel.Controls.Add($B)
 }
 
@@ -211,7 +224,7 @@ Add-Btn $P3 "BACKUP PRO" { Load-Module "BackupCenter.ps1" }
 Add-Btn $P3 "GEMINI AI CLI" { Load-Module "GeminiAI.ps1" }
 Add-Btn $P3 "WINGET STORE" { Load-Module "AppStore.ps1" }
 
-# > LOAD JSON APPS (Tab Ứng dụng)
+# > LOAD JSON APPS
 try {
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Data = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts" -Headers @{"User-Agent"="PS";"Cache-Control"="no-cache"} -ErrorAction Stop
@@ -237,7 +250,7 @@ $BtnNone = New-Object System.Windows.Forms.Button; $BtnNone.Text="BO CHON"; $Btn
 $BtnNone.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$false} } } } }); $PnlFooter.Controls.Add($BtnNone)
 
 $BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font="Segoe UI, 14, Bold"; $BtnInstall.Location="360,10"; $BtnInstall.Size="400,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"; $BtnInstall.Cursor="Hand"
-Add-HoverEffect $BtnInstall # Animation cho nút Install
+Add-HoverEffect $BtnInstall
 $BtnInstall.Add_Click({
     $BtnInstall.Enabled=$false; $BtnInstall.Text="DANG XU LY..."
     foreach($P in $TabControl.TabPages){ 
@@ -263,8 +276,5 @@ $BtnDonate.Add_Click({
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
 }); $PnlFooter.Controls.Add($BtnDonate)
 
-# --- INIT ---
-Apply-Theme # Áp dụng màu sắc trước
-$Form.Add_Load({ Start-FadeIn }) # Kích hoạt Fade-in
-$Form.ShowDialog() | Out-Null
+Apply-Theme; $Form.Add_Load({ Start-FadeIn }); $Form.ShowDialog() | Out-Null
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
