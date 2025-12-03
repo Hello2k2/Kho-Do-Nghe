@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 10.0 (Professional Edition)
+    Version: 10.3 (Multiline Tabs + Smart Grid)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -23,10 +23,9 @@ if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force 
 
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-# --- 3. THEME ENGINE (DARK/LIGHT) ---
+# --- 3. THEME ENGINE ---
 $Global:DarkMode = $true 
 
-# Bảng màu (Palette)
 $Theme = @{
     Dark = @{
         Back = [System.Drawing.Color]::FromArgb(32, 33, 36)
@@ -43,8 +42,8 @@ $Theme = @{
         Text = [System.Drawing.Color]::Black
         BtnBack = [System.Drawing.Color]::FromArgb(225, 225, 225)
         BtnHover = [System.Drawing.Color]::FromArgb(200, 200, 200)
-        Accent = [System.Drawing.Color]::FromArgb(0, 120, 215) # Blue Win10
-        Group = [System.Drawing.Color]::FromArgb(0, 100, 0) # Dark Green
+        Accent = [System.Drawing.Color]::FromArgb(0, 120, 215)
+        Group = [System.Drawing.Color]::FromArgb(0, 100, 0)
     }
 }
 
@@ -55,30 +54,25 @@ function Apply-Theme {
     $Form.ForeColor = $T.Text
     $LblTitle.ForeColor = $T.Accent
     
-    # Update Tabs
     foreach ($P in $TabControl.TabPages) {
-        $P.BackColor = $T.Panel
-        $P.ForeColor = $T.Text
-        
-        # Update Checkboxes & GroupBox
+        $P.BackColor = $T.Panel; $P.ForeColor = $T.Text
         foreach ($C in $P.Controls) {
             if ($C -is [System.Windows.Forms.CheckBox]) { $C.ForeColor = $T.Text }
             if ($C -is [System.Windows.Forms.GroupBox]) { 
                 $C.ForeColor = $T.Group
-                foreach ($GC in $C.Controls) {
-                     if ($GC -is [System.Windows.Forms.Button]) {
-                        $GC.BackColor = $T.BtnBack
-                        $GC.ForeColor = $T.Text
-                     }
+                foreach ($Flow in $C.Controls) {
+                    if ($Flow -is [System.Windows.Forms.FlowLayoutPanel]) {
+                        foreach ($Btn in $Flow.Controls) {
+                            $Btn.BackColor = $T.BtnBack; $Btn.ForeColor = $T.Text
+                        }
+                    }
                 }
             }
         }
     }
-    
-    # Update Footer Buttons (Trừ nút Install màu xanh lá)
     $BtnSelectAll.BackColor = $T.BtnBack; $BtnSelectAll.ForeColor = $T.Text
     $BtnUncheck.BackColor = $T.BtnBack; $BtnUncheck.ForeColor = $T.Text
-    $BtnTheme.Text = if ($Global:DarkMode) { "☀ LIGHT MODE" } else { "🌙 DARK MODE" }
+    $BtnTheme.Text = if ($Global:DarkMode) { "☀ LIGHT" } else { "🌙 DARK" }
     $BtnTheme.BackColor = if ($Global:DarkMode) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::Black }
     $BtnTheme.ForeColor = if ($Global:DarkMode) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
 }
@@ -104,110 +98,105 @@ function Load-Module ($Name) {
     try { Invoke-WebRequest "$RawUrl$Name" -OutFile $Dest; Start-Process powershell "-Ex Bypass -File `"$Dest`"" } catch {}
 }
 
-# --- 5. DATA LOADING ---
+# --- 5. GUI CONSTRUCTION ---
+$Form = New-Object System.Windows.Forms.Form
+$Form.Text = "PHAT TAN PC TOOLKIT V10.3 (MULTILINE TABS)"
+$Form.Size = New-Object System.Drawing.Size(1050, 750)
+$Form.StartPosition = "CenterScreen"
+$Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+
+# Header
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 20, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,10"; $Form.Controls.Add($LblTitle)
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Professional IT Rescue Suite"; $LblSub.ForeColor="Gray"; $LblSub.AutoSize=$true; $LblSub.Location="25,50"; $Form.Controls.Add($LblSub)
+$BtnTheme = New-Object System.Windows.Forms.Button; $BtnTheme.Location="880,20"; $BtnTheme.Size="120,35"; $BtnTheme.FlatStyle="Flat"
+$BtnTheme.Add_Click({ $Global:DarkMode = -not $Global:DarkMode; Apply-Theme })
+$Form.Controls.Add($BtnTheme)
+
+# MAIN TAB CONTROL (MULTILINE SETUP)
+$TabControl = New-Object System.Windows.Forms.TabControl
+$TabControl.Location="20,90"
+$TabControl.Size="990,480"
+$TabControl.Font="Segoe UI, 10"
+$TabControl.Multiline = $true  # <--- BẬT CHẾ ĐỘ NHIỀU HÀNG
+$TabControl.SizeMode = [System.Windows.Forms.TabSizeMode]::FillToRight # <--- CĂN ĐỀU CÁC TAB CHO ĐẸP
+$TabControl.ItemSize = New-Object System.Drawing.Size(0, 30) # Tăng chiều cao Tab cho dễ bấm
+$Form.Controls.Add($TabControl)
+
+# > 1. TẠO TAB ADVANCED TOOLS TRƯỚC (ĐỂ NÓ NẰM ĐẦU TIÊN)
+$AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "  ★ ADVANCED MODULES ★  "; $AdvTab.AutoScroll = $true
+$TabControl.Controls.Add($AdvTab)
+
+# > 2. SAU ĐÓ MỚI LOAD JSON APPS (NẰM PHÍA SAU)
 try {
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Data = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts" -Headers @{"User-Agent"="PS";"Cache-Control"="no-cache"} -ErrorAction Stop
 } catch { $Data = @() }
 
-# --- 6. GUI CONSTRUCTION ---
-$Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V10.0 (PROFESSIONAL)"
-$Form.Size = New-Object System.Drawing.Size(1000, 750) # Form rộng hơn
-$Form.StartPosition = "CenterScreen"
-$Form.FormBorderStyle = "FixedSingle"
-$Form.MaximizeBox = $false
-
-# Header Area
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 20, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,10"; $Form.Controls.Add($LblTitle)
-$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Professional IT Rescue Suite"; $LblSub.ForeColor="Gray"; $LblSub.AutoSize=$true; $LblSub.Location="25,50"; $Form.Controls.Add($LblSub)
-
-# Theme Toggle Button
-$BtnTheme = New-Object System.Windows.Forms.Button; $BtnTheme.Location="830,20"; $BtnTheme.Size="120,35"; $BtnTheme.FlatStyle="Flat"
-$BtnTheme.Add_Click({ $Global:DarkMode = -not $Global:DarkMode; Apply-Theme })
-$Form.Controls.Add($BtnTheme)
-
-# MAIN TAB CONTROL
-$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="20,90"; $TabControl.Size="940,480"; $TabControl.Font="Segoe UI, 10"
-$Form.Controls.Add($TabControl)
-
-# > GENERATE JSON TABS
-$Tabs = $Data | Select -Expand tab -Unique
-foreach ($T in $Tabs) {
-    $Page = New-Object System.Windows.Forms.TabPage; $Page.Text = "  $T  "; $Page.AutoScroll = $true
-    $TabControl.Controls.Add($Page)
-    
+$JsonTabs = $Data | Select -Expand tab -Unique
+foreach ($T in $JsonTabs) {
+    $Page = New-Object System.Windows.Forms.TabPage; $Page.Text = "  $T  "; $Page.AutoScroll = $true; $TabControl.Controls.Add($Page)
+    $Flow = New-Object System.Windows.Forms.FlowLayoutPanel; $Flow.Dock="Fill"; $Flow.AutoScroll=$true; $Flow.Padding="20,20,20,20"; $Page.Controls.Add($Flow)
     $Apps = $Data | Where {$_.tab -eq $T}
-    $Flow = New-Object System.Windows.Forms.FlowLayoutPanel; $Flow.Dock="Fill"; $Flow.AutoScroll=$true; $Flow.Padding="20,20,20,20"
-    $Page.Controls.Add($Flow)
-    
     foreach ($A in $Apps) {
-        $Chk = New-Object System.Windows.Forms.CheckBox; $Chk.Text=$A.name; $Chk.Tag=$A; $Chk.AutoSize=$true; $Chk.Margin="10,10,20,10"; $Chk.Font="Segoe UI, 11"
-        $Flow.Controls.Add($Chk)
+        $Chk = New-Object System.Windows.Forms.CheckBox; $Chk.Text=$A.name; $Chk.Tag=$A; $Chk.AutoSize=$true; $Chk.Margin="10,10,20,10"; $Chk.Font="Segoe UI, 11"; $Flow.Controls.Add($Chk)
     }
 }
 
-# > ADVANCED TOOLS TAB (NEW LAYOUT)
-$AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "  ADVANCED MODULES  "; $AdvTab.AutoScroll = $true
-$TabControl.Controls.Add($AdvTab)
-
-# Helper tạo GroupBox và Button
-function Add-Group ($Title, $X, $Y, $H) {
-    $G = New-Object System.Windows.Forms.GroupBox; $G.Text=$Title; $G.Location="$X,$Y"; $G.Size="290,$H"; $G.Font="Segoe UI, 10, Bold"
-    $AdvTab.Controls.Add($G); return $G
+# --- CẤU HÌNH TAB ADVANCED (SMART GRID) ---
+function Add-SmartGroup ($Title, $X, $Y, $W, $H) {
+    $G = New-Object System.Windows.Forms.GroupBox; $G.Text=$Title; $G.Location="$X,$Y"; $G.Size="$W,$H"; $G.Font="Segoe UI, 10, Bold"
+    $F = New-Object System.Windows.Forms.FlowLayoutPanel; $F.Dock="Fill"; $F.FlowDirection="TopDown"; $F.WrapContents=$true; $F.Padding="10,15,0,0"
+    $G.Controls.Add($F); $AdvTab.Controls.Add($G); return $F
 }
-function Add-ModBtn ($Parent, $Txt, $Y, $Cmd) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="15,$Y"; $B.Size="260,40"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9"
-    $B.Add_Click($Cmd); $Parent.Controls.Add($B)
+
+function Add-Btn ($Panel, $Txt, $Cmd) {
+    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Size="145,40"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9"; $B.Margin="3,3,3,8"
+    $B.Add_Click($Cmd); $Panel.Controls.Add($B)
 }
 
 # CỘT 1: SYSTEM (X=15)
-$G1 = Add-Group "SYSTEM & MAINTENANCE" 15 20 420
-Add-ModBtn $G1 "CHECK INFO & DRIVER" 30 { Load-Module "SystemInfo.ps1" }
-Add-ModBtn $G1 "SYSTEM SCAN (SFC/DISM)" 80 { Load-Module "SystemScan.ps1" }
-Add-ModBtn $G1 "SYSTEM CLEANER PRO" 130 { Load-Module "SystemCleaner.ps1" }
-Add-ModBtn $G1 "RAM BOOSTER (OPTIMIZE)" 180 { Load-Module "RamBooster.ps1" }
-Add-ModBtn $G1 "ACTIVE WINDOWS/OFFICE" 230 { irm https://get.activated.win | iex }
-Add-ModBtn $G1 "DATA RECOVERY (HDD)" 280 { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+$P1 = Add-SmartGroup "SYSTEM & MAINTENANCE" 15 20 315 400
+Add-Btn $P1 "CHECK INFO" { Load-Module "SystemInfo.ps1" }
+Add-Btn $P1 "SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
+Add-Btn $P1 "CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
+Add-Btn $P1 "RAM BOOSTER" { Load-Module "RamBooster.ps1" }
+Add-Btn $P1 "ACTIVE WIN/OFF" { irm https://get.activated.win | iex }
+Add-Btn $P1 "HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
 
-# CỘT 2: SECURITY (X=325)
-$G2 = Add-Group "SECURITY & NETWORK" 325 20 420
-Add-ModBtn $G2 "NETWORK MASTER (DNS)" 30 { Load-Module "NetworkMaster.ps1" }
-Add-ModBtn $G2 "WIN UPDATE MANAGER" 80 { Load-Module "WinUpdatePro.ps1" }
-Add-ModBtn $G2 "DEFENDER CONTROL" 130 { Load-Module "DefenderMgr.ps1" }
-Add-ModBtn $G2 "BITLOCKER MANAGER" 180 { Load-Module "BitLockerMgr.ps1" }
-Add-ModBtn $G2 "BROWSER PRIVACY" 230 { Load-Module "BrowserPrivacy.ps1" }
+# CỘT 2: SECURITY (X=340)
+$P2 = Add-SmartGroup "SECURITY & NETWORK" 340 20 315 400
+Add-Btn $P2 "DNS MASTER" { Load-Module "NetworkMaster.ps1" }
+Add-Btn $P2 "WIN UPDATE" { Load-Module "WinUpdatePro.ps1" }
+Add-Btn $P2 "DEFENDER CTRL" { Load-Module "DefenderMgr.ps1" }
+Add-Btn $P2 "BITLOCKER MGR" { Load-Module "BitLockerMgr.ps1" }
+Add-Btn $P2 "BROWSER BLOCK" { Load-Module "BrowserPrivacy.ps1" }
+Add-Btn $P2 "FIREWALL OFF" { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
 
-# CỘT 3: DEPLOYMENT & AI (X=635)
-$G3 = Add-Group "DEPLOYMENT & AI TOOLS" 635 20 420
-Add-ModBtn $G3 "AUTO INSTALL WINDOWS" 30 { Load-Module "WinInstall.ps1" }
-Add-ModBtn $G3 "WIN MODDER STUDIO (EDIT ISO)" 80 { Load-Module "WinModder.ps1" }
-Add-ModBtn $G3 "WIN AIO BUILDER (MERGE)" 130 { Load-Module "WinAIOBuilder.ps1" }
-Add-ModBtn $G3 "LTSC STORE INSTALLER" 180 { Load-Module "StoreInstaller.ps1" }
-Add-ModBtn $G3 "ISO DOWNLOADER (IDM)" 230 { Load-Module "ISODownloader.ps1" }
-Add-ModBtn $G3 "BACKUP & RESTORE PRO" 280 { Load-Module "BackupCenter.ps1" }
-Add-ModBtn $G3 "GEMINI AI ASSISTANT (CLI)" 330 { Load-Module "GeminiAI.ps1" }
+# CỘT 3: DEPLOYMENT (X=665)
+$P3 = Add-SmartGroup "DEPLOYMENT & AI TOOLS" 665 20 315 400
+Add-Btn $P3 "AUTO INSTALL WIN" { Load-Module "WinInstall.ps1" }
+Add-Btn $P3 "WIN MODDER" { Load-Module "WinModder.ps1" }
+Add-Btn $P3 "WIN AIO BUILD" { Load-Module "WinAIOBuilder.ps1" }
+Add-Btn $P3 "LTSC STORE" { Load-Module "StoreInstaller.ps1" }
+Add-Btn $P3 "ISO IDM TOOL" { Load-Module "ISODownloader.ps1" }
+Add-Btn $P3 "BACKUP PRO" { Load-Module "BackupCenter.ps1" }
+Add-Btn $P3 "GEMINI AI CLI" { Load-Module "GeminiAI.ps1" }
+Add-Btn $P3 "WINGET STORE" { Load-Module "AppStore.ps1" }
 
-# --- FOOTER AREA ---
-$PnlFooter = New-Object System.Windows.Forms.Panel; $PnlFooter.Location="0,590"; $PnlFooter.Size="1000,120"; $PnlFooter.BackColor=[System.Drawing.Color]::Transparent
-$Form.Controls.Add($PnlFooter)
+# --- FOOTER ---
+$PnlFooter = New-Object System.Windows.Forms.Panel; $PnlFooter.Location="0,590"; $PnlFooter.Size="1050,120"; $PnlFooter.BackColor=[System.Drawing.Color]::Transparent; $Form.Controls.Add($PnlFooter)
 
-# Select Buttons
 $BtnAll = New-Object System.Windows.Forms.Button; $BtnAll.Text="CHON TAT CA"; $BtnAll.Location="30,10"; $BtnAll.Size="120,40"; $BtnAll.FlatStyle="Flat"
-$BtnAll.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($C in $P.Controls){ foreach($Ct in $C.Controls){ if($Ct -is [System.Windows.Forms.CheckBox]){$Ct.Checked=$true} } } } })
-$PnlFooter.Controls.Add($BtnAll)
+$BtnAll.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$true} } } } }); $PnlFooter.Controls.Add($BtnAll)
 
 $BtnNone = New-Object System.Windows.Forms.Button; $BtnNone.Text="BO CHON"; $BtnNone.Location="160,10"; $BtnNone.Size="120,40"; $BtnNone.FlatStyle="Flat"
-$BtnNone.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($C in $P.Controls){ foreach($Ct in $C.Controls){ if($Ct -is [System.Windows.Forms.CheckBox]){$Ct.Checked=$false} } } } })
-$PnlFooter.Controls.Add($BtnNone)
+$BtnNone.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$false} } } } }); $PnlFooter.Controls.Add($BtnNone)
 
-# BIG INSTALL BUTTON
-$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font="Segoe UI, 14, Bold"
-$BtnInstall.Location="350,10"; $BtnInstall.Size="400,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"
+$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font="Segoe UI, 14, Bold"; $BtnInstall.Location="360,10"; $BtnInstall.Size="400,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"
 $BtnInstall.Add_Click({
     $BtnInstall.Enabled=$false; $BtnInstall.Text="DANG XU LY..."
     foreach($P in $TabControl.TabPages){ 
-        foreach($F in $P.Controls){ # Check flow panel
+        foreach($F in $P.Controls){ 
             foreach($C in $F.Controls){
                 if($C -is [System.Windows.Forms.CheckBox] -and $C.Checked){
                     $I = $C.Tag
@@ -218,21 +207,16 @@ $BtnInstall.Add_Click({
         } 
     }
     [System.Windows.Forms.MessageBox]::Show("Da Xong!", "Info"); $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Enabled=$true
-})
-$PnlFooter.Controls.Add($BtnInstall)
+}); $PnlFooter.Controls.Add($BtnInstall)
 
-# Mini Links
-$BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="WINPE RESCUE"; $BtnPe.Location="780,10"; $BtnPe.Size="120,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
+$BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="WINPE RESCUE"; $BtnPe.Location="830,10"; $BtnPe.Size="120,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnPe.Add_Click({ Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }); $PnlFooter.Controls.Add($BtnPe)
 
-$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="DONATE"; $BtnDonate.Location="780,50"; $BtnDonate.Size="120,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
+$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="DONATE"; $BtnDonate.Location="830,50"; $BtnDonate.Size="120,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnDonate.Add_Click({ 
     $D=New-Object System.Windows.Forms.Form;$D.Size="400,500";$D.StartPosition="CenterScreen";$P=New-Object System.Windows.Forms.PictureBox;$P.Dock="Fill";$P.SizeMode="Zoom"
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
 }); $PnlFooter.Controls.Add($BtnDonate)
 
-# --- INIT ---
-Apply-Theme
-$Form.Add_Shown({ Apply-Theme })
-$Form.ShowDialog() | Out-Null
+Apply-Theme; $Form.Add_Shown({ Apply-Theme }); $Form.ShowDialog() | Out-Null
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
