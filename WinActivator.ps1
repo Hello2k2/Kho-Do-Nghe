@@ -1,10 +1,11 @@
-# --- 1. FORCE ADMIN ---
+# --- 1. YÊU CẦU QUYỀN ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
 # --- THEME ENGINE (NEON GLOW) ---
@@ -21,7 +22,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ACTIVATION CENTER & ESU MASTER (SMART EDITION)"
+$Form.Text = "TRUNG TÂM KÍCH HOẠT & ESU MASTER (SMART EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
@@ -30,8 +31,8 @@ $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 # Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "WINDOWS ACTIVATION & ESU MASTER"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Powered by MAS 3.9 | Smart Key Engine v1.0"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,50"; $Form.Controls.Add($LblS)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "QUẢN LÝ KÍCH HOẠT WINDOWS & ESU"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Hỗ trợ bởi MAS 3.9 | Smart Key Engine v1.0"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,50"; $Form.Controls.Add($LblS)
 
 # --- ADVANCED GLOW PAINTER ---
 $GlowPaint = {
@@ -68,91 +69,79 @@ function Add-Btn ($Parent, $Txt, $X, $Y, $W, $Cmd) {
 }
 
 # =========================================================================================
-# SECTION 1: SMART KEY INPUT (THE ROBOT PART)
+# PHẦN 1: NHẬP KEY THÔNG MINH (ROBOT INPUT)
 # =========================================================================================
-$CardKey = Add-Card 20 80 895 150 "1. NHAP KEY THU CONG (SMART ENGINE)"
+$CardKey = Add-Card 20 80 895 150 "1. NHẬP KEY THỦ CÔNG (SMART ENGINE)"
 
-# Input Box Style Robot
+# Input Box
 $TxtKey = New-Object System.Windows.Forms.TextBox
 $TxtKey.Location="25,50"; $TxtKey.Size="550,35"; $TxtKey.Font="Consolas, 16, Bold"
 $TxtKey.BackColor="Black"; $TxtKey.ForeColor="Gray"; $TxtKey.BorderStyle="FixedSingle"
-$TxtKey.MaxLength = 29 # 25 chars + 4 hyphens
+$TxtKey.MaxLength = 29
 $CardKey.Controls.Add($TxtKey)
 
-# Status Bar (Robot Voice)
+# Status Bar
 $LblStatus = New-Object System.Windows.Forms.Label
-$LblStatus.Text = "[SYSTEM]: WAITING FOR INPUT..."
+$LblStatus.Text = "[HỆ THỐNG]: ĐANG CHỜ NHẬP LIỆU..."
 $LblStatus.Font = "Consolas, 9"; $LblStatus.ForeColor = "Gray"
 $LblStatus.Location = "25, 95"; $LblStatus.AutoSize = $true
 $CardKey.Controls.Add($LblStatus)
 
-# Paste Button (Icon Style)
+# Paste Button
 $BtnPaste = New-Object System.Windows.Forms.Button
-$BtnPaste.Text = "📋 PASTE"
+$BtnPaste.Text = "📋 DÁN"
 $BtnPaste.Location = "585, 50"; $BtnPaste.Size = "80, 32"; $BtnPaste.FlatStyle="Flat"; $BtnPaste.BackColor="DimGray"; $BtnPaste.ForeColor="White"
 $CardKey.Controls.Add($BtnPaste)
 
 # Action Buttons
-$BtnInstallKey = Add-Btn $CardKey "NẠP KEY (INSTALL)" 680 48 180 {
+$BtnInstallKey = Add-Btn $CardKey "NẠP KEY (CÀI ĐẶT)" 680 48 180 {
     $K = $TxtKey.Text
     Start-Process "slmgr.vbs" -ArgumentList "/ipk $K" -Wait
     Start-Process "slmgr.vbs" -ArgumentList "/ato" -Wait
-    [System.Windows.Forms.MessageBox]::Show("Da gui lenh kich hoat!`nKey: $K", "Success")
+    [System.Windows.Forms.MessageBox]::Show("Đã gửi lệnh kích hoạt!`nMã Key: $K", "Thành công")
 }
-$BtnInstallKey.Enabled = $false # Mac dinh khoa
+$BtnInstallKey.Enabled = $false
 $BtnInstallKey.BackColor = [System.Drawing.Color]::FromArgb(30,30,30); $BtnInstallKey.ForeColor="Gray"
 
-# --- LOGIC THÔNG MINH (SMART LOGIC) ---
+# --- LOGIC THÔNG MINH ---
 $BtnPaste.Add_Click({
     if ([System.Windows.Forms.Clipboard]::ContainsText()) {
         $Clip = [System.Windows.Forms.Clipboard]::GetText()
-        # Loc bo moi ky tu rac, chi lay chu va so
         $Clean = $Clip -replace "[^a-zA-Z0-9]", ""
         if ($Clean.Length -gt 25) { $Clean = $Clean.Substring(0, 25) }
-        $TxtKey.Text = $Clean # Trigger TextChanged
+        $TxtKey.Text = $Clean
     }
 })
 
-# Bien co de tranh loop khi format
 $Global:IsFormatting = $false
-
 $TxtKey.Add_TextChanged({
     if ($Global:IsFormatting) { return }
     $Global:IsFormatting = $true
     
-    # 1. Lay vi tri con tro
     $CursorPos = $TxtKey.SelectionStart
-    
-    # 2. Clean Text (Chi lay chu so, Upper case)
     $Raw = $TxtKey.Text -replace "[^a-zA-Z0-9]", ""
     $Raw = $Raw.ToUpper()
     
-    # 3. Auto Add Hyphens (Them dau gach ngang)
     $Formatted = ""
     for ($i = 0; $i -lt $Raw.Length; $i++) {
         if ($i -gt 0 -and $i % 5 -eq 0) { $Formatted += "-" }
         $Formatted += $Raw[$i]
     }
     
-    # 4. Limit Length
     if ($Formatted.Length -gt 29) { $Formatted = $Formatted.Substring(0, 29) }
-    
     $TxtKey.Text = $Formatted
-    
-    # 5. Restore Cursor (Hack nhe de con tro khong bi nhay ve cuoi)
     try { $TxtKey.SelectionStart = $Formatted.Length } catch {}
     
-    # 6. Validate & Visual Feedback
     if ($Raw.Length -eq 25) {
-        $TxtKey.ForeColor = $Theme.Valid # Xanh Neon
-        $LblStatus.Text = "[SYSTEM]: KEY FORMAT VALIDIFIED. READY TO INSTALL."
+        $TxtKey.ForeColor = $Theme.Valid
+        $LblStatus.Text = "[HỆ THỐNG]: ĐỊNH DẠNG KEY HỢP LỆ. SẴN SÀNG CÀI ĐẶT."
         $LblStatus.ForeColor = $Theme.Valid
         $BtnInstallKey.Enabled = $true
         $BtnInstallKey.BackColor = $Theme.BtnBack; $BtnInstallKey.ForeColor = $Theme.Text
     } else {
-        $TxtKey.ForeColor = $Theme.Error # Do Neon
+        $TxtKey.ForeColor = $Theme.Error
         $Count = 25 - $Raw.Length
-        $LblStatus.Text = "[SYSTEM]: ANALYZING... MISSING $Count CHARACTERS"
+        $LblStatus.Text = "[HỆ THỐNG]: ĐANG PHÂN TÍCH... THIẾU $Count KÝ TỰ"
         $LblStatus.ForeColor = $Theme.Error
         $BtnInstallKey.Enabled = $false
         $BtnInstallKey.BackColor = [System.Drawing.Color]::FromArgb(30,30,30); $BtnInstallKey.ForeColor="Gray"
@@ -160,64 +149,63 @@ $TxtKey.Add_TextChanged({
     
     if ($Raw.Length -eq 0) {
         $TxtKey.ForeColor = "Gray"
-        $LblStatus.Text = "[SYSTEM]: WAITING FOR INPUT..."
+        $LblStatus.Text = "[HỆ THỐNG]: ĐANG CHỜ NHẬP LIỆU..."
         $LblStatus.ForeColor = "Gray"
     }
-    
     $Global:IsFormatting = $false
 })
 
 # =========================================================================================
-# SECTION 2: CONVERT EDITION
+# PHẦN 2: CHUYỂN ĐỔI PHIÊN BẢN (CONVERT)
 # =========================================================================================
-$CardConv = Add-Card 20 250 435 300 "2. CHUYEN DOI PHIEN BAN WIN (CONVERT)"
+$CardConv = Add-Card 20 250 435 300 "2. CHUYỂN ĐỔI PHIÊN BẢN (CONVERT)"
 
-$LblConv = New-Object System.Windows.Forms.Label; $LblConv.Text="Chon phien ban muon chuyen doi sang:"; $LblConv.Location="20,50"; $LblConv.AutoSize=$true; $LblConv.ForeColor="White"; $CardConv.Controls.Add($LblConv)
+$LblConv = New-Object System.Windows.Forms.Label; $LblConv.Text="Chọn phiên bản muốn chuyển đổi sang:"; $LblConv.Location="20,50"; $LblConv.AutoSize=$true; $LblConv.ForeColor="White"; $CardConv.Controls.Add($LblConv)
 
 $CbEditions = New-Object System.Windows.Forms.ComboBox; $CbEditions.Location="20,80"; $CbEditions.Size="390,30"; $CbEditions.Font="Segoe UI, 11"; $CbEditions.DropDownStyle="DropDownList"
-$Editions = @("IoT Enterprise LTSC (Recommended for ESU)", "Enterprise LTSC 2021", "Professional", "Professional Workstation", "Enterprise", "Education", "Home")
+$Editions = @("IoT Enterprise LTSC (Khuyên dùng cho ESU)", "Enterprise LTSC 2021", "Professional", "Professional Workstation", "Enterprise", "Education", "Home")
 foreach ($E in $Editions) { $CbEditions.Items.Add($E) | Out-Null }; $CbEditions.SelectedIndex = 0
 $CardConv.Controls.Add($CbEditions)
 
-Add-Btn $CardConv "TIEN HANH CONVERT (AUTO)" 20 130 390 {
-    $Msg = "Tool se mo Menu MAS. Ban hay bam: [6] Extras -> [1] Change Edition -> Chon phien ban tuong ung."
-    if ([System.Windows.Forms.MessageBox]::Show($Msg, "Huong dan", "YesNo", "Information") -eq "Yes") {
+Add-Btn $CardConv "TIẾN HÀNH CONVERT (AUTO)" 20 130 390 {
+    $Msg = "Tool sẽ mở Menu MAS. Bạn hãy bấm: [6] Extras -> [1] Change Edition -> Chọn phiên bản tương ứng."
+    if ([System.Windows.Forms.MessageBox]::Show($Msg, "Hướng dẫn", "YesNo", "Information") -eq "Yes") {
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
     }
 }
-$LblEsu = New-Object System.Windows.Forms.Label; $LblEsu.Text="MEO: De co ESU 2032 (Win 10), hay chuyen sang ban 'IoT Enterprise LTSC'."; $LblEsu.ForeColor="Gold"; $LblEsu.Location="20,200"; $LblEsu.Size="390,50"; $CardConv.Controls.Add($LblEsu)
+$LblEsu = New-Object System.Windows.Forms.Label; $LblEsu.Text="MẸO: Để có ESU 2032 (Win 10), hãy chuyển sang bản 'IoT Enterprise LTSC'."; $LblEsu.ForeColor="Gold"; $LblEsu.Location="20,200"; $LblEsu.Size="390,50"; $CardConv.Controls.Add($LblEsu)
 
 # =========================================================================================
-# SECTION 3: MAS 3.9 ACTIVATION
+# PHẦN 3: KÍCH HOẠT TỰ ĐỘNG (MAS 3.9)
 # =========================================================================================
-$CardMas = Add-Card 480 250 435 300 "3. MAS 3.9 - AUTO ACTIVATION & ESU"
+$CardMas = Add-Card 480 250 435 300 "3. MAS 3.9 - KÍCH HOẠT TỰ ĐỘNG & ESU"
 
-Add-Btn $CardMas "1. KICH HOAT WINDOWS (HWID)" 20 50 390 {
-    if ([System.Windows.Forms.MessageBox]::Show("Kich hoat Ban quyen so vinh vien (HWID)?", "Confirm", "YesNo") -eq "Yes") {
+Add-Btn $CardMas "1. KÍCH HOẠT WINDOWS (HWID)" 20 50 390 {
+    if ([System.Windows.Forms.MessageBox]::Show("Kích hoạt Bản quyền số vĩnh viễn (HWID)?", "Xác nhận", "YesNo") -eq "Yes") {
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
-        [System.Windows.Forms.MessageBox]::Show("Cua so MAS da mo. Bam phim [1] de kich hoat HWID.", "Huong dan")
+        [System.Windows.Forms.MessageBox]::Show("Cửa sổ MAS đã mở. Bấm phím [1] để kích hoạt HWID.", "Hướng dẫn")
     }
 }
 
-Add-Btn $CardMas "2. KICH HOAT OFFICE (OHOOK)" 20 100 390 {
+Add-Btn $CardMas "2. KÍCH HOẠT OFFICE (OHOOK)" 20 100 390 {
     Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
-    [System.Windows.Forms.MessageBox]::Show("Cua so MAS da mo. Bam phim [2] de kich hoat Office.", "Huong dan")
+    [System.Windows.Forms.MessageBox]::Show("Cửa sổ MAS đã mở. Bấm phím [2] để kích hoạt Office.", "Hướng dẫn")
 }
 
-Add-Btn $CardMas "3. KICH HOAT ESU / WIN / OFFICE (TSforge)" 20 150 390 {
-    $M = "*** QUAN TRONG: De co ESU (Update 2032): ***`n1. Convert sang 'IoT Enterprise LTSC' (Ben trai).`n2. Chon nut nay -> Cua so hien len -> Chon so [3] (TSforge).`n3. Chon tiep de kich hoat ESU."
-    if ([System.Windows.Forms.MessageBox]::Show($M, "Huong dan ESU", "YesNo", "Warning") -eq "Yes") {
+Add-Btn $CardMas "3. KÍCH HOẠT ESU / WIN / OFFICE (TSforge)" 20 150 390 {
+    $M = "*** QUAN TRỌNG: Để có ESU (Cập nhật 2032): ***`n1. Convert sang 'IoT Enterprise LTSC' (Bên trái).`n2. Chọn nút này -> Cửa sổ hiện lên -> Chọn số [3] (TSforge).`n3. Chọn tiếp để kích hoạt ESU."
+    if ([System.Windows.Forms.MessageBox]::Show($M, "Hướng dẫn ESU", "YesNo", "Warning") -eq "Yes") {
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
     }
 }
 
-Add-Btn $CardMas "KIEM TRA TRANG THAI (CHECK STATUS)" 20 230 390 { Start-Process "slmgr.vbs" -ArgumentList "/xpr" }
+Add-Btn $CardMas "KIỂM TRA TRẠNG THÁI (CHECK STATUS)" 20 230 390 { Start-Process "slmgr.vbs" -ArgumentList "/xpr" }
 
 # --- FOOTER ---
-$BtnDelKey = New-Object System.Windows.Forms.Button; $BtnDelKey.Text="XOA KEY / HUY KICH HOAT"; $BtnDelKey.Location="20,570"; $BtnDelKey.Size="250,30"; $BtnDelKey.FlatStyle="Flat"; $BtnDelKey.ForeColor="Red"; $BtnDelKey.BackColor=$Theme.Back; $BtnDelKey.Cursor="Hand"
+$BtnDelKey = New-Object System.Windows.Forms.Button; $BtnDelKey.Text="XÓA KEY / HỦY KÍCH HOẠT"; $BtnDelKey.Location="20,570"; $BtnDelKey.Size="250,30"; $BtnDelKey.FlatStyle="Flat"; $BtnDelKey.ForeColor="Red"; $BtnDelKey.BackColor=$Theme.Back; $BtnDelKey.Cursor="Hand"
 $BtnDelKey.Add_Click({ Start-Process "slmgr.vbs" -ArgumentList "/upk" -Wait; Start-Process "slmgr.vbs" -ArgumentList "/cpky" })
 $Form.Controls.Add($BtnDelKey)
 
-$LblCredit = New-Object System.Windows.Forms.Label; $LblCredit.Text="Powered by MAS (Massgrave.dev)"; $LblCredit.ForeColor="DimGray"; $LblCredit.Location="650,580"; $LblCredit.AutoSize=$true; $Form.Controls.Add($LblCredit)
+$LblCredit = New-Object System.Windows.Forms.Label; $LblCredit.Text="Được hỗ trợ bởi MAS (Massgrave.dev)"; $LblCredit.ForeColor="DimGray"; $LblCredit.Location="650,580"; $LblCredit.AutoSize=$true; $Form.Controls.Add($LblCredit)
 
 $Form.ShowDialog() | Out-Null
