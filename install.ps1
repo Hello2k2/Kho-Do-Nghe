@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.4 (Icons + Office Installer + Stable)
+    Version: 11.5 (Credits Added + Final Polish)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -56,7 +56,6 @@ function Apply-Theme {
     
     foreach ($P in $TabControl.TabPages) {
         $P.BackColor = $T.Back; $P.ForeColor = $T.Text
-        
         foreach ($C in $P.Controls) {
             if ($C -is [System.Windows.Forms.Panel] -and $C.Name -like "Card*") {
                 $C.BackColor = $T.Card
@@ -81,7 +80,7 @@ function Apply-Theme {
     $BtnTheme.ForeColor = if ($Global:DarkMode) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
 }
 
-# --- 4. SAFE ANIMATION ---
+# --- 4. ANIMATION ---
 function Start-FadeIn {
     $Form.Opacity = 0
     $Script:AnimTimer = New-Object System.Windows.Forms.Timer
@@ -130,35 +129,21 @@ function Tai-Va-Chay {
 
 function Load-Module ($ScriptName) {
     $LocalPath = "$TempDir\$ScriptName"
-    
-    # Thêm timestamp để ép tải mới
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Url = "$RawUrl$ScriptName" + "?t=$Ts"
-
     try {
-        # 1. Tải nội dung về RAM dưới dạng Text (String)
         $WebClient = New-Object System.Net.WebClient
         $WebClient.Encoding = [System.Text.Encoding]::UTF8
         $Content = $WebClient.DownloadString($Url)
-
-        # 2. Lưu xuống ổ cứng với Encoding UTF-8 có BOM (Quan trọng cho PowerShell 5.1)
-        # Dùng StreamWriter để ép ghi BOM
         $Stream = [System.IO.StreamWriter]::new($LocalPath, $false, [System.Text.Encoding]::UTF8)
-        $Stream.Write($Content)
-        $Stream.Close()
-
-        if (Test-Path $LocalPath) {
-            # Thêm -NoExit để giữ cửa sổ nếu có lỗi (dễ debug)
-            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`""
-        }
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("Loi tai Module: $ScriptName`n`nChi tiet: $($_.Exception.Message)", "Loi Ket Noi")
-    }
+        $Stream.Write($Content); $Stream.Close()
+        if (Test-Path $LocalPath) { Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`"" }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai Module: $ScriptName`nChi tiet: $($_.Exception.Message)", "Loi Ket Noi") }
 }
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.4 (ICONS EDITION)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.5 (CREDITS EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false; $Form.Opacity = 0
@@ -191,7 +176,7 @@ function Add-Btn ($Panel, $Txt, $Cmd) {
     $B.Add_Click($Cmd); Add-HoverEffect $B; $Panel.Controls.Add($B)
 }
 
-# --- CỘT 1: SYSTEM & MAINTENANCE (X=15) ---
+# --- CỘT 1: SYSTEM & MAINTENANCE ---
 $P1 = Add-Card "SYSTEM & MAINTENANCE" 15 20 315 400
 Add-Btn $P1 "ℹ️ CHECK INFO" { Load-Module "SystemInfo.ps1" }
 Add-Btn $P1 "🧹 CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
@@ -200,7 +185,7 @@ Add-Btn $P1 "🚀 RAM BOOSTER" { Load-Module "RamBooster.ps1" }
 Add-Btn $P1 "🔑 ACTIVATION" { Load-Module "WinActivator.ps1" }
 Add-Btn $P1 "💾 HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
 
-# --- CỘT 2: SECURITY & NETWORK (X=340) ---
+# --- CỘT 2: SECURITY & NETWORK ---
 $P2 = Add-Card "SECURITY & NETWORK" 340 20 315 400
 Add-Btn $P2 "🌐 DNS MASTER" { Load-Module "NetworkMaster.ps1" }
 Add-Btn $P2 "🔄 WIN UPDATE" { Load-Module "WinUpdatePro.ps1" }
@@ -209,10 +194,10 @@ Add-Btn $P2 "🔒 BITLOCKER" { Load-Module "BitLockerMgr.ps1" }
 Add-Btn $P2 "🚫 BLOCK WEB" { Load-Module "BrowserPrivacy.ps1" }
 Add-Btn $P2 "🔥 FIREWALL OFF" { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
 
-# --- CỘT 3: DEPLOYMENT & TOOLS (X=665) ---
+# --- CỘT 3: DEPLOYMENT & TOOLS ---
 $P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
 Add-Btn $P3 "💿 INSTALL WIN" { Load-Module "WinInstall.ps1" }
-Add-Btn $P3 "🏢 OFFICE TOOL" { Load-Module "OfficeInstaller.ps1" } # <--- MỚI
+Add-Btn $P3 "🏢 OFFICE TOOL" { Load-Module "OfficeInstaller.ps1" }
 Add-Btn $P3 "🛠️ WIN MODDER" { Load-Module "WinModder.ps1" }
 Add-Btn $P3 "📦 AIO BUILDER" { Load-Module "WinAIOBuilder.ps1" }
 Add-Btn $P3 "🤖 GEMINI AI" { Load-Module "GeminiAI.ps1" }
@@ -246,7 +231,7 @@ $BtnAll.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Contro
 $BtnNone = New-Object System.Windows.Forms.Button; $BtnNone.Text="BO CHON"; $BtnNone.Location="160,10"; $BtnNone.Size="120,40"; $BtnNone.FlatStyle="Flat"
 $BtnNone.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$false} } } } }); $PnlFooter.Controls.Add($BtnNone)
 
-$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font="Segoe UI, 14, Bold"; $BtnInstall.Location="360,10"; $BtnInstall.Size="400,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"; $BtnInstall.Cursor="Hand"
+$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font="Segoe UI, 14, Bold"; $BtnInstall.Location="360,10"; $BtnInstall.Size="320,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"; $BtnInstall.Cursor="Hand"
 Add-HoverEffect $BtnInstall
 $BtnInstall.Add_Click({
     $BtnInstall.Enabled=$false; $BtnInstall.Text="DANG XU LY..."
@@ -264,14 +249,29 @@ $BtnInstall.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("Da Xong!", "Info"); $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Enabled=$true
 }); $PnlFooter.Controls.Add($BtnInstall)
 
-$BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="⚡ WINPE RESCUE"; $BtnPe.Location="830,10"; $BtnPe.Size="130,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
+# --- NÚT GHI CÔNG & DONATE ---
+$BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="⚡ WINPE"; $BtnPe.Location="750,10"; $BtnPe.Size="100,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnPe.Add_Click({ Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }); $PnlFooter.Controls.Add($BtnPe)
 
-$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="☕ DONATE"; $BtnDonate.Location="830,50"; $BtnDonate.Size="130,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
+$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="☕ DONATE"; $BtnDonate.Location="860,10"; $BtnDonate.Size="100,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnDonate.Add_Click({ 
     $D=New-Object System.Windows.Forms.Form;$D.Size="400,500";$D.StartPosition="CenterScreen";$P=New-Object System.Windows.Forms.PictureBox;$P.Dock="Fill";$P.SizeMode="Zoom"
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
 }); $PnlFooter.Controls.Add($BtnDonate)
+
+# NÚT CREDITS (GHI CÔNG)
+$BtnCredit = New-Object System.Windows.Forms.Button; $BtnCredit.Text="ℹ️ CREDITS"; $BtnCredit.Location="750,55"; $BtnCredit.Size="210,35"; $BtnCredit.BackColor="DarkSlateBlue"; $BtnCredit.ForeColor="White"; $BtnCredit.FlatStyle="Flat"
+$BtnCredit.Add_Click({
+    [System.Windows.Forms.MessageBox]::Show(
+        "PHAT TAN PC TOOLKIT - CREDITS:`n`n" +
+        "1. MMT (Massgrave) - Windows Activation Scripts (MAS)`n" +
+        "2. DONG599 - Y Tuong & Giao Dien`n" +
+        "3. Microsoft - Office Deployment Tool & Sysinternals`n" +
+        "4. Community - Cac module Open Source khac.`n`n" +
+        "Developed by: Phat Tan PC`nLien he: 0823.883.028", 
+        "GHI CONG & TAC GIA"
+    )
+}); $PnlFooter.Controls.Add($BtnCredit)
 
 Apply-Theme; $Form.Add_Load({ Start-FadeIn }); $Form.ShowDialog() | Out-Null
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
