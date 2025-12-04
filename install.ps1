@@ -143,7 +143,7 @@ function Load-Module ($ScriptName) {
 
         if (Test-Path $LocalPath) {
             # Chạy file với quyền Admin và Bypass chính sách
-            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`""
+            Start-Process powershell -ArgumentList "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`""
         } else {
             [System.Windows.Forms.MessageBox]::Show("Khong tim thay file sau khi tai: $ScriptName", "Loi File")
         }
