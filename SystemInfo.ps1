@@ -1,6 +1,6 @@
 <#
     SYSTEM INFO PRO MAX - PHAT TAN PC
-    Version: 9.0 (Detailed Disk Partition Tree + Battery + Fixed HTML)
+    Version: 9.1 (Fixed HTML Export Empty Rows)
 #>
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -10,7 +10,7 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CHI TIẾT CẤU HÌNH - PHÁT TẤN PC (V9.0)"
+$Form.Text = "CHI TIẾT CẤU HÌNH - PHÁT TẤN PC (V9.1)"
 $Form.Size = New-Object System.Drawing.Size(1000, 700)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = "White"
@@ -112,11 +112,10 @@ function Load-CpuRam {
 }
 
 # ==========================================
-# TAB 3: LƯU TRỮ (DISK TREE) - NÂNG CẤP !!!
+# TAB 3: LƯU TRỮ (DISK TREE)
 # ==========================================
 $TabDisk = Make-Tab "Lưu Trữ (Disk)"
 $GridDisk = Make-Grid $TabDisk
-# Định nghĩa cột mới cho chi tiết phân vùng
 $GridDisk.Columns.Add("Name", "Tên / Ổ Đĩa"); $GridDisk.Columns["Name"].FillWeight = 150
 $GridDisk.Columns.Add("Label", "Nhãn (Label)"); $GridDisk.Columns["Label"].FillWeight = 100
 $GridDisk.Columns.Add("Total", "Tổng Dung Lượng"); $GridDisk.Columns["Total"].FillWeight = 80
@@ -126,49 +125,31 @@ $GridDisk.Columns.Add("Status", "Trạng Thái"); $GridDisk.Columns["Status"].Fi
 
 function Load-Storage {
     $GridDisk.Rows.Clear()
-    
-    # 1. Lấy danh sách ổ cứng vật lý
     $Disks = Get-Disk | Sort-Object Number
-    
     foreach ($D in $Disks) {
-        # Tạo dòng Header cho ổ cứng vật lý (Màu xám đậm)
         $SizeGB = [Math]::Round($D.Size / 1GB, 0)
         $RowIndex = $GridDisk.Rows.Add("💿 DISK $($D.Number)", $D.FriendlyName, "$SizeGB GB", "-", $D.PartitionStyle, $D.HealthStatus)
         $GridDisk.Rows[$RowIndex].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
         $GridDisk.Rows[$RowIndex].DefaultCellStyle.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 
-        # 2. Lấy danh sách phân vùng của ổ cứng này
         $Parts = Get-Partition -DiskNumber $D.Number | Sort-Object PartitionNumber
-        
         foreach ($P in $Parts) {
-            # Lấy thông tin Volume (Dung lượng, Free space)
             $Vol = $P | Get-Volume -ErrorAction SilentlyContinue
-            
             $DriveLetter = if ($P.DriveLetter) { "  [$($P.DriveLetter):]" } else { "  (Hidden)" }
             $Label = if ($Vol.FileSystemLabel) { $Vol.FileSystemLabel } else { $P.Type }
             
-            # Tính toán dung lượng
             if ($Vol) {
                 $Total = [Math]::Round($Vol.Size / 1GB, 1).ToString() + " GB"
                 $Free = [Math]::Round($Vol.SizeRemaining / 1GB, 1).ToString() + " GB"
                 $FS = $Vol.FileSystem
-                
-                # Tính % trống để hiện trạng thái
                 $PercentFree = [Math]::Round(($Vol.SizeRemaining / $Vol.Size) * 100, 0)
                 $StatusText = "$PercentFree% Free"
                 if ($PercentFree -lt 10) { $StatusText += " (ĐẦY!)" }
             } else {
-                # Các phân vùng hệ thống (Recovery, System Reserved) không có Volume info chi tiết
                 $Total = [Math]::Round($P.Size / 1GB, 2).ToString() + " GB"
-                $Free = "-"
-                $FS = "-"
-                $StatusText = "System/Recovery"
+                $Free = "-"; $FS = "-"; $StatusText = "System/Recovery"
             }
-
-            # Thêm dòng phân vùng
             $RowIdx = $GridDisk.Rows.Add($DriveLetter, $Label, $Total, $Free, $FS, $StatusText)
-            
-            # Tô màu đỏ nếu ổ đầy (<10% free)
             if ($StatusText -match "ĐẦY") { $GridDisk.Rows[$RowIdx].DefaultCellStyle.ForeColor = "Red" }
         }
     }
@@ -210,31 +191,24 @@ function Load-Battery {
             Add-Item $LvBat "[TRẠNG THÁI]" ""
             Add-Item $LvBat "Tên Pin" $Bat.Name
             Add-Item $LvBat "Hiện Tại" "$($Bat.EstimatedChargeRemaining)%"
-            
             $Status = switch ($Bat.BatteryStatus) { 1 {"Đang xả"} 2 {"Đang sạc"} 3 {"Đầy"} default {"Khác"} }
             Add-Item $LvBat "Tình trạng" $Status
-
             Add-Item $LvBat "" ""
             Add-Item $LvBat "[SỨC KHỎE (HEALTH)]" "Đang phân tích..."
             
-            # Generate Report
             $ReportPath = "$env:TEMP\battery-report.xml"
             powercfg /batteryreport /output "$ReportPath" /xml | Out-Null
-            
             if (Test-Path $ReportPath) {
                 [xml]$Xml = Get-Content $ReportPath
                 $Design = $Xml.BatteryReport.Batteries.Battery.DesignCapacity
                 $Full = $Xml.BatteryReport.Batteries.Battery.FullChargeCapacity
-                
                 if ($Design -and $Full) {
                     $Health = [Math]::Round(($Full / $Design) * 100, 1)
                     $Wear = [Math]::Round(100 - $Health, 1)
-                    
                     Add-Item $LvBat "Dung lượng Thiết Kế" "$Design mWh"
                     Add-Item $LvBat "Dung lượng Thực Tế" "$Full mWh"
                     Add-Item $LvBat "Độ Chai Pin (Wear)" "$Wear %"
                     Add-Item $LvBat "Sức Khỏe (Health)" "$Health %"
-                    
                     if ($Health -lt 60) { 
                         $Item = New-Object System.Windows.Forms.ListViewItem("CẢNH BÁO"); $Item.SubItems.Add("PIN CHAI > 40% -> NÊN THAY!"); $Item.ForeColor = "Red"; $LvBat.Items.Add($Item)
                     }
@@ -260,7 +234,7 @@ function Load-AllDrivers {
 }
 
 # ==========================================
-# EXPORT HTML ENGINE
+# BUTTONS & HTML EXPORT ENGINE (RE-FIXED V9.1)
 # ==========================================
 $BtnReload = New-Object System.Windows.Forms.Button; $BtnReload.Text = "LÀM MỚI"; $BtnReload.Location = "10,580"; $BtnReload.Size = "150,40"; $BtnReload.BackColor = "LightBlue"
 $BtnReload.Add_Click({ Run-All-Checks })
@@ -269,6 +243,9 @@ $Form.Controls.Add($BtnReload)
 $BtnHTML = New-Object System.Windows.Forms.Button; $BtnHTML.Text = "XUẤT BÁO CÁO HTML"; $BtnHTML.Location = "170,580"; $BtnHTML.Size = "180,40"; $BtnHTML.BackColor = "Orange"
 
 $BtnHTML.Add_Click({
+    # Chạy làm mới để chắc chắn có dữ liệu
+    Run-All-Checks
+    
     $Path = "$env:USERPROFILE\Desktop\PC_Report_$($env:COMPUTERNAME).html"
     $CSS = "<style>body{font-family:Segoe UI;padding:20px;background:#f4f4f4}.box{background:white;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);margin-bottom:20px}h2{color:#0078d4;border-bottom:2px solid #ddd;padding-bottom:10px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f0f0f0}tr:nth-child(even){background:#fafafa}.red{color:red;font-weight:bold}.gray{background:#e0e0e0;font-weight:bold}</style>"
     
@@ -280,21 +257,47 @@ $BtnHTML.Add_Click({
         foreach($h in $Headers){$Html.Append("<th>$h</th>")}
         $Html.Append("</tr>")
         foreach($r in $Rows){
+            # Logic tô màu xám cho dòng tiêu đề Disk
             $Class = if($r[0] -match "DISK"){"class='gray'"}else{""}
-            $Html.Append("<tr $Class>"); foreach($c in $r){$Html.Append("<td>$c</td>")}; $Html.Append("</tr>")
+            $Html.Append("<tr $Class>")
+            foreach($c in $r){$Html.Append("<td>$c</td>")}
+            $Html.Append("</tr>")
         }
         $Html.Append("</table></div>")
     }
 
-    # Data Extractors
-    $R_Sum = @(); foreach($i in $LvSum.Items){$R_Sum+=@($i.Text, $i.SubItems[1].Text)}
+    # FIX: Dùng ArrayList để tránh lỗi cộng mảng của PowerShell
+    # 1. TONG QUAN
+    $R_Sum = New-Object System.Collections.ArrayList
+    foreach($i in $LvSum.Items){ $R_Sum.Add(@($i.Text, $i.SubItems[1].Text)) | Out-Null }
     Tbl "1. TỔNG QUAN" @("Thông Số","Giá Trị") $R_Sum
 
-    $R_Disk = @(); foreach($r in $GridDisk.Rows){$R_Disk+=@($r.Cells[0].Value,$r.Cells[1].Value,$r.Cells[2].Value,$r.Cells[3].Value,$r.Cells[4].Value,$r.Cells[5].Value)}
-    Tbl "2. LƯU TRỮ (DISK DETAIL)" @("Tên/Ổ","Nhãn","Tổng","Trống","Kiểu","Trạng Thái") $R_Disk
+    # 2. CPU RAM
+    $R_Cpu = New-Object System.Collections.ArrayList
+    foreach($i in $LvCpu.Items){ $R_Cpu.Add(@($i.Text, $i.SubItems[1].Text)) | Out-Null }
+    Tbl "2. CPU & RAM" @("Thông Số","Giá Trị") $R_Cpu
 
-    $R_Bat = @(); foreach($i in $LvBat.Items){$R_Bat+=@($i.Text, $i.SubItems[1].Text)}
-    Tbl "3. PIN (BATTERY)" @("Thông Số","Giá Trị") $R_Bat
+    # 3. DISK
+    $R_Disk = New-Object System.Collections.ArrayList
+    foreach($r in $GridDisk.Rows){
+        $R_Disk.Add(@($r.Cells[0].Value, $r.Cells[1].Value, $r.Cells[2].Value, $r.Cells[3].Value, $r.Cells[4].Value, $r.Cells[5].Value)) | Out-Null
+    }
+    Tbl "3. LƯU TRỮ (DISK DETAIL)" @("Tên/Ổ","Nhãn","Tổng","Trống","Kiểu","Trạng Thái") $R_Disk
+
+    # 4. NETWORK
+    $R_Net = New-Object System.Collections.ArrayList
+    foreach($i in $LvNet.Items){ $R_Net.Add(@($i.Text, $i.SubItems[1].Text)) | Out-Null }
+    Tbl "4. MẠNG (NETWORK)" @("Thông Số","Giá Trị") $R_Net
+
+    # 5. BATTERY
+    $R_Bat = New-Object System.Collections.ArrayList
+    foreach($i in $LvBat.Items){ $R_Bat.Add(@($i.Text, $i.SubItems[1].Text)) | Out-Null }
+    Tbl "5. PIN (BATTERY)" @("Thông Số","Giá Trị") $R_Bat
+
+    # 6. GPU
+    $R_Gpu = New-Object System.Collections.ArrayList
+    foreach($i in $LvGpu.Items){ $R_Gpu.Add(@($i.Text, $i.SubItems[1].Text)) | Out-Null }
+    Tbl "6. GPU" @("Thông Số","Giá Trị") $R_Gpu
 
     $Html.Append("</body></html>")
     $Html.ToString() | Out-File $Path -Encoding UTF8
