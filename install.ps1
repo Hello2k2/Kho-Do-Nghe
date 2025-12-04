@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.5 (Credits Added + Final Polish)
+    Version: 11.6 (Corrected Credits + Final Polish)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -143,7 +143,7 @@ function Load-Module ($ScriptName) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.5 (CREDITS EDITION)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.6 (FINAL EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false; $Form.Opacity = 0
@@ -259,14 +259,14 @@ $BtnDonate.Add_Click({
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
 }); $PnlFooter.Controls.Add($BtnDonate)
 
-# NÚT CREDITS (GHI CÔNG)
+# NÚT CREDITS (GHI CÔNG - ĐÃ SỬA LẠI)
 $BtnCredit = New-Object System.Windows.Forms.Button; $BtnCredit.Text="ℹ️ CREDITS"; $BtnCredit.Location="750,55"; $BtnCredit.Size="210,35"; $BtnCredit.BackColor="DarkSlateBlue"; $BtnCredit.ForeColor="White"; $BtnCredit.FlatStyle="Flat"
 $BtnCredit.Add_Click({
     [System.Windows.Forms.MessageBox]::Show(
         "PHAT TAN PC TOOLKIT - CREDITS:`n`n" +
-        "1. MMT (Massgrave) - Windows Activation Scripts (MAS)`n" +
-        "2. DONG599 - Y Tuong & Giao Dien`n" +
-        "3. Microsoft - Office Deployment Tool & Sysinternals`n" +
+        "1. MMT (Ma Minh Toan)`n" +
+        "2. Massgrave.dev - MAS (Windows Activation Scripts)`n" +
+        "3. DONG599 - Y Tuong & Giao Dien`n" +
         "4. Community - Cac module Open Source khac.`n`n" +
         "Developed by: Phat Tan PC`nLien he: 0823.883.028", 
         "GHI CONG & TAC GIA"
