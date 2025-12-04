@@ -20,7 +20,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ACTIVATION CENTER & ESU ENABLER (MAS 3.9)"
+$Form.Text = "ACTIVATION CENTER AND ESU ENABLER (MAS 3.9)"
 $Form.Size = New-Object System.Drawing.Size(950, 650)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
