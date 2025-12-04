@@ -13,8 +13,8 @@ $Theme = @{
     Card      = [System.Drawing.Color]::FromArgb(40, 40, 45)
     Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
     BtnBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)
-    BtnHover  = [System.Drawing.Color]::FromArgb(255, 140, 0) # Dark Orange
-    Accent    = [System.Drawing.Color]::FromArgb(255, 69, 0)    # Orange Red (Office Color)
+    BtnHover  = [System.Drawing.Color]::FromArgb(255, 140, 0)
+    Accent    = [System.Drawing.Color]::FromArgb(255, 69, 0)
     Border    = [System.Drawing.Color]::FromArgb(255, 69, 0)
 }
 
@@ -28,7 +28,7 @@ $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "OFFICE DEPLOYMENT TOOL (ODT)"; $LblT.Font = "Impact, 22"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
 
-# --- PAINT HANDLER (Vien Neon) ---
+# --- PAINT HANDLER ---
 $PaintHandler = {
     param($sender, $e)
     $Pen = New-Object System.Drawing.Pen($Theme.Border, 2)
@@ -36,7 +36,7 @@ $PaintHandler = {
     $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
 }
 
-# --- CẤU HÌNH DATA ---
+# --- CONFIG DATA ---
 $OfficeVers = @("Office 2016", "Office 2019", "Office 2021", "Office 2024", "Microsoft 365")
 $Archs = @("x64 (64-bit)", "x86 (32-bit)")
 $Langs = @("en-us", "vi-vn", "ko-kr", "ja-jp", "zh-cn", "fr-fr", "ru-ru", "de-de", "es-es")
@@ -44,7 +44,7 @@ $AppsList = @("Word", "Excel", "PowerPoint", "Outlook", "OneNote", "Access", "Pu
 
 # ================= UI SECTIONS =================
 
-# 1. VERSION & ARCHITECTURE
+# 1. VERSION
 $PnlVer = New-Object System.Windows.Forms.Panel; $PnlVer.Location="20,80"; $PnlVer.Size="300,320"; $PnlVer.BackColor=$Theme.Card; $PnlVer.Add_Paint($PaintHandler); $Form.Controls.Add($PnlVer)
 $L1 = New-Object System.Windows.Forms.Label; $L1.Text="1. PHIEN BAN & KIEN TRUC"; $L1.Location="10,10"; $L1.AutoSize=$true; $L1.Font="Segoe UI, 10, Bold"; $PnlVer.Controls.Add($L1)
 
@@ -62,7 +62,7 @@ $RadioArchs = @()
 $R64 = New-Object System.Windows.Forms.RadioButton; $R64.Text="x64 (Chuan)"; $R64.Location="20,30"; $R64.AutoSize=$true; $R64.Checked=$true; $GbArch.Controls.Add($R64)
 $R86 = New-Object System.Windows.Forms.RadioButton; $R86.Text="x86 (May yeu)"; $R86.Location="140,30"; $R86.AutoSize=$true; $GbArch.Controls.Add($R86)
 
-# 2. APPS SELECTION
+# 2. APPS
 $PnlApp = New-Object System.Windows.Forms.Panel; $PnlApp.Location="340,80"; $PnlApp.Size="300,320"; $PnlApp.BackColor=$Theme.Card; $PnlApp.Add_Paint($PaintHandler); $Form.Controls.Add($PnlApp)
 $L2 = New-Object System.Windows.Forms.Label; $L2.Text="2. UNG DUNG CAN CAI"; $L2.Location="10,10"; $L2.AutoSize=$true; $L2.Font="Segoe UI, 10, Bold"; $PnlApp.Controls.Add($L2)
 
@@ -79,31 +79,25 @@ $BtnSelAll.Add_Click({ foreach($c in $ChkApps){$c.Checked=$true} })
 $BtnSelNone = New-Object System.Windows.Forms.Button; $BtnSelNone.Text="X"; $BtnSelNone.Location="260,5"; $BtnSelNone.Size="25,25"; $BtnSelNone.FlatStyle="Flat"; $PnlApp.Controls.Add($BtnSelNone)
 $BtnSelNone.Add_Click({ foreach($c in $ChkApps){$c.Checked=$false} })
 
-
-# 3. EXTRA & CONFIG
+# 3. EXTRA
 $PnlExt = New-Object System.Windows.Forms.Panel; $PnlExt.Location="660,80"; $PnlExt.Size="300,320"; $PnlExt.BackColor=$Theme.Card; $PnlExt.Add_Paint($PaintHandler); $Form.Controls.Add($PnlExt)
 $L3 = New-Object System.Windows.Forms.Label; $L3.Text="3. CAU HINH BO SUNG"; $L3.Location="10,10"; $L3.AutoSize=$true; $L3.Font="Segoe UI, 10, Bold"; $PnlExt.Controls.Add($L3)
 
-# Project / Visio
 $GbPro = New-Object System.Windows.Forms.GroupBox; $GbPro.Text="San Pham Rieng Le"; $GbPro.Location="15,40"; $GbPro.Size="270,80"; $GbPro.ForeColor="Gold"; $PnlExt.Controls.Add($GbPro)
 $ChkVisio = New-Object System.Windows.Forms.CheckBox; $ChkVisio.Text="Visio Pro"; $ChkVisio.Location="20,25"; $ChkVisio.AutoSize=$true; $GbPro.Controls.Add($ChkVisio)
 $ChkProj = New-Object System.Windows.Forms.CheckBox; $ChkProj.Text="Project Pro"; $ChkProj.Location="140,25"; $ChkProj.AutoSize=$true; $GbPro.Controls.Add($ChkProj)
 $ChkVl = New-Object System.Windows.Forms.CheckBox; $ChkVl.Text="Dung Ban Volume License (VL)"; $ChkVl.Location="20,50"; $ChkVl.AutoSize=$true; $ChkVl.ForeColor="Cyan"; $ChkVl.Checked=$true; $GbPro.Controls.Add($ChkVl)
 
-# Language
 $LblLang = New-Object System.Windows.Forms.Label; $LblLang.Text="Ngon Ngu:"; $LblLang.Location="15,140"; $LblLang.AutoSize=$true; $PnlExt.Controls.Add($LblLang)
 $CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location="100,135"; $CbLang.Size="180,25"; $CbLang.DropDownStyle="DropDownList"
 foreach ($L in $Langs) { $CbLang.Items.Add($L) | Out-Null }; $CbLang.SelectedIndex=0; $PnlExt.Controls.Add($CbLang)
 
-# Path
 $LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text="Noi cai dat (Bo trong = Mac dinh):"; $LblPath.Location="15,180"; $LblPath.AutoSize=$true; $PnlExt.Controls.Add($LblPath)
 $TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Location="15,205"; $TxtPath.Size="220,25"; $PnlExt.Controls.Add($TxtPath)
 $BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text="..."; $BtnPath.Location="240,203"; $BtnPath.Size="40,27"; $BtnPath.FlatStyle="Flat"; $PnlExt.Controls.Add($BtnPath)
-$BtnPath.Add_Click({ 
-    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if($FBD.ShowDialog() -eq "OK"){$TxtPath.Text=$FBD.SelectedPath} 
-})
+$BtnPath.Add_Click({ $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if($FBD.ShowDialog() -eq "OK"){$TxtPath.Text=$FBD.SelectedPath} })
 
-# --- ACTION AREA ---
+# --- ACTIONS ---
 $PnlAct = New-Object System.Windows.Forms.Panel; $PnlAct.Location="20,420"; $PnlAct.Size="940,120"; $PnlAct.BackColor=$Theme.Card; $PnlAct.Add_Paint($PaintHandler); $Form.Controls.Add($PnlAct)
 
 function Add-BigBtn ($Txt, $X, $Col, $Cmd) {
@@ -127,79 +121,74 @@ function Get-Odt {
     if (!(Test-Path $OdtPath)) {
         Log "Dang tai Office Deployment Tool..."
         try {
-            # Link Setup.exe truc tiep tu MS
             (New-Object System.Net.WebClient).DownloadFile("https://otp.landian.vip/en-us/setup.exe", $OdtPath) 
-            # Note: Link tren la mirror setup.exe sach, hoac dung link extract tu file officedeploymenttool.exe
         } catch { Log "Loi tai ODT! Kiem tra mang." }
     }
     return $OdtPath
 }
 
 function Start-Install ($Mode) {
-    # 1. Get Params
+    # 1. PARAMS
     $VerStr = ($RadioVers | Where {$_.Checked}).Text
     $Arch = if ($R64.Checked) { "64" } else { "32" }
     $Lang = $CbLang.SelectedItem
     $IsVol = $ChkVl.Checked
     
-    # 2. Map Product ID
+    # 2. MAP PRODUCT ID
     $ProdID = switch -Regex ($VerStr) {
         "2016" { if($IsVol){"ProPlusVolume"}else{"ProPlusRetail"} }
         "2019" { if($IsVol){"ProPlus2019Volume"}else{"ProPlus2019Retail"} }
         "2021" { if($IsVol){"ProPlus2021Volume"}else{"ProPlus2021Retail"} }
-        "2024" { if($IsVol){"ProPlus2024Volume"}else{"ProPlus2024Retail"} } # Du kien
-        "365"  { "O365ProPlusRetail" } # 365 luon la Retail
+        "2024" { if($IsVol){"ProPlus2024Volume"}else{"ProPlus2024Retail"} }
+        "365"  { "O365ProPlusRetail" }
     }
     
-    # 3. Create Config XML
+    # 3. CREATE XML (FIXED SYNTAX)
     $XmlPath = "$env:TEMP\config_office.xml"
     $Writer = New-Object System.IO.StreamWriter($XmlPath)
-    $Writer.WriteLine("<Configuration>")
+    $Writer.WriteLine('<Configuration>') # Dung nhay don bao ngoai
     
-    # Path param
     $SrcAttr = if ($Mode -eq "Download" -or $TxtPath.Text) { 
         $P = if($TxtPath.Text){$TxtPath.Text}else{"$env:USERPROFILE\Desktop\Office_Install_Files"}
-        "SourcePath=`"$P`"" 
+        'SourcePath="' + $P + '"' 
     } else { "" }
     
-    $Writer.WriteLine("  <Add OfficeClientEdition=`"$Arch``" Channel=`"PerpetualVL2021``" $SrcAttr>") # Channel co the auto fix boi ODT
+    # FIX: Dùng chuỗi ghép (Concatenation) để tránh lỗi Parser
+    $Writer.WriteLine('  <Add OfficeClientEdition="' + $Arch + '" Channel="PerpetualVL2021" ' + $SrcAttr + '>')
     
-    # Main Product
-    $Writer.WriteLine("    <Product ID=`"$ProdID`">")
-    $Writer.WriteLine("      <Language ID=`"$Lang`" />")
-    # Exclude Apps
+    $Writer.WriteLine('    <Product ID="' + $ProdID + '">')
+    $Writer.WriteLine('      <Language ID="' + $Lang + '" />')
+    
     foreach ($C in $ChkApps) {
         if (!$C.Checked) {
             $AppID = switch ($C.Text) {
                 "Word" {"Word"} "Excel" {"Excel"} "PowerPoint" {"PowerPoint"} "Outlook" {"Outlook"} 
                 "OneNote" {"OneNote"} "Access" {"Access"} "Publisher" {"Publisher"} "Teams" {"Teams"} "OneDrive" {"Groove"} "SkypeForBusiness" {"Lync"}
             }
-            $Writer.WriteLine("      <ExcludeApp ID=`"$AppID`" />")
+            $Writer.WriteLine('      <ExcludeApp ID="' + $AppID + '" />')
         }
     }
-    $Writer.WriteLine("    </Product>")
+    $Writer.WriteLine('    </Product>')
     
-    # Visio
     if ($ChkVisio.Checked) {
-        $Vid = if($IsVol){"VisioPro2021Volume"}else{"VisioProRetail"} # Auto map 2021 cho an toan
-        $Writer.WriteLine("    <Product ID=`"$Vid`"><Language ID=`"$Lang`" /></Product>")
+        $Vid = if($IsVol){"VisioPro2021Volume"}else{"VisioProRetail"}
+        $Writer.WriteLine('    <Product ID="' + $Vid + '"><Language ID="' + $Lang + '" /></Product>')
     }
-    # Project
     if ($ChkProj.Checked) {
         $Pid = if($IsVol){"ProjectPro2021Volume"}else{"ProjectProRetail"}
-        $Writer.WriteLine("    <Product ID=`"$Pid`"><Language ID=`"$Lang`" /></Product>")
+        $Writer.WriteLine('    <Product ID="' + $Pid + '"><Language ID="' + $Lang + '" /></Product>')
     }
     
-    $Writer.WriteLine("  </Add>")
+    $Writer.WriteLine('  </Add>')
     
     if ($Mode -eq "Install") {
-        $Writer.WriteLine("  <Display Level=`"Full`" AcceptEULA=`"TRUE`" />")
-        $Writer.WriteLine("  <Property Name=`"FORCEAPPSHUTDOWN`" Value=`"TRUE`" />")
+        $Writer.WriteLine('  <Display Level="Full" AcceptEULA="TRUE" />')
+        $Writer.WriteLine('  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />')
     }
-    $Writer.WriteLine("</Configuration>")
+    $Writer.WriteLine('</Configuration>')
     $Writer.Close()
     
-    # 4. RUN ODT
+    # 4. RUN
     $Setup = Get-Odt
     Log "Da tao file Config.xml. Dang chay setup.exe..."
     
@@ -218,12 +207,9 @@ function Start-Install ($Mode) {
 }
 
 function Start-Uninstall {
-    if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon GO BO toan bo Office tren may nay?", "Canh bao", "YesNo", "Warning") -eq "Yes") {
-        # Dung Scrub tool hoac cau hinh XML remove
+    if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon GO BO toan bo Office?", "Canh bao", "YesNo", "Warning") -eq "Yes") {
         $XmlPath = "$env:TEMP\remove_office.xml"
-        $Content = "<Configuration><Remove All=`"TRUE`" /></Configuration>"
-        [IO.File]::WriteAllText($XmlPath, $Content)
-        
+        [IO.File]::WriteAllText($XmlPath, '<Configuration><Remove All="TRUE" /></Configuration>')
         $Setup = Get-Odt
         Start-Process $Setup -ArgumentList "/configure `"$XmlPath`""
         Log "Da gui lenh go bo Office."
