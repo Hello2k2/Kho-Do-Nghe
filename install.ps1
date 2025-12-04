@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.3 (Fix Crash Timer + Animation Safe Mode)
+    Version: 11.4 (Icons + Office Installer + Stable)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -13,6 +13,7 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 # --- 2. INIT & CONFIG ---
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
 $BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
@@ -80,41 +81,25 @@ function Apply-Theme {
     $BtnTheme.ForeColor = if ($Global:DarkMode) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
 }
 
-# --- 4. SAFE ANIMATION (FIXED) ---
+# --- 4. SAFE ANIMATION ---
 function Start-FadeIn {
     $Form.Opacity = 0
-    # FIX: Dùng biến Script Scope để không bị Null
     $Script:AnimTimer = New-Object System.Windows.Forms.Timer
     $Script:AnimTimer.Interval = 15
-    
     $Script:AnimTimer.Add_Tick({
         try {
             $Form.Opacity += 0.08
             if ($Form.Opacity -ge 1) { 
-                $Form.Opacity = 1
-                $Script:AnimTimer.Stop()
-                $Script:AnimTimer.Dispose()
+                $Form.Opacity = 1; $Script:AnimTimer.Stop(); $Script:AnimTimer.Dispose()
             }
-        } catch {
-            $Form.Opacity = 1; $Script:AnimTimer.Stop()
-        }
+        } catch { $Form.Opacity = 1; $Script:AnimTimer.Stop() }
     })
     $Script:AnimTimer.Start()
 }
 
 function Add-HoverEffect ($Btn) {
-    $Btn.Add_MouseEnter({ 
-        try {
-            $this.BackColor = $this.Tag.HoverColor
-            $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y - 2)
-        } catch {}
-    })
-    $Btn.Add_MouseLeave({ 
-        try {
-            $this.BackColor = $this.Tag.BaseColor
-            $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y + 2)
-        } catch {}
-    })
+    $Btn.Add_MouseEnter({ try { $this.BackColor = $this.Tag.HoverColor; $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y - 2) } catch {} })
+    $Btn.Add_MouseLeave({ try { $this.BackColor = $this.Tag.BaseColor; $this.Location = New-Object System.Drawing.Point($this.Location.X, $this.Location.Y + 2) } catch {} })
 }
 
 $PaintHandler = {
@@ -122,10 +107,8 @@ $PaintHandler = {
     try {
         $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
         $Pen = New-Object System.Drawing.Pen($T.Border, 2)
-        $Rect = $sender.ClientRectangle
-        $Rect.Width -= 2; $Rect.Height -= 2; $Rect.X += 1; $Rect.Y += 1
-        $e.Graphics.DrawRectangle($Pen, $Rect)
-        $Pen.Dispose()
+        $Rect = $sender.ClientRectangle; $Rect.Width-=2; $Rect.Height-=2; $Rect.X+=1; $Rect.Y+=1
+        $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
     } catch {}
 }
 
@@ -141,13 +124,8 @@ function Tai-Va-Chay {
         if (Test-Path $Dest) {
             if ($Type -eq "Msi") { Start-Process "msiexec.exe" "/i `"$Dest`" /quiet /norestart" -Wait }
             else { Start-Process $Dest -Wait }
-        } else {
-            throw "File downloaded but not found."
         }
-    } catch { 
-        # Báo lỗi rõ ràng nếu file chưa up
-        [System.Windows.Forms.MessageBox]::Show("Loi download: $Name`n`nNguyen nhan: Link sai hoac File chua duoc Upload len Server.", "Error") 
-    }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi download: $Name`nKiem tra lai file tren Github.", "Error") }
 }
 
 function Load-Module ($Name) {
@@ -157,11 +135,10 @@ function Load-Module ($Name) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.3 (STABLE)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.4 (ICONS EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
-$Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
-$Form.Opacity = 0 # Ẩn để Fade-in
+$Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false; $Form.Opacity = 0
 
 # Header
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 20, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,10"; $Form.Controls.Add($LblTitle)
@@ -179,54 +156,47 @@ $Form.Controls.Add($TabControl)
 $AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "  ★ ADVANCED MODULES ★  "; $AdvTab.AutoScroll = $true; $TabControl.Controls.Add($AdvTab)
 
 function Add-Card ($Title, $X, $Y, $W, $H) {
-    $P = New-Object System.Windows.Forms.Panel
-    $P.Name = "Card_$Title" 
-    $P.Location = "$X,$Y"; $P.Size = "$W,$H"
-    $P.Padding = "1,1,1,1" 
+    $P = New-Object System.Windows.Forms.Panel; $P.Name = "Card_$Title"; $P.Location = "$X,$Y"; $P.Size = "$W,$H"; $P.Padding = "1,1,1,1"
     $P.Add_Paint($Global:PaintHandler)
-    
-    $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Location="15,15"; $L.AutoSize=$true; $L.Font="Segoe UI, 11, Bold"
-    $P.Controls.Add($L)
-    
-    $F = New-Object System.Windows.Forms.FlowLayoutPanel; $F.Location="2,45"; $F.Size="$($W-4),$($H-47)"; $F.FlowDirection="TopDown"; $F.WrapContents=$true; $F.Padding="10,0,0,0"
-    $P.Controls.Add($F)
+    $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Location="15,15"; $L.AutoSize=$true; $L.Font="Segoe UI, 11, Bold"; $P.Controls.Add($L)
+    $F = New-Object System.Windows.Forms.FlowLayoutPanel; $F.Location="2,45"; $F.Size="$($W-4),$($H-47)"; $F.FlowDirection="TopDown"; $F.WrapContents=$true; $F.Padding="10,0,0,0"; $P.Controls.Add($F)
     $AdvTab.Controls.Add($P); return $F
 }
 
 function Add-Btn ($Panel, $Txt, $Cmd) {
     $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Size="140,40"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9"; $B.Margin="5,5,5,5"; $B.Cursor="Hand"
-    $B.Add_Click($Cmd); Add-HoverEffect $B
-    $Panel.Controls.Add($B)
+    $B.Add_Click($Cmd); Add-HoverEffect $B; $Panel.Controls.Add($B)
 }
 
-# CỘT 1: SYSTEM
+# --- CỘT 1: SYSTEM & MAINTENANCE (X=15) ---
 $P1 = Add-Card "SYSTEM & MAINTENANCE" 15 20 315 400
-Add-Btn $P1 "CHECK INFO" { Load-Module "SystemInfo.ps1" }
-Add-Btn $P1 "SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
-Add-Btn $P1 "CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
-Add-Btn $P1 "RAM BOOSTER" { Load-Module "RamBooster.ps1" }
-Add-Btn $P1 "ACTIVATION & ESU" { Load-Module "WinActivator.ps1" }
-Add-Btn $P1 "HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+Add-Btn $P1 "ℹ️ CHECK INFO" { Load-Module "SystemInfo.ps1" }
+Add-Btn $P1 "🧹 CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
+Add-Btn $P1 "🔍 SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
+Add-Btn $P1 "🚀 RAM BOOSTER" { Load-Module "RamBooster.ps1" }
+Add-Btn $P1 "🔑 ACTIVATION" { Load-Module "WinActivator.ps1" }
+Add-Btn $P1 "💾 HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
 
-# CỘT 2: SECURITY
+# --- CỘT 2: SECURITY & NETWORK (X=340) ---
 $P2 = Add-Card "SECURITY & NETWORK" 340 20 315 400
-Add-Btn $P2 "DNS MASTER" { Load-Module "NetworkMaster.ps1" }
-Add-Btn $P2 "WIN UPDATE" { Load-Module "WinUpdatePro.ps1" }
-Add-Btn $P2 "DEFENDER CTRL" { Load-Module "DefenderMgr.ps1" }
-Add-Btn $P2 "BITLOCKER MGR" { Load-Module "BitLockerMgr.ps1" }
-Add-Btn $P2 "BROWSER BLOCK" { Load-Module "BrowserPrivacy.ps1" }
-Add-Btn $P2 "FIREWALL OFF" { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
+Add-Btn $P2 "🌐 DNS MASTER" { Load-Module "NetworkMaster.ps1" }
+Add-Btn $P2 "🔄 WIN UPDATE" { Load-Module "WinUpdatePro.ps1" }
+Add-Btn $P2 "🛡️ DEFENDER" { Load-Module "DefenderMgr.ps1" }
+Add-Btn $P2 "🔒 BITLOCKER" { Load-Module "BitLockerMgr.ps1" }
+Add-Btn $P2 "🚫 BLOCK WEB" { Load-Module "BrowserPrivacy.ps1" }
+Add-Btn $P2 "🔥 FIREWALL OFF" { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
 
-# CỘT 3: DEPLOYMENT
+# --- CỘT 3: DEPLOYMENT & TOOLS (X=665) ---
 $P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
-Add-Btn $P3 "AUTO INSTALL WIN" { Load-Module "WinInstall.ps1" }
-Add-Btn $P3 "WIN MODDER" { Load-Module "WinModder.ps1" }
-Add-Btn $P3 "WIN AIO BUILD" { Load-Module "WinAIOBuilder.ps1" }
-Add-Btn $P3 "LTSC STORE" { Load-Module "StoreInstaller.ps1" }
-Add-Btn $P3 "ISO IDM TOOL" { Load-Module "ISODownloader.ps1" }
-Add-Btn $P3 "BACKUP PRO" { Load-Module "BackupCenter.ps1" }
-Add-Btn $P3 "GEMINI AI CLI" { Load-Module "GeminiAI.ps1" }
-Add-Btn $P3 "WINGET STORE" { Load-Module "AppStore.ps1" }
+Add-Btn $P3 "💿 INSTALL WIN" { Load-Module "WinInstall.ps1" }
+Add-Btn $P3 "🏢 OFFICE TOOL" { Load-Module "OfficeInstaller.ps1" } # <--- MỚI
+Add-Btn $P3 "🛠️ WIN MODDER" { Load-Module "WinModder.ps1" }
+Add-Btn $P3 "📦 AIO BUILDER" { Load-Module "WinAIOBuilder.ps1" }
+Add-Btn $P3 "🤖 GEMINI AI" { Load-Module "GeminiAI.ps1" }
+Add-Btn $P3 "🛍️ LTSC STORE" { Load-Module "StoreInstaller.ps1" }
+Add-Btn $P3 "⬇️ ISO TURBO" { Load-Module "ISODownloader.ps1" }
+Add-Btn $P3 "☁️ BACKUP PRO" { Load-Module "BackupCenter.ps1" }
+Add-Btn $P3 "🛒 WINGET APP" { Load-Module "AppStore.ps1" }
 
 # > LOAD JSON APPS
 try {
@@ -271,10 +241,10 @@ $BtnInstall.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("Da Xong!", "Info"); $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Enabled=$true
 }); $PnlFooter.Controls.Add($BtnInstall)
 
-$BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="WINPE RESCUE"; $BtnPe.Location="830,10"; $BtnPe.Size="120,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
+$BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="⚡ WINPE RESCUE"; $BtnPe.Location="830,10"; $BtnPe.Size="130,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnPe.Add_Click({ Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }); $PnlFooter.Controls.Add($BtnPe)
 
-$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="DONATE"; $BtnDonate.Location="830,50"; $BtnDonate.Size="120,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
+$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="☕ DONATE"; $BtnDonate.Location="830,50"; $BtnDonate.Size="130,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnDonate.Add_Click({ 
     $D=New-Object System.Windows.Forms.Form;$D.Size="400,500";$D.StartPosition="CenterScreen";$P=New-Object System.Windows.Forms.PictureBox;$P.Dock="Fill";$P.SizeMode="Zoom"
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
