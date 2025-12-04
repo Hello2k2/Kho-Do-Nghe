@@ -20,7 +20,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ACTIVATION CENTER AND ESU ENABLER (MAS 3.9)"
+$Form.Text = "ACTIVATION CENTER & ESU ENABLER (MAS 3.9)"
 $Form.Size = New-Object System.Drawing.Size(950, 650)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
@@ -29,7 +29,7 @@ $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 # Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "WINDOWS ACTIVATION & ESU MASTER"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "WINDOWS ACTIVATION "; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
 $LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Powered by MAS 3.9 | Ho tro ESU Update den 2032"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,50"; $Form.Controls.Add($LblS)
 
 # --- ADVANCED GLOW PAINTER (Hieu ung Neon Blur) ---
