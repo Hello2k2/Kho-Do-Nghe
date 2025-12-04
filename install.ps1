@@ -128,9 +128,29 @@ function Tai-Va-Chay {
     } catch { [System.Windows.Forms.MessageBox]::Show("Loi download: $Name`nKiem tra lai file tren Github.", "Error") }
 }
 
-function Load-Module ($Name) {
-    $Dest = "$TempDir\$Name"
-    try { Invoke-WebRequest "$RawUrl$Name" -OutFile $Dest; Start-Process powershell "-Ex Bypass -File `"$Dest`"" } catch {}
+function Load-Module ($ScriptName) {
+    $LocalPath = "$TempDir\$ScriptName"
+    
+    # Thêm timestamp để ép tải mới (tránh lưu cache file cũ bị lỗi)
+    $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
+    $Url = "$RawUrl$ScriptName" + "?t=$Ts"
+
+    try {
+        # Dùng WebClient tải file (Ổn định hơn Invoke-WebRequest)
+        $WebClient = New-Object System.Net.WebClient
+        $WebClient.Encoding = [System.Text.Encoding]::UTF8 # Ép buộc UTF-8 để không lỗi tiếng Việt
+        $WebClient.DownloadFile($Url, $LocalPath)
+
+        if (Test-Path $LocalPath) {
+            # Chạy file với quyền Admin và Bypass chính sách
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`""
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Khong tim thay file sau khi tai: $ScriptName", "Loi File")
+        }
+    } catch {
+        # Hiện lỗi chi tiết nếu tải thất bại
+        [System.Windows.Forms.MessageBox]::Show("Loi tai Module: $ScriptName`n`nChi tiet: $($_.Exception.Message)", "Loi Ket Noi")
+    }
 }
 
 # --- 6. GUI CONSTRUCTION ---
