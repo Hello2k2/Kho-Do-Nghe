@@ -131,24 +131,27 @@ function Tai-Va-Chay {
 function Load-Module ($ScriptName) {
     $LocalPath = "$TempDir\$ScriptName"
     
-    # Thêm timestamp để ép tải mới (tránh lưu cache file cũ bị lỗi)
+    # Thêm timestamp để ép tải mới
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Url = "$RawUrl$ScriptName" + "?t=$Ts"
 
     try {
-        # Dùng WebClient tải file (Ổn định hơn Invoke-WebRequest)
+        # 1. Tải nội dung về RAM dưới dạng Text (String)
         $WebClient = New-Object System.Net.WebClient
-        $WebClient.Encoding = [System.Text.Encoding]::UTF8 # Ép buộc UTF-8 để không lỗi tiếng Việt
-        $WebClient.DownloadFile($Url, $LocalPath)
+        $WebClient.Encoding = [System.Text.Encoding]::UTF8
+        $Content = $WebClient.DownloadString($Url)
+
+        # 2. Lưu xuống ổ cứng với Encoding UTF-8 có BOM (Quan trọng cho PowerShell 5.1)
+        # Dùng StreamWriter để ép ghi BOM
+        $Stream = [System.IO.StreamWriter]::new($LocalPath, $false, [System.Text.Encoding]::UTF8)
+        $Stream.Write($Content)
+        $Stream.Close()
 
         if (Test-Path $LocalPath) {
-            # Chạy file với quyền Admin và Bypass chính sách
-            Start-Process powershell -ArgumentList "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`""
-        } else {
-            [System.Windows.Forms.MessageBox]::Show("Khong tim thay file sau khi tai: $ScriptName", "Loi File")
+            # Thêm -NoExit để giữ cửa sổ nếu có lỗi (dễ debug)
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`""
         }
     } catch {
-        # Hiện lỗi chi tiết nếu tải thất bại
         [System.Windows.Forms.MessageBox]::Show("Loi tai Module: $ScriptName`n`nChi tiet: $($_.Exception.Message)", "Loi Ket Noi")
     }
 }
