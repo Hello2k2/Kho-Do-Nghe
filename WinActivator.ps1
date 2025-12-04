@@ -9,19 +9,20 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- THEME ENGINE (NEON GLOW) ---
 $Theme = @{
-    Back      = [System.Drawing.Color]::FromArgb(25, 25, 30)
-    Card      = [System.Drawing.Color]::FromArgb(35, 35, 40)
+    Back      = [System.Drawing.Color]::FromArgb(20, 20, 25)
+    Card      = [System.Drawing.Color]::FromArgb(30, 30, 35)
     Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    BtnBack   = [System.Drawing.Color]::FromArgb(50, 50, 60)
+    BtnBack   = [System.Drawing.Color]::FromArgb(45, 45, 50)
     BtnHover  = [System.Drawing.Color]::FromArgb(0, 180, 180) 
     Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Cyan Neon
-    GlowColor = [System.Drawing.Color]::FromArgb(0, 255, 255)     # Màu tỏa sáng
+    Valid     = [System.Drawing.Color]::FromArgb(0, 255, 0)       # Green Neon
+    Error     = [System.Drawing.Color]::FromArgb(255, 0, 80)      # Red Neon
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ACTIVATION CENTER & ESU ENABLER (MAS 3.9)"
-$Form.Size = New-Object System.Drawing.Size(950, 650)
+$Form.Text = "ACTIVATION CENTER & ESU MASTER (SMART EDITION)"
+$Form.Size = New-Object System.Drawing.Size(950, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
 $Form.ForeColor = $Theme.Text
@@ -29,157 +30,182 @@ $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 # Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "WINDOWS ACTIVATION "; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Powered by MAS 3.9 | Ho tro ESU Update den 2032"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,50"; $Form.Controls.Add($LblS)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "WINDOWS ACTIVATION & ESU MASTER"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Powered by MAS 3.9 | Smart Key Engine v1.0"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,50"; $Form.Controls.Add($LblS)
 
-# --- ADVANCED GLOW PAINTER (Hieu ung Neon Blur) ---
+# --- ADVANCED GLOW PAINTER ---
 $GlowPaint = {
     param($sender, $e)
-    $GlowColor = $Theme.GlowColor
-    
-    # Ve 4 lop vien mo dan de tao hieu ung Glow/Blur
+    $GlowColor = $Theme.Accent
     for ($i = 1; $i -le 4; $i++) {
-        $Alpha = 60 - ($i * 10) # Do trong suot giam dan (50 -> 10)
-        if ($Alpha -lt 0) { $Alpha = 0 }
-        $PenColor = [System.Drawing.Color]::FromArgb($Alpha, $GlowColor)
-        $Pen = New-Object System.Drawing.Pen($PenColor, $i * 2) # Vien day dan
-        
+        $Alpha = 50 - ($i * 10); if ($Alpha -lt 0) { $Alpha = 0 }
+        $Pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb($Alpha, $GlowColor), $i * 2)
         $Rect = $sender.ClientRectangle
-        # Tinh toan padding de vien khong bi cat
-        $Offset = $i 
-        $Rect.X += $Offset; $Rect.Y += $Offset
-        $Rect.Width -= ($Offset * 2); $Rect.Height -= ($Offset * 2)
-        
-        # Bo tron goc (hack nhe bang DrawRectangle)
-        $e.Graphics.DrawRectangle($Pen, $Rect)
-        $Pen.Dispose()
+        $Rect.X += $i; $Rect.Y += $i; $Rect.Width -= ($i * 2); $Rect.Height -= ($i * 2)
+        $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
     }
-    
-    # Ve vien chinh sac net o trong cung
     $MainPen = New-Object System.Windows.Forms.Pen($GlowColor, 1)
-    $RMain = $sender.ClientRectangle
-    $RMain.Width-=1; $RMain.Height-=1
-    $e.Graphics.DrawRectangle($MainPen, $RMain)
-    $MainPen.Dispose()
+    $RMain = $sender.ClientRectangle; $RMain.Width-=1; $RMain.Height-=1
+    $e.Graphics.DrawRectangle($MainPen, $RMain); $MainPen.Dispose()
 }
 
 # --- HELPER FUNCTIONS ---
 function Add-Card ($X, $Y, $W, $H, $Title) {
     $P = New-Object System.Windows.Forms.Panel
     $P.Location="$X,$Y"; $P.Size="$W,$H"; $P.BackColor=$Theme.Card
-    $P.Padding = "2,2,2,2" # Chua cho cho vien
-    $P.Add_Paint($GlowPaint) # Gan hieu ung Glow
-    
+    $P.Padding = "2,2,2,2"; $P.Add_Paint($GlowPaint)
     $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Font="Segoe UI, 11, Bold"; $L.ForeColor=$Theme.Accent; $L.Location="15,15"; $L.AutoSize=$true
-    $P.Controls.Add($L)
-    
-    $Form.Controls.Add($P); return $P
+    $P.Controls.Add($L); $Form.Controls.Add($P); return $P
 }
 
 function Add-Btn ($Parent, $Txt, $X, $Y, $W, $Cmd) {
     $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="$X,$Y"; $B.Size="$W,40"
     $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9, Bold"; $B.BackColor=$Theme.BtnBack; $B.ForeColor=$Theme.Text; $B.Cursor="Hand"
-    $B.FlatAppearance.BorderSize = 0
-    $B.Add_Click($Cmd)
-    # Hover Effect
-    $B.Add_MouseEnter({ $this.BackColor=$Theme.BtnHover; $this.ForeColor="Black" })
-    $B.Add_MouseLeave({ $this.BackColor=$Theme.BtnBack; $this.ForeColor=$Theme.Text })
-    $Parent.Controls.Add($B)
+    $B.FlatAppearance.BorderSize = 0; $B.Add_Click($Cmd)
+    $B.Add_MouseEnter({ if($this.Enabled){$this.BackColor=$Theme.BtnHover; $this.ForeColor="Black"} })
+    $B.Add_MouseLeave({ if($this.Enabled){$this.BackColor=$Theme.BtnBack; $this.ForeColor=$Theme.Text} })
+    $Parent.Controls.Add($B); return $B
 }
 
 # =========================================================================================
-# SECTION 1: MANUAL KEY (UU TIEN HANG DAU)
+# SECTION 1: SMART KEY INPUT (THE ROBOT PART)
 # =========================================================================================
-$CardKey = Add-Card 20 80 895 130 "1. NHAP KEY THU CONG (PRIORITY)"
+$CardKey = Add-Card 20 80 895 150 "1. NHAP KEY THU CONG (SMART ENGINE)"
 
-$TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="20,50"; $TxtKey.Size="500,30"; $TxtKey.Font="Consolas, 14"; $TxtKey.BackColor="Black"; $TxtKey.ForeColor="Lime"; $TxtKey.BorderStyle="FixedSingle"
+# Input Box Style Robot
+$TxtKey = New-Object System.Windows.Forms.TextBox
+$TxtKey.Location="25,50"; $TxtKey.Size="550,35"; $TxtKey.Font="Consolas, 16, Bold"
+$TxtKey.BackColor="Black"; $TxtKey.ForeColor="Gray"; $TxtKey.BorderStyle="FixedSingle"
+$TxtKey.MaxLength = 29 # 25 chars + 4 hyphens
 $CardKey.Controls.Add($TxtKey)
 
-Add-Btn $CardKey "NAP KEY (INSTALL)" 540 48 150 {
-    $K = $TxtKey.Text.Trim()
-    if ($K.Length -lt 5) { [System.Windows.Forms.MessageBox]::Show("Nhap Key vao di ban oi!", "Loi"); return }
+# Status Bar (Robot Voice)
+$LblStatus = New-Object System.Windows.Forms.Label
+$LblStatus.Text = "[SYSTEM]: WAITING FOR INPUT..."
+$LblStatus.Font = "Consolas, 9"; $LblStatus.ForeColor = "Gray"
+$LblStatus.Location = "25, 95"; $LblStatus.AutoSize = $true
+$CardKey.Controls.Add($LblStatus)
+
+# Paste Button (Icon Style)
+$BtnPaste = New-Object System.Windows.Forms.Button
+$BtnPaste.Text = "📋 PASTE"
+$BtnPaste.Location = "585, 50"; $BtnPaste.Size = "80, 32"; $BtnPaste.FlatStyle="Flat"; $BtnPaste.BackColor="DimGray"; $BtnPaste.ForeColor="White"
+$CardKey.Controls.Add($BtnPaste)
+
+# Action Buttons
+$BtnInstallKey = Add-Btn $CardKey "NẠP KEY (INSTALL)" 680 48 180 {
+    $K = $TxtKey.Text
     Start-Process "slmgr.vbs" -ArgumentList "/ipk $K" -Wait
     Start-Process "slmgr.vbs" -ArgumentList "/ato" -Wait
-    [System.Windows.Forms.MessageBox]::Show("Da nap Key xong. Kiem tra thong bao cua Windows.", "Info")
+    [System.Windows.Forms.MessageBox]::Show("Da gui lenh kich hoat!`nKey: $K", "Success")
 }
+$BtnInstallKey.Enabled = $false # Mac dinh khoa
+$BtnInstallKey.BackColor = [System.Drawing.Color]::FromArgb(30,30,30); $BtnInstallKey.ForeColor="Gray"
 
-Add-Btn $CardKey "XOA KEY (UNINSTALL)" 710 48 160 {
-    if ([System.Windows.Forms.MessageBox]::Show("Huy kich hoat & Xoa Key khoi may?", "Confirm", "YesNo") -eq "Yes") {
-        Start-Process "slmgr.vbs" -ArgumentList "/upk" -Wait
-        Start-Process "slmgr.vbs" -ArgumentList "/cpky" -Wait
-        [System.Windows.Forms.MessageBox]::Show("Da xoa Key thanh cong!", "Info")
+# --- LOGIC THÔNG MINH (SMART LOGIC) ---
+$BtnPaste.Add_Click({
+    if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+        $Clip = [System.Windows.Forms.Clipboard]::GetText()
+        # Loc bo moi ky tu rac, chi lay chu va so
+        $Clean = $Clip -replace "[^a-zA-Z0-9]", ""
+        if ($Clean.Length -gt 25) { $Clean = $Clean.Substring(0, 25) }
+        $TxtKey.Text = $Clean # Trigger TextChanged
     }
-}
-$LblHint = New-Object System.Windows.Forms.Label; $LblHint.Text="* Danh cho Key Ban quyen so, Key Retail hoac MAK."; $LblHint.ForeColor="Gray"; $LblHint.Location="20,90"; $LblHint.AutoSize=$true; $CardKey.Controls.Add($LblHint)
+})
 
+# Bien co de tranh loop khi format
+$Global:IsFormatting = $false
+
+$TxtKey.Add_TextChanged({
+    if ($Global:IsFormatting) { return }
+    $Global:IsFormatting = $true
+    
+    # 1. Lay vi tri con tro
+    $CursorPos = $TxtKey.SelectionStart
+    
+    # 2. Clean Text (Chi lay chu so, Upper case)
+    $Raw = $TxtKey.Text -replace "[^a-zA-Z0-9]", ""
+    $Raw = $Raw.ToUpper()
+    
+    # 3. Auto Add Hyphens (Them dau gach ngang)
+    $Formatted = ""
+    for ($i = 0; $i -lt $Raw.Length; $i++) {
+        if ($i -gt 0 -and $i % 5 -eq 0) { $Formatted += "-" }
+        $Formatted += $Raw[$i]
+    }
+    
+    # 4. Limit Length
+    if ($Formatted.Length -gt 29) { $Formatted = $Formatted.Substring(0, 29) }
+    
+    $TxtKey.Text = $Formatted
+    
+    # 5. Restore Cursor (Hack nhe de con tro khong bi nhay ve cuoi)
+    try { $TxtKey.SelectionStart = $Formatted.Length } catch {}
+    
+    # 6. Validate & Visual Feedback
+    if ($Raw.Length -eq 25) {
+        $TxtKey.ForeColor = $Theme.Valid # Xanh Neon
+        $LblStatus.Text = "[SYSTEM]: KEY FORMAT VALIDIFIED. READY TO INSTALL."
+        $LblStatus.ForeColor = $Theme.Valid
+        $BtnInstallKey.Enabled = $true
+        $BtnInstallKey.BackColor = $Theme.BtnBack; $BtnInstallKey.ForeColor = $Theme.Text
+    } else {
+        $TxtKey.ForeColor = $Theme.Error # Do Neon
+        $Count = 25 - $Raw.Length
+        $LblStatus.Text = "[SYSTEM]: ANALYZING... MISSING $Count CHARACTERS"
+        $LblStatus.ForeColor = $Theme.Error
+        $BtnInstallKey.Enabled = $false
+        $BtnInstallKey.BackColor = [System.Drawing.Color]::FromArgb(30,30,30); $BtnInstallKey.ForeColor="Gray"
+    }
+    
+    if ($Raw.Length -eq 0) {
+        $TxtKey.ForeColor = "Gray"
+        $LblStatus.Text = "[SYSTEM]: WAITING FOR INPUT..."
+        $LblStatus.ForeColor = "Gray"
+    }
+    
+    $Global:IsFormatting = $false
+})
 
 # =========================================================================================
-# SECTION 2: CONVERT EDITION (CHUYEN DOI PHIEN BAN)
+# SECTION 2: CONVERT EDITION
 # =========================================================================================
-$CardConv = Add-Card 20 230 435 300 "2. CHUYEN DOI PHIEN BAN WIN (CONVERT)"
+$CardConv = Add-Card 20 250 435 300 "2. CHUYEN DOI PHIEN BAN WIN (CONVERT)"
 
 $LblConv = New-Object System.Windows.Forms.Label; $LblConv.Text="Chon phien ban muon chuyen doi sang:"; $LblConv.Location="20,50"; $LblConv.AutoSize=$true; $LblConv.ForeColor="White"; $CardConv.Controls.Add($LblConv)
 
 $CbEditions = New-Object System.Windows.Forms.ComboBox; $CbEditions.Location="20,80"; $CbEditions.Size="390,30"; $CbEditions.Font="Segoe UI, 11"; $CbEditions.DropDownStyle="DropDownList"
-$Editions = @(
-    "IoT Enterprise LTSC (Recommended for ESU)", 
-    "Enterprise LTSC 2021",
-    "Professional", 
-    "Professional Workstation", 
-    "Enterprise", 
-    "Education",
-    "Home"
-)
-foreach ($E in $Editions) { $CbEditions.Items.Add($E) | Out-Null }
-$CbEditions.SelectedIndex = 0
+$Editions = @("IoT Enterprise LTSC (Recommended for ESU)", "Enterprise LTSC 2021", "Professional", "Professional Workstation", "Enterprise", "Education", "Home")
+foreach ($E in $Editions) { $CbEditions.Items.Add($E) | Out-Null }; $CbEditions.SelectedIndex = 0
 $CardConv.Controls.Add($CbEditions)
 
 Add-Btn $CardConv "TIEN HANH CONVERT (AUTO)" 20 130 390 {
-    $Target = $CbEditions.SelectedItem
-    $Msg = "Ban dang muon chuyen Win hien tai sang ban: [$Target]`n`n" +
-           "Luu y: De an toan nhat, Tool se mo Menu MAS -> Ban hay lam theo huong dan sau:`n" +
-           "1. Cua so MAS hien len.`n" +
-           "2. Bam so [6] (Extras).`n" +
-           "3. Bam so [1] (Change Edition).`n" +
-           "4. Chon dung phien ban ban muon."
-    
-    if ([System.Windows.Forms.MessageBox]::Show($Msg, "Xac nhan", "YesNo", "Information") -eq "Yes") {
+    $Msg = "Tool se mo Menu MAS. Ban hay bam: [6] Extras -> [1] Change Edition -> Chon phien ban tuong ung."
+    if ([System.Windows.Forms.MessageBox]::Show($Msg, "Huong dan", "YesNo", "Information") -eq "Yes") {
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
     }
 }
-
-$LblEsu = New-Object System.Windows.Forms.Label; $LblEsu.Text="MEO: De nhan ban cap nhat ESU den nam 2032`n(Win 10), hay chuyen sang ban 'IoT Enterprise LTSC'.`nSau do kich hoat bang HWID o ben phai."; $LblEsu.ForeColor="Gold"; $LblEsu.Location="20,200"; $LblEsu.AutoSize=$true; $CardConv.Controls.Add($LblEsu)
-
+$LblEsu = New-Object System.Windows.Forms.Label; $LblEsu.Text="MEO: De co ESU 2032 (Win 10), hay chuyen sang ban 'IoT Enterprise LTSC'."; $LblEsu.ForeColor="Gold"; $LblEsu.Location="20,200"; $LblEsu.Size="390,50"; $CardConv.Controls.Add($LblEsu)
 
 # =========================================================================================
-# SECTION 3: MAS 3.9 ACTIVATION (AUTO CRACK)
+# SECTION 3: MAS 3.9 ACTIVATION
 # =========================================================================================
-$CardMas = Add-Card 480 230 435 300 "3. MAS 3.9 - AUTO ACTIVATION & ESU"
+$CardMas = Add-Card 480 250 435 300 "3. MAS 3.9 - AUTO ACTIVATION & ESU"
 
-# NÚT 1: HWID (WIN)
 Add-Btn $CardMas "1. KICH HOAT WINDOWS (HWID)" 20 50 390 {
-    if ([System.Windows.Forms.MessageBox]::Show("Kich hoat Ban quyen so vinh vien (HWID) cho Windows?`n(Dung cho moi loai Win tru Server/LTSC 2021)", "Confirm", "YesNo") -eq "Yes") {
-        # Chay lenh HWID silent neu MAS ho tro hoac goi menu
-        # MAS moi ho tro tham so /hwid
+    if ([System.Windows.Forms.MessageBox]::Show("Kich hoat Ban quyen so vinh vien (HWID)?", "Confirm", "YesNo") -eq "Yes") {
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
         [System.Windows.Forms.MessageBox]::Show("Cua so MAS da mo. Bam phim [1] de kich hoat HWID.", "Huong dan")
     }
 }
 
-# NÚT 2: OHOOK (OFFICE)
 Add-Btn $CardMas "2. KICH HOAT OFFICE (OHOOK)" 20 100 390 {
     Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
-    [System.Windows.Forms.MessageBox]::Show("Cua so MAS da mo. Bam phim [2] de kich hoat Office (Ohook).", "Huong dan")
+    [System.Windows.Forms.MessageBox]::Show("Cua so MAS da mo. Bam phim [2] de kich hoat Office.", "Huong dan")
 }
 
-# NÚT 3: TSFORGE (ESU / CRACK NANG CAO)
 Add-Btn $CardMas "3. KICH HOAT ESU / WIN / OFFICE (TSforge)" 20 150 390 {
-    $M = "TSforge la phuong phap kich hoat manh me nhat (KMS 38 / ESU).`n`n" +
-         "*** QUAN TRONG: De co ESU (Update Win 10 den 2032): ***`n" +
-         "1. Chuyen doi Win sang 'IoT Enterprise LTSC' (O muc ben trai).`n" +
-         "2. Chon nut nay -> Cua so hien len -> Chon so [3] (TSforge).`n" +
-         "3. Chon tiep de kich hoat ESU."
-    
+    $M = "*** QUAN TRONG: De co ESU (Update 2032): ***`n1. Convert sang 'IoT Enterprise LTSC' (Ben trai).`n2. Chon nut nay -> Cua so hien len -> Chon so [3] (TSforge).`n3. Chon tiep de kich hoat ESU."
     if ([System.Windows.Forms.MessageBox]::Show($M, "Huong dan ESU", "YesNo", "Warning") -eq "Yes") {
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "irm https://get.activated.win | iex"
     }
@@ -188,6 +214,10 @@ Add-Btn $CardMas "3. KICH HOAT ESU / WIN / OFFICE (TSforge)" 20 150 390 {
 Add-Btn $CardMas "KIEM TRA TRANG THAI (CHECK STATUS)" 20 230 390 { Start-Process "slmgr.vbs" -ArgumentList "/xpr" }
 
 # --- FOOTER ---
-$LblCredit = New-Object System.Windows.Forms.Label; $LblCredit.Text="Windows Activation Script (MAS) by Massgrave.dev"; $LblCredit.ForeColor="DimGray"; $LblCredit.Location="20,550"; $LblCredit.AutoSize=$true; $Form.Controls.Add($LblCredit)
+$BtnDelKey = New-Object System.Windows.Forms.Button; $BtnDelKey.Text="XOA KEY / HUY KICH HOAT"; $BtnDelKey.Location="20,570"; $BtnDelKey.Size="250,30"; $BtnDelKey.FlatStyle="Flat"; $BtnDelKey.ForeColor="Red"; $BtnDelKey.BackColor=$Theme.Back; $BtnDelKey.Cursor="Hand"
+$BtnDelKey.Add_Click({ Start-Process "slmgr.vbs" -ArgumentList "/upk" -Wait; Start-Process "slmgr.vbs" -ArgumentList "/cpky" })
+$Form.Controls.Add($BtnDelKey)
+
+$LblCredit = New-Object System.Windows.Forms.Label; $LblCredit.Text="Powered by MAS (Massgrave.dev)"; $LblCredit.ForeColor="DimGray"; $LblCredit.Location="650,580"; $LblCredit.AutoSize=$true; $Form.Controls.Add($LblCredit)
 
 $Form.ShowDialog() | Out-Null
