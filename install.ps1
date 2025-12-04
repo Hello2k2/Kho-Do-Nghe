@@ -184,6 +184,7 @@ Add-Btn $P1 "🔍 SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
 Add-Btn $P1 "🚀 RAM BOOSTER" { Load-Module "RamBooster.ps1" }
 Add-Btn $P1 "🔑 ACTIVATION" { Load-Module "WinActivator.ps1" }
 Add-Btn $P1 "💾 HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+Add-Btn $P1 "🚀 DEBLOATER (GỠ RÁC)" { Load-Module "Debloater.ps1" }
 
 # --- CỘT 2: SECURITY & NETWORK ---
 $P2 = Add-Card "SECURITY & NETWORK" 340 20 315 400
