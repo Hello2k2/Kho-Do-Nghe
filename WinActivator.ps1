@@ -22,7 +22,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TRUNG TÂM KÍCH HOẠT & ESU MASTER (SMART EDITION)"
+$Form.Text = "TRUNG TÂM KÍCH HOẠT VÀ ESU MASTER (SMART EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
@@ -31,23 +31,25 @@ $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 # Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "QUẢN LÝ KÍCH HOẠT WINDOWS & ESU"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "QUẢN LÝ KÍCH HOẠT WINDOWS + ESU"; $LblT.Font = "Segoe UI, 18, Bold"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
 $LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Hỗ trợ bởi MAS 3.9 | Smart Key Engine v1.0"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,50"; $Form.Controls.Add($LblS)
 
 # --- ADVANCED GLOW PAINTER ---
 $GlowPaint = {
     param($sender, $e)
-    $GlowColor = $Theme.Accent
-    for ($i = 1; $i -le 4; $i++) {
-        $Alpha = 50 - ($i * 10); if ($Alpha -lt 0) { $Alpha = 0 }
-        $Pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb($Alpha, $GlowColor), $i * 2)
-        $Rect = $sender.ClientRectangle
-        $Rect.X += $i; $Rect.Y += $i; $Rect.Width -= ($i * 2); $Rect.Height -= ($i * 2)
-        $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
-    }
-    $MainPen = New-Object System.Windows.Forms.Pen($GlowColor, 1)
-    $RMain = $sender.ClientRectangle; $RMain.Width-=1; $RMain.Height-=1
-    $e.Graphics.DrawRectangle($MainPen, $RMain); $MainPen.Dispose()
+    try {
+        $GlowColor = $Theme.Accent
+        for ($i = 1; $i -le 4; $i++) {
+            $Alpha = 50 - ($i * 10); if ($Alpha -lt 0) { $Alpha = 0 }
+            $Pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb($Alpha, $GlowColor), $i * 2)
+            $Rect = $sender.ClientRectangle
+            $Rect.X += $i; $Rect.Y += $i; $Rect.Width -= ($i * 2); $Rect.Height -= ($i * 2)
+            $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
+        }
+        $MainPen = New-Object System.Windows.Forms.Pen($GlowColor, 1)
+        $RMain = $sender.ClientRectangle; $RMain.Width-=1; $RMain.Height-=1
+        $e.Graphics.DrawRectangle($MainPen, $RMain); $MainPen.Dispose()
+    } catch {}
 }
 
 # --- HELPER FUNCTIONS ---
@@ -178,7 +180,8 @@ $LblEsu = New-Object System.Windows.Forms.Label; $LblEsu.Text="MẸO: Để có 
 # =========================================================================================
 # PHẦN 3: KÍCH HOẠT TỰ ĐỘNG (MAS 3.9)
 # =========================================================================================
-$CardMas = Add-Card 480 250 435 300 "3. MAS 3.9 - KÍCH HOẠT TỰ ĐỘNG & ESU"
+# SỬA LỖI Ở ĐÂY: Thay dấu & bằng dấu + hoặc chữ "VÀ"
+$CardMas = Add-Card 480 250 435 300 "3. MAS 3.9 - TỰ ĐỘNG KÍCH HOẠT + ESU"
 
 Add-Btn $CardMas "1. KÍCH HOẠT WINDOWS (HWID)" 20 50 390 {
     if ([System.Windows.Forms.MessageBox]::Show("Kích hoạt Bản quyền số vĩnh viễn (HWID)?", "Xác nhận", "YesNo") -eq "Yes") {
