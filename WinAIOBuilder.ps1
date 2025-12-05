@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 3.7 (Safe Mode + Syntax Fix + Debug Ready)
+    Version: 3.8 (Fix Font Error + Safe Mode)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -26,20 +26,26 @@ $Theme = @{
     Accent    = [System.Drawing.Color]::FromArgb(0, 255, 255)
 }
 
+# --- FONTS HELPER (FIX LOI FONT) ---
+$FontNormal = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+$FontBold   = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$FontTitle  = New-Object System.Drawing.Font("Impact", 18, [System.Drawing.FontStyle]::Regular)
+$FontBigBtn = New-Object System.Windows.Forms.Button; $FontBigBtn.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold) # Template
+
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V3.7 (STABLE)"
+$Form.Text = "WINDOWS AIO BUILDER V3.8 (FONT FIXED)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "TẠO WINDOWS AIO & HDD BOOT"; $LblT.Font = "Impact, 18"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $Form.Controls.Add($LblT)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "TẠO WINDOWS AIO & HDD BOOT"; $LblT.Font = $FontTitle; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $Form.Controls.Add($LblT)
 
 # ================= SECTIONS =================
 
 # 1. INPUT ISO
-$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn (Hỗ trợ Win 7/8/10/11)"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
+$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
 
 $TxtIsoList = New-Object System.Windows.Forms.TextBox; $TxtIsoList.Location = "15,25"; $TxtIsoList.Size = "580,25"; $TxtIsoList.ReadOnly = $true; $GbIso.Controls.Add($TxtIsoList)
 $BtnAdd = New-Object System.Windows.Forms.Button; $BtnAdd.Text = "THÊM ISO..."; $BtnAdd.Location = "610,23"; $BtnAdd.Size = "100,27"; $BtnAdd.BackColor = "DimGray"; $BtnAdd.ForeColor = "White"; $GbIso.Controls.Add($BtnAdd)
@@ -47,29 +53,29 @@ $BtnEject = New-Object System.Windows.Forms.Button; $BtnEject.Text = "RESET LIST
 
 $Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,60"; $Grid.Size = "865,175"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
 $ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name = "Select"; $ColChk.HeaderText = "[X]"; $ColChk.Width = 40; $Grid.Columns.Add($ColChk) | Out-Null
-$Grid.Columns.Add("ISO", "Đường dẫn File"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
+$Grid.Columns.Add("ISO", "File"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Size"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "Path")
 $Grid.Columns[1].Width = 50; $Grid.Columns[3].Width = 80; $Grid.Columns[4].Width = 60; $Grid.Columns[5].Visible = $false; $GbIso.Controls.Add($Grid)
 
 # 2. BUILD OPTIONS
-$GbBuild = New-Object System.Windows.Forms.GroupBox; $GbBuild.Text = "2. Cấu Hình & Build (install.wim + CMD)"; $GbBuild.Location = "20,310"; $GbBuild.Size = "895,120"; $GbBuild.ForeColor = "Lime"; $Form.Controls.Add($GbBuild)
+$GbBuild = New-Object System.Windows.Forms.GroupBox; $GbBuild.Text = "2. Cấu Hình & Build"; $GbBuild.Location = "20,310"; $GbBuild.Size = "895,120"; $GbBuild.ForeColor = "Lime"; $Form.Controls.Add($GbBuild)
 
-$LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục làm việc:"; $LblOut.Location = "15,25"; $LblOut.AutoSize = $true; $GbBuild.Controls.Add($LblOut)
+$LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục:"; $LblOut.Location = "15,25"; $LblOut.AutoSize = $true; $GbBuild.Controls.Add($LblOut)
 $TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "120,22"; $TxtOut.Size = "400,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
 $BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "530,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
 
-$ChkBootLayout = New-Object System.Windows.Forms.CheckBox; $ChkBootLayout.Text = "Sao chép Boot (Để tạo ISO hoặc USB Boot)"; $ChkBootLayout.Location = "120,55"; $ChkBootLayout.AutoSize = $true; $ChkBootLayout.Checked = $true; $ChkBootLayout.ForeColor = "Cyan"; $GbBuild.Controls.Add($ChkBootLayout)
+$ChkBootLayout = New-Object System.Windows.Forms.CheckBox; $ChkBootLayout.Text = "Sao chép Boot (Quan trọng)"; $ChkBootLayout.Location = "120,55"; $ChkBootLayout.AutoSize = $true; $ChkBootLayout.Checked = $true; $ChkBootLayout.ForeColor = "Cyan"; $GbBuild.Controls.Add($ChkBootLayout)
 
-$BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "BẮT ĐẦU BUILD AIO"; $BtnBuild.Location = "600,20"; $BtnBuild.Size = "280,80"; $BtnBuild.BackColor = "Green"; $BtnBuild.ForeColor = "White"; $BtnBuild.Font = "Segoe UI, 12, Bold"; $GbBuild.Controls.Add($BtnBuild)
+$BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "BẮT ĐẦU BUILD AIO"; $BtnBuild.Location = "600,20"; $BtnBuild.Size = "280,80"; $BtnBuild.BackColor = "Green"; $BtnBuild.ForeColor = "White"; $BtnBuild.Font = $FontBigBtn.Font; $GbBuild.Controls.Add($BtnBuild)
 
 # 3. CREATE ISO
-$GbIsoTool = New-Object System.Windows.Forms.GroupBox; $GbIsoTool.Text = "3. Đóng Gói Ra File ISO"; $GbIsoTool.Location = "20,440"; $GbIsoTool.Size = "440,150"; $GbIsoTool.ForeColor = "Orange"; $Form.Controls.Add($GbIsoTool)
-$BtnMakeIso = New-Object System.Windows.Forms.Button; $BtnMakeIso.Text = "TẠO FILE ISO NGAY"; $BtnMakeIso.Location = "20,30"; $BtnMakeIso.Size = "400,50"; $BtnMakeIso.BackColor = "DarkOrange"; $BtnMakeIso.ForeColor = "Black"; $BtnMakeIso.Font = "Segoe UI, 11, Bold"; $GbIsoTool.Controls.Add($BtnMakeIso)
-$LblIsoNote = New-Object System.Windows.Forms.Label; $LblIsoNote.Text = "* Tự động tải oscdimg.exe (ADK) nếu thiếu."; $LblIsoNote.Location = "20,90"; $LblIsoNote.AutoSize = $true; $LblIsoNote.ForeColor = "Gray"; $GbIsoTool.Controls.Add($LblIsoNote)
+$GbIsoTool = New-Object System.Windows.Forms.GroupBox; $GbIsoTool.Text = "3. Tạo ISO Boot"; $GbIsoTool.Location = "20,440"; $GbIsoTool.Size = "440,150"; $GbIsoTool.ForeColor = "Orange"; $Form.Controls.Add($GbIsoTool)
+$BtnMakeIso = New-Object System.Windows.Forms.Button; $BtnMakeIso.Text = "TẠO FILE ISO NGAY"; $BtnMakeIso.Location = "20,30"; $BtnMakeIso.Size = "400,50"; $BtnMakeIso.BackColor = "DarkOrange"; $BtnMakeIso.ForeColor = "Black"; $BtnMakeIso.Font = $FontBold; $GbIsoTool.Controls.Add($BtnMakeIso)
+$LblIsoNote = New-Object System.Windows.Forms.Label; $LblIsoNote.Text = "* Tự tải tool nếu thiếu."; $LblIsoNote.Location = "20,90"; $LblIsoNote.AutoSize = $true; $LblIsoNote.ForeColor = "Gray"; $GbIsoTool.Controls.Add($LblIsoNote)
 
 # 4. HDD BOOT
-$GbHdd = New-Object System.Windows.Forms.GroupBox; $GbHdd.Text = "4. HDD Boot (Không cần USB)"; $GbHdd.Location = "475,440"; $GbHdd.Size = "440,150"; $GbHdd.ForeColor = "Red"; $Form.Controls.Add($GbHdd)
-$BtnHddBoot = New-Object System.Windows.Forms.Button; $BtnHddBoot.Text = "TẠO MENU BOOT HDD"; $BtnHddBoot.Location = "20,30"; $BtnHddBoot.Size = "400,50"; $BtnHddBoot.BackColor = "Firebrick"; $BtnHddBoot.ForeColor = "White"; $BtnHddBoot.Font = "Segoe UI, 11, Bold"; $GbHdd.Controls.Add($BtnHddBoot)
-$LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Tự động tạo BCD và WinPE"; $LblHddStat.Location = "20,90"; $LblHddStat.AutoSize = $true; $GbHdd.Controls.Add($LblHddStat)
+$GbHdd = New-Object System.Windows.Forms.GroupBox; $GbHdd.Text = "4. HDD Boot"; $GbHdd.Location = "475,440"; $GbHdd.Size = "440,150"; $GbHdd.ForeColor = "Red"; $Form.Controls.Add($GbHdd)
+$BtnHddBoot = New-Object System.Windows.Forms.Button; $BtnHddBoot.Text = "TẠO MENU BOOT HDD"; $BtnHddBoot.Location = "20,30"; $BtnHddBoot.Size = "400,50"; $BtnHddBoot.BackColor = "Firebrick"; $BtnHddBoot.ForeColor = "White"; $BtnHddBoot.Font = $FontBold; $GbHdd.Controls.Add($BtnHddBoot)
+$LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Cài Win không cần USB"; $LblHddStat.Location = "20,90"; $LblHddStat.AutoSize = $true; $GbHdd.Controls.Add($LblHddStat)
 
 # Log Area
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "20,600"; $TxtLog.Size = "895,140"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $Form.Controls.Add($TxtLog)
@@ -83,7 +89,7 @@ function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))
 function Get-7Zip {
     $7z = "$env:TEMP\7zr.exe"
     if (Test-Path $7z) { return $7z }
-    Log "Dang tai 7-Zip Engine (de xu ly Win 7)..."
+    Log "Dang tai 7-Zip..."
     try { (New-Object System.Net.WebClient).DownloadFile("https://www.7-zip.org/a/7zr.exe", $7z); return $7z } 
     catch { Log "Loi tai 7-Zip!"; return $null }
 }
@@ -113,7 +119,6 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "WaitCursor"
     Log "Dang xu ly ISO: $IsoPath..."
     
-    # 1. Thu Mount bang Windows
     try {
         Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
         $Vol = $null; for($i=0;$i -lt 6;$i++){ $Vol=Get-DiskImage -ImagePath $IsoPath|Get-Volume; if($Vol){break}; Start-Sleep -m 500 }
@@ -122,21 +127,18 @@ function Process-Iso ($IsoPath) {
             $Drv = "$($Vol.DriveLetter):"; $Wim = "$Drv\sources\install.wim"; if(!(Test-Path $Wim)){$Wim="$Drv\sources\install.esd"}
             if (Test-Path $Wim) { Scan-Wim $Wim $IsoPath; $Form.Cursor="Default"; return }
         }
-    } catch { Log "Windows Mount that bai. Chuyen sang 7-Zip..." }
+    } catch { Log "Windows Mount failed. Switch to 7-Zip..." }
 
-    # 2. Neu Mount that bai (Win 7) -> Dung 7-Zip
     $7z = Get-7Zip
     if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode()
         $ExtractDir = "$Global:TempWimDir\$Hash"
         New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
         
-        Log "Dang trich xuat install.wim bang 7-Zip (Mat vai phut)..."
+        Log "Dang trich xuat 7-Zip (Mat vai phut)..."
         $P = Start-Process $7z -ArgumentList "e `"$IsoPath`" sources/install.wim sources/install.esd -o`"$ExtractDir`" -y" -NoNewWindow -PassThru -Wait
-        
         $ExtWim = "$ExtractDir\install.wim"; if(!(Test-Path $ExtWim)){$ExtWim="$ExtractDir\install.esd"}
-        
-        if (Test-Path $ExtWim) { Scan-Wim $ExtWim $IsoPath } else { Log "Khong tim thay install.wim trong ISO nay!" }
+        if (Test-Path $ExtWim) { Scan-Wim $ExtWim $IsoPath } else { Log "Khong tim thay install.wim!" }
     }
     $Form.Cursor = "Default"
 }
@@ -234,7 +236,7 @@ $BtnHddBoot.Add_Click({
     $OutDir = $TxtOut.Text
     if (!($Grid.Rows.Count)) { [System.Windows.Forms.MessageBox]::Show("Can it nhat 1 ISO!", "Loi"); return }
     
-    # Lay boot.wim (Tu 7z hoac Mount)
+    # Lay boot.wim
     $FirstIso = $Grid.Rows[0].Cells[1].Value
     $7z = Get-7Zip; Log "Trich xuat boot.wim..."
     Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait
@@ -262,7 +264,6 @@ $BtnHddBoot.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("HDD Boot Menu Created!", "Success")
 })
 
-# FIX EVENT: Use FormClosing
 $Form.Add_FormClosing({ 
     try {
         foreach ($Iso in $Global:MountedISOs) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }
@@ -273,6 +274,5 @@ $Form.Add_FormClosing({
 $Form.ShowDialog() | Out-Null
 
 } catch {
-    # Hien thi loi neu script chet
     [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error")
 }
