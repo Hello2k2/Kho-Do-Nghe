@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 3.9 (Deep Scan WIM/ESD + Smart Mount)
+    Version: 4.0 (Smart Mount Detection - Fix Win 7 Lock Error)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -28,7 +28,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V3.9 (DEEP SCAN FIX)"
+$Form.Text = "WINDOWS AIO BUILDER V4.0 (FINAL FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -99,7 +99,7 @@ function Get-Oscdimg {
     return $null
 }
 
-# QUÉT FILE WIM (CẢI TIẾN - DEEP SCAN)
+# QUÉT FILE WIM
 function Scan-Wim ($WimPath, $SourceName) {
     try {
         Log "Da tim thay WIM tai: $WimPath"
@@ -111,51 +111,68 @@ function Scan-Wim ($WimPath, $SourceName) {
     } catch { Log "Loi doc WIM ($WimPath): $($_.Exception.Message)" }
 }
 
+# HÀM XỬ LÝ ISO CẢI TIẾN (V4.0)
 function Process-Iso ($IsoPath) {
     $Form.Cursor = "WaitCursor"
-    Log "Dang xu ly ISO: $IsoPath..."
+    Log "Dang kiem tra ISO: $IsoPath..."
     
-    # 1. Thu Mount bang Windows (Nhanh nhat)
-    try {
-        Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-        $Vol = $null; for($i=0;$i -lt 6;$i++){ $Vol=Get-DiskImage -ImagePath $IsoPath|Get-Volume; if($Vol){break}; Start-Sleep -m 500 }
-        
-        if ($Vol) {
-            $Drv = "$($Vol.DriveLetter):"
-            
-            # --- DEEP SCAN TRONG Ổ ẢO ---
-            # Tim tat ca file install.wim hoac install.esd trong toan bo o dia
-            Log "Dang quet tim install.wim trong o $Drv ..."
-            $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
-            
-            if ($WimFiles) {
-                # Lay file dau tien tim thay
-                Scan-Wim $WimFiles[0].FullName $IsoPath
-                $Form.Cursor="Default"; return
-            } else {
-                Log "Mount duoc nhung khong thay file install.wim/esd!"
-            }
-        }
-    } catch { Log "Windows Mount failed (Win 7). Chuyen sang 7-Zip..." }
+    # 1. KIỂM TRA XEM ĐÃ MOUNT SẴN CHƯA (FIX LỖI 2 Ổ ĐĨA)
+    $MountedVol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
+    $Drv = $null
 
-    # 2. Neu Mount that bai (Win 7) -> Dung 7-Zip
+    if ($MountedVol -and $MountedVol.DriveLetter) {
+        $Drv = "$($MountedVol.DriveLetter):"
+        Log "ISO nay da duoc Mount san tai o: $Drv. Dung luon!"
+    } else {
+        # Nếu chưa Mount thì mới Mount
+        try {
+            Log "Dang Mount ISO ra o ao..."
+            Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
+            
+            # Chờ ổ đĩa xuất hiện
+            for($i=0;$i -lt 10;$i++){ 
+                $MountedVol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
+                if($MountedVol -and $MountedVol.DriveLetter){ 
+                    $Drv = "$($MountedVol.DriveLetter):"
+                    break 
+                }
+                Start-Sleep -Milliseconds 500
+            }
+        } catch { Log "Windows Mount failed (Win 7). Chuyen sang 7-Zip..." }
+    }
+
+    # 2. QUÉT WIM TRONG Ổ ẢO
+    if ($Drv) {
+        Log "Dang quet tim install.wim trong o $Drv ..."
+        # Tìm file WIM bất kể nó nằm ở đâu trong ổ ảo
+        $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
+        
+        if ($WimFiles) {
+            Scan-Wim $WimFiles[0].FullName $IsoPath
+            $Form.Cursor="Default"
+            return # QUAN TRỌNG: Tìm thấy rồi thì thoát luôn, KHÔNG chạy 7-Zip nữa
+        } else {
+            Log "Mount duoc nhung khong thay file WIM! ISO nay co the bi loi."
+        }
+    }
+
+    # 3. NẾU VẪN KHÔNG ĐƯỢC -> DÙNG 7-ZIP (PHƯƠNG ÁN CUỐI)
     $7z = Get-7Zip
     if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode()
         $ExtractDir = "$Global:TempWimDir\$Hash"
         New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
         
-        Log "Dang trich xuat 7-Zip (Mat vai phut)..."
-        # Giai nen toan bo thu muc sources de chac an
+        Log "Thu trich xuat bang 7-Zip (Mat thoi gian)..."
+        # Chỉ trích xuất WIM, ghi đè (-y)
         $P = Start-Process $7z -ArgumentList "e `"$IsoPath`" sources/install.wim sources/install.esd -o`"$ExtractDir`" -y" -NoNewWindow -PassThru -Wait
         
-        # Quet lai trong Temp
         $ExtWim = Get-ChildItem -Path $ExtractDir -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
         
         if ($ExtWim) { 
             Scan-Wim $ExtWim[0].FullName $IsoPath 
         } else { 
-            Log "VAN KHONG TIM THAY FILE WIM! ISO nay co the bi loi." 
+            Log "KHONG TIM THAY FILE WIM! File ISO nay khong dung chuan." 
         }
     }
     $Form.Cursor = "Default"
@@ -254,10 +271,22 @@ $BtnHddBoot.Add_Click({
     $OutDir = $TxtOut.Text
     if (!($Grid.Rows.Count)) { [System.Windows.Forms.MessageBox]::Show("Can it nhat 1 ISO!", "Loi"); return }
     
-    # Lay boot.wim (Tu 7z hoac Mount)
+    # Lay boot.wim
     $FirstIso = $Grid.Rows[0].Cells[1].Value
-    $7z = Get-7Zip; Log "Trich xuat boot.wim..."
-    Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait
+    $FirstWim = $Grid.Rows[0].Cells[5].Value
+    
+    # Kiem tra xem WIM nam o dau (Mount hay Temp)
+    if ($FirstWim -match "PhatTan_Wims") {
+        $7z = Get-7Zip; Log "Trich xuat boot.wim bang 7-Zip..."
+        Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait
+    } else {
+        # Neu la Mount san -> Copy tu o ao
+        $Vol = Get-DiskImage -ImagePath $FirstIso | Get-Volume
+        $Drv = "$($Vol.DriveLetter):"
+        Log "Copy boot.wim tu o $Drv ..."
+        Copy-Item "$Drv\sources\boot.wim" "$OutDir\boot.wim" -Force
+        if (!(Test-Path "$OutDir\boot.sdi")) { Copy-Item "$Drv\boot\boot.sdi" "$OutDir\boot.sdi" -Force }
+    }
     
     # Inject
     $Mnt = "$env:TEMP\Mnt"; New-Item $Mnt -ItemType Directory -Force | Out-Null
@@ -265,6 +294,7 @@ $BtnHddBoot.Add_Click({
     [IO.File]::WriteAllText("$Mnt\Windows\System32\winpeshl.ini", "[LaunchApps]`r`n%SystemRoot%\System32\AutoRunAIO.cmd")
     [IO.File]::WriteAllText("$Mnt\Windows\System32\AutoRunAIO.cmd", "@echo off`r`nfor %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist `"%%d:\AIO_Output\AIO_Installer.cmd`" (%%d: & cd \AIO_Output & call AIO_Installer.cmd & exit))`r`ncmd.exe")
     Start-Process "dism" "/Unmount-Image /MountDir:`"$Mnt`" /Commit" -Wait -NoNewWindow
+    Remove-Item $Mnt -Recurse -Force
     
     # BCD
     $Drive = $OutDir.Substring(0,2); $Wim = "\AIO_Output\boot.wim"
