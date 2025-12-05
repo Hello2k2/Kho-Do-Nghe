@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 4.3 (Smart Build Menu + Auto Admin CMD)
+    Version: 4.4 (Stable Core + Auto Admin CMD + Smart Mount)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -8,13 +8,15 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- GLOBAL ERROR HANDLING ---
-try {
-
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
+
+# --- GLOBAL VARIABLES ---
+$Global:MountedISOs = @()
+$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
+if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
 
 # --- THEME ENGINE ---
 $Theme = @{
@@ -28,7 +30,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V4.3 (SMART MENU)"
+$Form.Text = "WINDOWS AIO BUILDER V4.4 (STABLE)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -39,7 +41,7 @@ $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "TẠO WINDOWS AIO &
 # ================= SECTIONS =================
 
 # 1. INPUT ISO
-$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn (Hỗ trợ Win 7/8/10/11)"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
+$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
 
 $TxtIsoList = New-Object System.Windows.Forms.TextBox; $TxtIsoList.Location = "15,25"; $TxtIsoList.Size = "580,25"; $TxtIsoList.ReadOnly = $true; $GbIso.Controls.Add($TxtIsoList)
 $BtnAdd = New-Object System.Windows.Forms.Button; $BtnAdd.Text = "THÊM ISO..."; $BtnAdd.Location = "610,23"; $BtnAdd.Size = "100,27"; $BtnAdd.BackColor = "DimGray"; $BtnAdd.ForeColor = "White"; $GbIso.Controls.Add($BtnAdd)
@@ -47,7 +49,7 @@ $BtnEject = New-Object System.Windows.Forms.Button; $BtnEject.Text = "RESET LIST
 
 $Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,60"; $Grid.Size = "865,175"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
 $ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name = "Select"; $ColChk.HeaderText = "[X]"; $ColChk.Width = 40; $Grid.Columns.Add($ColChk) | Out-Null
-$Grid.Columns.Add("ISO", "Đường dẫn File"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
+$Grid.Columns.Add("ISO", "File ISO"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
 $Grid.Columns[1].Width = 50; $Grid.Columns[3].Width = 80; $Grid.Columns[4].Width = 60; $Grid.Columns[5].Visible = $false; $GbIso.Controls.Add($Grid)
 
 # 2. BUILD OPTIONS
@@ -57,7 +59,7 @@ $LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục làm
 $TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "120,22"; $TxtOut.Size = "400,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
 $BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "530,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
 
-# Context Menu cho nút Build
+# Context Menu
 $MenuBuild = New-Object System.Windows.Forms.ContextMenu
 $Item1 = $MenuBuild.MenuItems.Add("1. Build ra file cài đặt (install.wim + CMD Admin)")
 $Item2 = $MenuBuild.MenuItems.Add("2. Chuẩn bị cấu trúc ISO (Để tạo file ISO Boot)")
@@ -78,10 +80,6 @@ $LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Tự đ
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "20,600"; $TxtLog.Size = "895,140"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $Form.Controls.Add($TxtLog)
 
 # --- FUNCTIONS ---
-$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
-if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
-$Global:MountedISOs = @()
-
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
 
 function Get-7Zip {
@@ -146,7 +144,7 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "Default"
 }
 
-# --- CORE BUILD LOGIC ---
+# --- BUILD CORE ---
 function Build-Core ($CopyBoot) {
     $Dir = $TxtOut.Text; if(!$Dir){return}; if(!(Test-Path $Dir)){New-Item -ItemType Directory -Path $Dir -Force | Out-Null}
     $Tasks = @(); foreach($r in $Grid.Rows){if($r.Cells[0].Value){$Tasks+=$r}}
@@ -154,7 +152,7 @@ function Build-Core ($CopyBoot) {
 
     $BtnBuild.Enabled=$false
     
-    # 1. COPY BOOT (Neu chon Option 2)
+    # 1. COPY BOOT
     if ($CopyBoot) {
         $FirstSource = $Tasks[0].Cells[1].Value
         $FirstWim = $Tasks[0].Cells[5].Value
@@ -171,7 +169,6 @@ function Build-Core ($CopyBoot) {
             }
         }
     } else {
-        # Neu chon Option 1 (Chi lay install.wim), dam bao thu muc sources ton tai
         if (!(Test-Path "$Dir\sources")) { New-Item -ItemType Directory -Path "$Dir\sources" -Force | Out-Null }
     }
 
@@ -185,11 +182,10 @@ function Build-Core ($CopyBoot) {
         $Count++
     }
 
-    # 3. TAO FILE CMD ADMIN (Chi cho Option 1)
+    # 3. CMD ADMIN
     if (!$CopyBoot) {
         $Cmd = @"
 @echo off
-:: AUTO ADMIN
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' ( goto UAC ) else ( goto Admin )
 :UAC
@@ -226,12 +222,9 @@ $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filt
 $BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
-# --- MENU HANDLERS ---
 $BtnBuild.Add_Click({ $MenuBuild.Show($BtnBuild, New-Object System.Drawing.Point(0, $BtnBuild.Height)) })
-$Item1.Add_Click({ Build-Core $false }) # Option 1: Chi lay WIM + CMD
-$Item2.Add_Click({ Build-Core $true })  # Option 2: Full ISO Layout
+$Item1.Add_Click({ Build-Core $false }); $Item2.Add_Click({ Build-Core $true })
 
-# --- ISO MAKER ---
 $BtnMakeIso.Add_Click({
     $Dir = $TxtOut.Text; $Oscd = Get-Oscdimg; if (!$Oscd) { return }
     $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName="WinAIO.iso"; $Save.Filter="ISO|*.iso"
@@ -242,7 +235,6 @@ $BtnMakeIso.Add_Click({
     }
 })
 
-# --- HDD BOOT ---
 $BtnHddBoot.Add_Click({
     $OutDir = $TxtOut.Text; if (!($Grid.Rows.Count)) { return }
     $FirstIso = $Grid.Rows[0].Cells[1].Value; $FirstWim = $Grid.Rows[0].Cells[5].Value
@@ -262,7 +254,6 @@ $BtnHddBoot.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("HDD Boot Menu Created!", "Success")
 })
 
+# FIX EVENT: Add_FormClosing
 $Form.Add_FormClosing({ try { foreach ($Iso in $Global:MountedISOs) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue } catch {} })
 $Form.ShowDialog() | Out-Null
-
-} catch { [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error") }
