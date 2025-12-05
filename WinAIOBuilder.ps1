@@ -1,11 +1,31 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 4.5 (Syntax Fixed + Smart Menu + Auto Admin)
+    Version: 4.6 (IEX Friendly + Fix Silent Exit)
 #>
 
-# --- 1. FORCE ADMIN ---
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
+# --- 1. SMART ADMIN CHECK ---
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+
+if (!$IsAdmin) {
+    # Neu chay tu file (co duong dan) -> Tu dong chay lai duoi quyen Admin
+    if ($PSCommandPath) {
+        Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        Exit
+    } else {
+        # Neu chay qua mang (IEX) -> Bao loi yeu cau chay Admin thu cong
+        Write-Host "--------------------------------------------------------" -ForegroundColor Red
+        Write-Host " [LOI] TOOL CAN QUYEN ADMINISTRATOR DE CHAY!" -ForegroundColor Yellow
+        Write-Host " Vi ban dang chay truc tiep tu mang (IEX), tool khong the" -ForegroundColor White
+        Write-Host " tu dong cap quyen Admin duoc." -ForegroundColor White
+        Write-Host ""
+        Write-Host " CACH KHAC PHUC:" -ForegroundColor Green
+        Write-Host " 1. Tat cua so nay di." -ForegroundColor Green
+        Write-Host " 2. Chuot phai vao PowerShell -> Chon 'Run as Administrator'." -ForegroundColor Green
+        Write-Host " 3. Dan lai lenh chay tool." -ForegroundColor Green
+        Write-Host "--------------------------------------------------------" -ForegroundColor Red
+        Read-Host "An Enter de thoat..."
+        Exit
+    }
 }
 
 # --- GLOBAL ERROR HANDLING ---
@@ -28,7 +48,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V4.5 (FINAL FIXED)"
+$Form.Text = "WINDOWS AIO BUILDER V4.6 (IEX FRIENDLY)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -57,7 +77,7 @@ $LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục làm
 $TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "120,22"; $TxtOut.Size = "400,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
 $BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "530,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
 
-# --- CONTEXT MENU (FIXED SYNTAX) ---
+# Context Menu
 $MenuBuild = New-Object System.Windows.Forms.ContextMenu
 $Item1 = $MenuBuild.MenuItems.Add("1. Build ra file cài đặt (install.wim + CMD Admin)")
 $Item2 = $MenuBuild.MenuItems.Add("2. Chuẩn bị cấu trúc ISO (Để tạo file ISO Boot)")
@@ -224,7 +244,7 @@ $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filt
 $BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
-# --- MENU FIX: WRAP NEW-OBJECT ---
+# --- MENU HANDLER FIXED ---
 $BtnBuild.Add_Click({ 
     $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height)
     $MenuBuild.Show($BtnBuild, $Pt) 
