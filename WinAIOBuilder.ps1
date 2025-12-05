@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 4.4 (Stable Core + Auto Admin CMD + Smart Mount)
+    Version: 4.5 (Syntax Fixed + Smart Menu + Auto Admin)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -8,15 +8,13 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
+# --- GLOBAL ERROR HANDLING ---
+try {
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
-
-# --- GLOBAL VARIABLES ---
-$Global:MountedISOs = @()
-$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
-if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
 
 # --- THEME ENGINE ---
 $Theme = @{
@@ -30,7 +28,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V4.4 (STABLE)"
+$Form.Text = "WINDOWS AIO BUILDER V4.5 (FINAL FIXED)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -49,7 +47,7 @@ $BtnEject = New-Object System.Windows.Forms.Button; $BtnEject.Text = "RESET LIST
 
 $Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,60"; $Grid.Size = "865,175"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
 $ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name = "Select"; $ColChk.HeaderText = "[X]"; $ColChk.Width = 40; $Grid.Columns.Add($ColChk) | Out-Null
-$Grid.Columns.Add("ISO", "File ISO"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
+$Grid.Columns.Add("ISO", "Đường dẫn File"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
 $Grid.Columns[1].Width = 50; $Grid.Columns[3].Width = 80; $Grid.Columns[4].Width = 60; $Grid.Columns[5].Visible = $false; $GbIso.Controls.Add($Grid)
 
 # 2. BUILD OPTIONS
@@ -59,7 +57,7 @@ $LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục làm
 $TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "120,22"; $TxtOut.Size = "400,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
 $BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "530,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
 
-# Context Menu
+# --- CONTEXT MENU (FIXED SYNTAX) ---
 $MenuBuild = New-Object System.Windows.Forms.ContextMenu
 $Item1 = $MenuBuild.MenuItems.Add("1. Build ra file cài đặt (install.wim + CMD Admin)")
 $Item2 = $MenuBuild.MenuItems.Add("2. Chuẩn bị cấu trúc ISO (Để tạo file ISO Boot)")
@@ -80,6 +78,10 @@ $LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Tự đ
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "20,600"; $TxtLog.Size = "895,140"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $Form.Controls.Add($TxtLog)
 
 # --- FUNCTIONS ---
+$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
+if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
+$Global:MountedISOs = @()
+
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
 
 function Get-7Zip {
@@ -222,7 +224,11 @@ $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filt
 $BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
-$BtnBuild.Add_Click({ $MenuBuild.Show($BtnBuild, New-Object System.Drawing.Point(0, $BtnBuild.Height)) })
+# --- MENU FIX: WRAP NEW-OBJECT ---
+$BtnBuild.Add_Click({ 
+    $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height)
+    $MenuBuild.Show($BtnBuild, $Pt) 
+})
 $Item1.Add_Click({ Build-Core $false }); $Item2.Add_Click({ Build-Core $true })
 
 $BtnMakeIso.Add_Click({
@@ -257,3 +263,5 @@ $BtnHddBoot.Add_Click({
 # FIX EVENT: Add_FormClosing
 $Form.Add_FormClosing({ try { foreach ($Iso in $Global:MountedISOs) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue } catch {} })
 $Form.ShowDialog() | Out-Null
+
+} catch { [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error") }
