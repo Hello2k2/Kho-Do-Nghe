@@ -1,31 +1,11 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 4.6 (IEX Friendly + Fix Silent Exit)
+    Version: 4.6 (WMIC Deep Scan + Multi-Mount + Auto Admin)
 #>
 
-# --- 1. SMART ADMIN CHECK ---
-$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-
-if (!$IsAdmin) {
-    # Neu chay tu file (co duong dan) -> Tu dong chay lai duoi quyen Admin
-    if ($PSCommandPath) {
-        Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-        Exit
-    } else {
-        # Neu chay qua mang (IEX) -> Bao loi yeu cau chay Admin thu cong
-        Write-Host "--------------------------------------------------------" -ForegroundColor Red
-        Write-Host " [LOI] TOOL CAN QUYEN ADMINISTRATOR DE CHAY!" -ForegroundColor Yellow
-        Write-Host " Vi ban dang chay truc tiep tu mang (IEX), tool khong the" -ForegroundColor White
-        Write-Host " tu dong cap quyen Admin duoc." -ForegroundColor White
-        Write-Host ""
-        Write-Host " CACH KHAC PHUC:" -ForegroundColor Green
-        Write-Host " 1. Tat cua so nay di." -ForegroundColor Green
-        Write-Host " 2. Chuot phai vao PowerShell -> Chon 'Run as Administrator'." -ForegroundColor Green
-        Write-Host " 3. Dan lai lenh chay tool." -ForegroundColor Green
-        Write-Host "--------------------------------------------------------" -ForegroundColor Red
-        Read-Host "An Enter de thoat..."
-        Exit
-    }
+# --- 1. FORCE ADMIN ---
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
 # --- GLOBAL ERROR HANDLING ---
@@ -35,6 +15,11 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
+
+# --- GLOBAL VARIABLES ---
+$Global:MountedISOs = @()
+$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
+if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
 
 # --- THEME ENGINE ---
 $Theme = @{
@@ -48,7 +33,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V4.6 (IEX FRIENDLY)"
+$Form.Text = "WINDOWS AIO BUILDER V4.6 (VM SCAN FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -98,10 +83,6 @@ $LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Tự đ
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "20,600"; $TxtLog.Size = "895,140"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $Form.Controls.Add($TxtLog)
 
 # --- FUNCTIONS ---
-$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
-if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
-$Global:MountedISOs = @()
-
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
 
 function Get-7Zip {
@@ -120,11 +101,28 @@ function Get-Oscdimg {
     return $null
 }
 
+# --- HÀM TÌM Ổ ĐĨA SIÊU MẠNH (GET-VOLUME + WMIC) ---
 function Get-IsoDrive ($IsoPath) {
+    # 1. Thu bang Modern API
     try {
         $Vol = Get-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Get-Volume
         if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
     } catch {}
+
+    # 2. Thu bang WMIC (Chuyen tri may ao/Win7)
+    try {
+        # Lay tat ca o CD/DVD (DriveType=5)
+        $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
+        foreach ($D in $Disks) {
+            $CheckWim = "$($D.DeviceID)\sources\install.wim"
+            $CheckEsd = "$($D.DeviceID)\sources\install.esd"
+            # Neu o nay co chua file cai dat Windows -> Chup luon
+            if ((Test-Path $CheckWim) -or (Test-Path $CheckEsd)) {
+                return $D.DeviceID
+            }
+        }
+    } catch { Log "WMIC Scan Error: $($_.Exception.Message)" }
+
     return $null
 }
 
@@ -135,26 +133,43 @@ function Scan-Wim ($WimPath, $SourceName) {
         foreach ($I in $Info) {
             $Grid.Rows.Add($true, $SourceName, $I.ImageIndex, $I.ImageName, "$([Math]::Round($I.Size/1GB,2)) GB", $I.Architecture, $WimPath) | Out-Null
         }
-        Log "Da them: $SourceName"
+        Log "Da them thanh cong: $SourceName"
     } catch { Log "Loi doc WIM: $($_.Exception.Message)" }
 }
 
 function Process-Iso ($IsoPath) {
     $Form.Cursor = "WaitCursor"; Log "Dang xu ly ISO: $IsoPath..."
-    $Drv = Get-IsoDrive $IsoPath
+    
+    # Check neu da mount san
+    $Drv = Get-IsoDrive $IsoPath 
+    
     if (!$Drv) {
         try {
+            Log "Dang Mount ISO..."
             Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-            for($i=0;$i -lt 15;$i++){ $Drv = Get-IsoDrive $IsoPath; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
+            # Cho doi Mount
+            for($i=0;$i -lt 15;$i++){ 
+                $Drv = Get-IsoDrive $IsoPath
+                if($Drv){ break }
+                Start-Sleep -Milliseconds 500 
+            }
             if ($Drv) { $Global:MountedISOs += $IsoPath }
         } catch { Log "Mount that bai (7-Zip needed)" }
+    } else {
+        Log "Phat hien ISO da duoc mount san tai: $Drv"
     }
     
+    # Quet file
     if ($Drv) {
+        # Quet install.wim/esd bat ke nam o dau
         $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
-        if ($WimFiles) { Scan-Wim $WimFiles[0].FullName $IsoPath; $Form.Cursor="Default"; return }
+        if ($WimFiles) { 
+            # Lay file dau tien tim duoc
+            Scan-Wim $WimFiles[0].FullName $IsoPath; $Form.Cursor="Default"; return 
+        }
     }
 
+    # 7-ZIP FALLBACK
     $7z = Get-7Zip
     if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode(); $ExtractDir = "$Global:TempWimDir\$Hash"; New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
@@ -244,7 +259,6 @@ $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filt
 $BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
-# --- MENU HANDLER FIXED ---
 $BtnBuild.Add_Click({ 
     $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height)
     $MenuBuild.Show($BtnBuild, $Pt) 
