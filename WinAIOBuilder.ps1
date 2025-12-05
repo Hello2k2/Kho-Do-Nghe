@@ -1,12 +1,15 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 3.6 (7-Zip Engine + Fix Win 7 ISO + HDD Boot)
+    Version: 3.7 (Safe Mode + Syntax Fix + Debug Ready)
 #>
 
 # --- 1. FORCE ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
+
+# --- GLOBAL ERROR HANDLING ---
+try {
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -25,7 +28,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V3.6 (7-ZIP ENGINE)"
+$Form.Text = "WINDOWS AIO BUILDER V3.7 (STABLE)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -44,7 +47,7 @@ $BtnEject = New-Object System.Windows.Forms.Button; $BtnEject.Text = "RESET LIST
 
 $Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,60"; $Grid.Size = "865,175"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
 $ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name = "Select"; $ColChk.HeaderText = "[X]"; $ColChk.Width = 40; $Grid.Columns.Add($ColChk) | Out-Null
-$Grid.Columns.Add("ISO", "Đường dẫn File (WIM/ISO)"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
+$Grid.Columns.Add("ISO", "Đường dẫn File"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); $Grid.Columns.Add("WimPath", "WimPath")
 $Grid.Columns[1].Width = 50; $Grid.Columns[3].Width = 80; $Grid.Columns[4].Width = 60; $Grid.Columns[5].Visible = $false; $GbIso.Controls.Add($Grid)
 
 # 2. BUILD OPTIONS
@@ -110,10 +113,10 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "WaitCursor"
     Log "Dang xu ly ISO: $IsoPath..."
     
-    # 1. Thu Mount bang Windows (Nhanh nhat)
+    # 1. Thu Mount bang Windows
     try {
         Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-        $Vol = $null; for($i=0;$i<6;$i++){ $Vol=Get-DiskImage -ImagePath $IsoPath|Get-Volume; if($Vol){break}; Start-Sleep -m 500 }
+        $Vol = $null; for($i=0;$i -lt 6;$i++){ $Vol=Get-DiskImage -ImagePath $IsoPath|Get-Volume; if($Vol){break}; Start-Sleep -m 500 }
         
         if ($Vol) {
             $Drv = "$($Vol.DriveLetter):"; $Wim = "$Drv\sources\install.wim"; if(!(Test-Path $Wim)){$Wim="$Drv\sources\install.esd"}
@@ -121,7 +124,7 @@ function Process-Iso ($IsoPath) {
         }
     } catch { Log "Windows Mount that bai. Chuyen sang 7-Zip..." }
 
-    # 2. Neu Mount that bai (Win 7) -> Dung 7-Zip trich xuat
+    # 2. Neu Mount that bai (Win 7) -> Dung 7-Zip
     $7z = Get-7Zip
     if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode()
@@ -159,18 +162,15 @@ $BtnBuild.Add_Click({
 
     $BtnBuild.Enabled=$false
     
-    # Copy Boot tu file nguon dau tien
     if ($ChkBootLayout.Checked) {
         $FirstSource = $Tasks[0].Cells[1].Value
-        $FirstWim = $Tasks[0].Cells[5].Value # Lay duong dan WIM thuc te
+        $FirstWim = $Tasks[0].Cells[5].Value 
         
         Log "Dang tao Boot Layout..."
-        # Neu la file trich xuat tu 7-zip, ta phai dung 7zip de lay folder boot
         if ($FirstWim -match "PhatTan_Wims") {
             $7z = Get-7Zip; Log "Trich xuat Boot tu ISO bang 7-Zip..."
             Start-Process $7z -ArgumentList "x `"$FirstSource`" boot efi setup.exe autorun.inf bootmgr bootmgr.efi -o`"$Dir`" -y" -NoNewWindow -Wait
         } else {
-            # Neu la Mount san
             $Vol = Get-DiskImage -ImagePath $FirstSource | Get-Volume
             if ($Vol) {
                 $Drv = "$($Vol.DriveLetter):"
@@ -190,7 +190,6 @@ $BtnBuild.Add_Click({
         $Count++
     }
 
-    # TAO CMD ADMIN
     $Cmd = @"
 @echo off
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
@@ -263,5 +262,17 @@ $BtnHddBoot.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("HDD Boot Menu Created!", "Success")
 })
 
-$Form.Add_FormClosing({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue })
+# FIX EVENT: Use FormClosing
+$Form.Add_FormClosing({ 
+    try {
+        foreach ($Iso in $Global:MountedISOs) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }
+        Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue 
+    } catch {}
+})
+
 $Form.ShowDialog() | Out-Null
+
+} catch {
+    # Hien thi loi neu script chet
+    [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error")
+}
