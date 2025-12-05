@@ -252,7 +252,7 @@ $BtnInstall.Add_Click({
 
 # --- NÚT GHI CÔNG & DONATE ---
 $BtnPe = New-Object System.Windows.Forms.Button; $BtnPe.Text="⚡ WINPE"; $BtnPe.Location="750,10"; $BtnPe.Size="100,35"; $BtnPe.BackColor="Orange"; $BtnPe.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
-$BtnPe.Add_Click({ Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }); $PnlFooter.Controls.Add($BtnPe)
+#$BtnPe.Add_Click({ Tai-Va-Chay "WinPE_CuuHo.exe" "WinPE_Setup.exe" "Portable" }); $PnlFooter.Controls.Add($BtnPe)
 
 $BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="☕ DONATE"; $BtnDonate.Location="860,10"; $BtnDonate.Size="100,35"; $BtnDonate.BackColor="Gold"; $BtnDonate.ForeColor="Black"; $BtnPe.FlatStyle="Flat"
 $BtnDonate.Add_Click({ 
