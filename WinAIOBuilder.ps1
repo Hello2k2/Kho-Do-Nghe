@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 5.1 (Fix DirectoryNotFound + Force Create Paths)
+    Version: 5.2 (Logic Rework: Decoupled Detection + Safe Path)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -28,7 +28,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V5.1 (STABLE)"
+$Form.Text = "WINDOWS AIO BUILDER V5.2 (FINAL REWORK)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -80,7 +80,7 @@ $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $T
 # --- FUNCTIONS ---
 $Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
 if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
-$Global:MountedISOs = @()
+$Global:MountedISOs = @{} # Hash Map: Path -> Drive
 
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
 
@@ -100,42 +100,37 @@ function Get-Oscdimg {
     return $null
 }
 
-# --- HÀM TÌM Ổ ĐĨA HYBRID (GOLDEN LOGIC) ---
+# --- HÀM TÌM Ổ ĐĨA (ĐƠN GIẢN HÓA - KHÔNG LỌC TRÙNG Ở ĐÂY) ---
 function Get-IsoDrive ($IsoPath) {
     # 1. Thu bang Modern API
     try {
         $Img = Get-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
         if ($Img -and $Img.Attached) {
             $Vol = $Img | Get-Volume
-            if ($Vol -and $Vol.DriveLetter) { 
-                Log " [Mode 1] Match: $($Vol.DriveLetter):"
-                return "$($Vol.DriveLetter):" 
-            }
+            if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
         }
     } catch {}
 
-    # 2. Thu bang WMIC
-    Log " [Mode 1] Failed. Chuyen sang WMIC Scan..."
+    # 2. Thu bang WMIC (Quet tat ca o CD)
     try {
         $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
         foreach ($D in $Disks) {
-            # Bỏ qua các ổ đã được gán cho ISO khác
-            if ($Global:MountedISOs.Values -contains $D.DeviceID) { continue }
-            
-            $CheckWim = "$($D.DeviceID)\sources\install.wim"
-            $CheckEsd = "$($D.DeviceID)\sources\install.esd"
-            if ((Test-Path $CheckWim) -or (Test-Path $CheckEsd)) {
+            # Kiem tra neu o dia co file wim
+            if ((Test-Path "$($D.DeviceID)\sources\install.wim") -or (Test-Path "$($D.DeviceID)\sources\install.esd")) {
+                # Neu ISO nay da duoc dang ky trong Global Map thi tra ve luon
+                if ($Global:MountedISOs[$IsoPath] -eq $D.DeviceID) { return $D.DeviceID }
+                
+                # Neu chua dang ky, ta tra ve (co the la nhan vo, nhung se xu ly o Process-Iso)
                 return $D.DeviceID
             }
         }
-    } catch { Log "WMIC Scan Error: $($_.Exception.Message)" }
-
+    } catch {}
     return $null
 }
 
 function Scan-Wim ($WimPath, $SourceName) {
     try {
-        Log "Da tim thay WIM tai: $WimPath"
+        Log "Da tim thay WIM: $WimPath"
         $Info = Get-WindowsImage -ImagePath $WimPath
         foreach ($I in $Info) {
             $Grid.Rows.Add($true, $SourceName, $I.ImageIndex, $I.ImageName, "$([Math]::Round($I.Size/1GB,2)) GB", $I.Architecture, $WimPath) | Out-Null
@@ -147,23 +142,39 @@ function Scan-Wim ($WimPath, $SourceName) {
 function Process-Iso ($IsoPath) {
     $Form.Cursor = "WaitCursor"; Log "Dang xu ly ISO: $IsoPath..."
     
-    $Drv = Get-IsoDrive $IsoPath 
-    if (!$Drv) {
+    # Check neu da co trong danh sach quan ly
+    if ($Global:MountedISOs.ContainsKey($IsoPath)) {
+        $Drv = $Global:MountedISOs[$IsoPath]
+        Log "ISO nay da duoc gan vao o: $Drv"
+    } else {
+        # Chua co -> Thu Mount
         try {
             Log "Dang Mount ISO..."
             Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-            for($i=0;$i -lt 15;$i++){ 
-                $Drv = Get-IsoDrive $IsoPath
-                if($Drv){ break }
-                Start-Sleep -Milliseconds 500 
+            
+            # Cho doi va tim o dia MOI (chua co trong danh sach)
+            $NewDrv = $null
+            for($i=0;$i -lt 15;$i++){
+                $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
+                foreach ($D in $Disks) {
+                    if (-not ($Global:MountedISOs.Values -contains $D.DeviceID)) {
+                        if ((Test-Path "$($D.DeviceID)\sources\install.wim") -or (Test-Path "$($D.DeviceID)\sources\install.esd")) {
+                            $NewDrv = $D.DeviceID; break
+                        }
+                    }
+                }
+                if ($NewDrv) { break }
+                Start-Sleep -Milliseconds 500
             }
-            if ($Drv) { $Global:MountedISOs += @{$IsoPath = $Drv} }
-        } catch { Log "Mount that bai (7-Zip needed)" }
-    } else {
-        Log "Phat hien ISO da duoc mount san tai: $Drv"
-        $Global:MountedISOs += @{$IsoPath = $Drv}
+            
+            if ($NewDrv) { 
+                $Global:MountedISOs[$IsoPath] = $NewDrv
+                $Drv = $NewDrv
+            }
+        } catch { Log "Mount failed (7-Zip needed)" }
     }
     
+    # Quet file
     if ($Drv) {
         $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
         if ($WimFiles) { 
@@ -172,6 +183,7 @@ function Process-Iso ($IsoPath) {
         }
     }
 
+    # 7-ZIP
     $7z = Get-7Zip
     if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode(); $ExtractDir = "$Global:TempWimDir\$Hash"; New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
@@ -185,15 +197,21 @@ function Process-Iso ($IsoPath) {
 
 # --- BUILD CORE ---
 function Build-Core ($CopyBoot) {
-    # 1. CHUẨN HÓA ĐƯỜNG DẪN (Fix lỗi H:/iso)
+    # 1. CHUẨN HÓA ĐƯỜNG DẪN & CHECK Ổ ĐĨA
     $RawDir = $TxtOut.Text
     if (!$RawDir) { return }
-    $Dir = $RawDir -replace '/', '\' # Doi dau / thanh \
+    $Dir = $RawDir -replace '/', '\' 
     
-    # 2. TẠO THƯ MỤC NẾU CHƯA CÓ
+    # Kiem tra neu duong dan nam tren o dia CD/DVD (Read-only)
+    $RootDrive = [System.IO.Path]::GetPathRoot($Dir)
+    $DriveInfo = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $RootDrive.Trim('\') }
+    if ($DriveInfo.DriveType -eq 5) {
+        [System.Windows.Forms.MessageBox]::Show("Ban dang chon noi luu la o CD/DVD ao ($RootDrive)!`nVui long chon o cung that (VD: D:, E:).", "Loi Duong Dan")
+        return
+    }
+
+    # 2. TẠO THƯ MỤC
     if (!(Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir -Force | Out-Null }
-    
-    # 3. QUAN TRỌNG: TẠO THƯ MỤC SOURCES TRƯỚC (Fix lỗi DirectoryNotFound)
     $SourceDir = "$Dir\sources"
     if (!(Test-Path $SourceDir)) { New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null }
 
@@ -202,46 +220,47 @@ function Build-Core ($CopyBoot) {
 
     $BtnBuild.Enabled=$false
     
-    # 4. COPY BOOT (OPTION 2)
+    # 3. COPY BOOT
     if ($CopyBoot) {
         $FirstSource = $Tasks[0].Cells[1].Value
-        $FirstWim = $Tasks[0].Cells[6].Value # Cot 6 la WimPath
+        $FirstWim = $Tasks[0].Cells[6].Value
         Log "Dang tao Boot Layout..."
+        
+        # Logic tim lai o dia nguon
+        $Drv = $null
+        if ($Global:MountedISOs.ContainsKey($FirstSource)) {
+            $Drv = $Global:MountedISOs[$FirstSource]
+        }
         
         if ($FirstWim -match "PhatTan_Wims") {
             $7z = Get-7Zip; Log "Trich xuat Boot bang 7-Zip..."
             Start-Process $7z -ArgumentList "x `"$FirstSource`" boot efi setup.exe autorun.inf bootmgr bootmgr.efi -o`"$Dir`" -y" -NoNewWindow -Wait
+        } elseif ($Drv) {
+            Start-Process "robocopy.exe" -ArgumentList "`"$Drv`" `"$Dir`" /E /XD `"$Drv\sources`" `"$Drv\System Volume Information`" /MT:16 /NFL /NDL" -NoNewWindow -Wait
+            Start-Process "robocopy.exe" -ArgumentList "`"$Drv\sources`" `"$SourceDir`" /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
         } else {
-            $Drv = Get-IsoDrive $FirstSource
-            if ($Drv) {
-                # Copy tru file install.wim de tranh copy lau
-                Start-Process "robocopy.exe" -ArgumentList "`"$Drv`" `"$Dir`" /E /XD `"$Drv\sources`" `"$Drv\System Volume Information`" /MT:16 /NFL /NDL" -NoNewWindow -Wait
-                # Copy thu muc sources rieng (khong copy install.wim)
-                Start-Process "robocopy.exe" -ArgumentList "`"$Drv\sources`" `"$SourceDir`" /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
-            } else {
-                Log "KHONG TIM THAY O NGUON DE COPY BOOT! (Thu chon Option 1)"
-            }
+            Log "KHONG TIM THAY O NGUON ($FirstSource). Vui long chon lai ISO."
         }
     }
 
-    # 5. EXPORT WIM
+    # 4. EXPORT WIM
     $DestWim = "$SourceDir\install.wim"
     $Count = 1
     foreach ($T in $Tasks) {
-        $SrcWim = $T.Cells[6].Value # Cot 6
+        $SrcWim = $T.Cells[6].Value 
         $Idx = $T.Cells[2].Value; $Name = $T.Cells[3].Value
         Log "Exporting ($Count/$($Tasks.Count)): $Name..."
         try {
             Export-WindowsImage -SourceImagePath $SrcWim -SourceIndex $Idx -DestinationImagePath $DestWim -DestinationName "$Name" -CompressionType Maximum -ErrorAction Stop
         } catch {
             Log "Loi Export: $($_.Exception.Message)"
-            [System.Windows.Forms.MessageBox]::Show("Loi khi xuat file WIM! Kiem tra log.", "Loi Export")
+            [System.Windows.Forms.MessageBox]::Show("Loi Export. Check Log.", "Loi")
             $BtnBuild.Enabled=$true; return
         }
         $Count++
     }
 
-    # 6. CMD ADMIN
+    # 5. CMD ADMIN
     if (!$CopyBoot) {
         $Cmd = @"
 @echo off
@@ -267,24 +286,20 @@ timeout 10
 wpeutil reboot
 "@
         [IO.File]::WriteAllText("$Dir\AIO_Installer.cmd", $Cmd)
-        Log "Da tao AIO_Installer.cmd (Auto-Admin)."
     }
 
     Log "HOAN TAT!"
-    [System.Windows.Forms.MessageBox]::Show("Da xong! File tai: $Dir", "Thanh Cong")
+    [System.Windows.Forms.MessageBox]::Show("Da xong!", "Thanh Cong")
     Invoke-Item $Dir
     $BtnBuild.Enabled=$true
 }
 
 # --- EVENTS ---
 $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO/WIM|*.iso;*.wim;*.esd"; $O.Multiselect=$true; if($O.ShowDialog() -eq "OK"){ foreach($f in $O.FileNames){ if(!($TxtIsoList.Text.Contains($f))){ $TxtIsoList.Text+="$f; "; Process-Iso $f } } } })
-$BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
+$BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@{}; Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
-$BtnBuild.Add_Click({ 
-    $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height)
-    $MenuBuild.Show($BtnBuild, $Pt) 
-})
+$BtnBuild.Add_Click({ $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height); $MenuBuild.Show($BtnBuild, $Pt) })
 $Item1.Add_Click({ Build-Core $false }); $Item2.Add_Click({ Build-Core $true })
 
 $BtnMakeIso.Add_Click({
@@ -304,7 +319,8 @@ $BtnHddBoot.Add_Click({
     
     if ($FirstWim -match "PhatTan_Wims") { $7z = Get-7Zip; Log "Trich xuat boot.wim..."; Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait } 
     else { 
-        $Drv = Get-IsoDrive $FirstIso
+        $Drv = $null
+        if ($Global:MountedISOs.ContainsKey($FirstIso)) { $Drv = $Global:MountedISOs[$FirstIso] }
         if ($Drv) { Log "Copy boot.wim tu $Drv..."; Copy-Item "$Drv\sources\boot.wim" "$OutDir\boot.wim" -Force; if (!(Test-Path "$OutDir\boot.sdi")) { Copy-Item "$Drv\boot\boot.sdi" "$OutDir\boot.sdi" -Force } } 
     }
     
