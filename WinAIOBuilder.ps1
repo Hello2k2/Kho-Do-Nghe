@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 4.1 (WMIC Fallback for VM + Robust Mount)
+    Version: 4.3 (Smart Build Menu + Auto Admin CMD)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -28,7 +28,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V4.1 (VM OPTIMIZED)"
+$Form.Text = "WINDOWS AIO BUILDER V4.3 (SMART MENU)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -39,7 +39,7 @@ $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "TẠO WINDOWS AIO &
 # ================= SECTIONS =================
 
 # 1. INPUT ISO
-$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
+$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn (Hỗ trợ Win 7/8/10/11)"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
 
 $TxtIsoList = New-Object System.Windows.Forms.TextBox; $TxtIsoList.Location = "15,25"; $TxtIsoList.Size = "580,25"; $TxtIsoList.ReadOnly = $true; $GbIso.Controls.Add($TxtIsoList)
 $BtnAdd = New-Object System.Windows.Forms.Button; $BtnAdd.Text = "THÊM ISO..."; $BtnAdd.Location = "610,23"; $BtnAdd.Size = "100,27"; $BtnAdd.BackColor = "DimGray"; $BtnAdd.ForeColor = "White"; $GbIso.Controls.Add($BtnAdd)
@@ -57,9 +57,12 @@ $LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục làm
 $TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "120,22"; $TxtOut.Size = "400,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
 $BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "530,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
 
-$ChkBootLayout = New-Object System.Windows.Forms.CheckBox; $ChkBootLayout.Text = "Sao chép Boot (Để tạo ISO hoặc USB Boot)"; $ChkBootLayout.Location = "120,55"; $ChkBootLayout.AutoSize = $true; $ChkBootLayout.Checked = $true; $ChkBootLayout.ForeColor = "Cyan"; $GbBuild.Controls.Add($ChkBootLayout)
+# Context Menu cho nút Build
+$MenuBuild = New-Object System.Windows.Forms.ContextMenu
+$Item1 = $MenuBuild.MenuItems.Add("1. Build ra file cài đặt (install.wim + CMD Admin)")
+$Item2 = $MenuBuild.MenuItems.Add("2. Chuẩn bị cấu trúc ISO (Để tạo file ISO Boot)")
 
-$BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "BẮT ĐẦU BUILD AIO"; $BtnBuild.Location = "600,20"; $BtnBuild.Size = "280,80"; $BtnBuild.BackColor = "Green"; $BtnBuild.ForeColor = "White"; $BtnBuild.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $GbBuild.Controls.Add($BtnBuild)
+$BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "BẮT ĐẦU BUILD AIO ▼"; $BtnBuild.Location = "600,20"; $BtnBuild.Size = "280,80"; $BtnBuild.BackColor = "Green"; $BtnBuild.ForeColor = "White"; $BtnBuild.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $GbBuild.Controls.Add($BtnBuild)
 
 # 3. CREATE ISO
 $GbIsoTool = New-Object System.Windows.Forms.GroupBox; $GbIsoTool.Text = "3. Đóng Gói Ra File ISO"; $GbIsoTool.Location = "20,440"; $GbIsoTool.Size = "440,150"; $GbIsoTool.ForeColor = "Orange"; $Form.Controls.Add($GbIsoTool)
@@ -77,6 +80,7 @@ $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $T
 # --- FUNCTIONS ---
 $Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
 if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
+$Global:MountedISOs = @()
 
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
 
@@ -96,38 +100,14 @@ function Get-Oscdimg {
     return $null
 }
 
-# --- HÀM TÌM Ổ ĐĨA THÔNG MINH (WMIC FALLBACK) ---
 function Get-IsoDrive ($IsoPath) {
-    # CACH 1: PowerShell Get-Volume (Chuan nhung hay loi trong VM)
-    for($i=0; $i -lt 5; $i++) {
-        $Vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume
-        if ($Vol -and $Vol.DriveLetter) { 
-            Log " [Check] Get-Volume OK: $($Vol.DriveLetter):"
-            return "$($Vol.DriveLetter):" 
-        }
-        Start-Sleep -Milliseconds 500
-    }
-
-    # CACH 2: WMIC / WMI Object (Cu nhung chac an)
-    Log " [Check] Get-Volume that bai. Chuyen sang WMIC..."
     try {
-        # Lay tat ca o CD-ROM/Removable (DriveType=5)
-        $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
-        foreach ($D in $Disks) {
-            $CheckPath = "$($D.DeviceID)\sources\install.wim"
-            $CheckPath2 = "$($D.DeviceID)\sources\install.esd"
-            # Kiem tra xem o nay co chua file cai dat khong
-            if ((Test-Path $CheckPath) -or (Test-Path $CheckPath2)) {
-                Log " [Check] WMIC Found Drive: $($D.DeviceID)"
-                return $D.DeviceID
-            }
-        }
-    } catch { Log "Loi WMIC: $($_.Exception.Message)" }
-
+        $Vol = Get-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Get-Volume
+        if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
+    } catch {}
     return $null
 }
 
-# QUÉT FILE WIM
 function Scan-Wim ($WimPath, $SourceName) {
     try {
         Log "Da tim thay WIM tai: $WimPath"
@@ -135,97 +115,68 @@ function Scan-Wim ($WimPath, $SourceName) {
         foreach ($I in $Info) {
             $Grid.Rows.Add($true, $SourceName, $I.ImageIndex, $I.ImageName, "$([Math]::Round($I.Size/1GB,2)) GB", $I.Architecture, $WimPath) | Out-Null
         }
-        Log "Da them thanh cong: $SourceName"
-    } catch { Log "Loi doc WIM ($WimPath): $($_.Exception.Message)" }
+        Log "Da them: $SourceName"
+    } catch { Log "Loi doc WIM: $($_.Exception.Message)" }
 }
 
-# HÀM XỬ LÝ ISO (V4.1)
 function Process-Iso ($IsoPath) {
-    $Form.Cursor = "WaitCursor"
-    Log "Dang xu ly ISO: $IsoPath..."
-    
-    # Kiem tra xem da mount san chua
+    $Form.Cursor = "WaitCursor"; Log "Dang xu ly ISO: $IsoPath..."
     $Drv = Get-IsoDrive $IsoPath
-    
     if (!$Drv) {
-        # Chua mount -> Mount
         try {
-            Log "Dang Mount ISO..."
             Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-            Start-Sleep -Seconds 1 # Doi Windows refresh
-            $Drv = Get-IsoDrive $IsoPath # Quet lai lan nua (bang ca WMIC)
-        } catch { Log "Mount loi. Thu dung 7-Zip..." }
-    } else {
-        Log "ISO da duoc Mount san."
+            for($i=0;$i -lt 15;$i++){ $Drv = Get-IsoDrive $IsoPath; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
+            if ($Drv) { $Global:MountedISOs += $IsoPath }
+        } catch { Log "Mount that bai (7-Zip needed)" }
     }
-
-    # QUET FILE WIM
+    
     if ($Drv) {
-        Log "Dang quet file trong o $Drv ..."
         $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
-        if ($WimFiles) {
-            Scan-Wim $WimFiles[0].FullName $IsoPath
-            $Form.Cursor="Default"; return
-        }
+        if ($WimFiles) { Scan-Wim $WimFiles[0].FullName $IsoPath; $Form.Cursor="Default"; return }
     }
 
-    # NEU VAN KHONG DUOC -> 7-ZIP
     $7z = Get-7Zip
     if ($7z) {
-        $Hash = (Get-Item $IsoPath).Name.GetHashCode()
-        $ExtractDir = "$Global:TempWimDir\$Hash"
-        New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
-        Log "Trich xuat bang 7-Zip (Mat thoi gian)..."
+        $Hash = (Get-Item $IsoPath).Name.GetHashCode(); $ExtractDir = "$Global:TempWimDir\$Hash"; New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
+        Log "Trich xuat bang 7-Zip..."
         $P = Start-Process $7z -ArgumentList "e `"$IsoPath`" sources/install.wim sources/install.esd -o`"$ExtractDir`" -y" -NoNewWindow -PassThru -Wait
         $ExtWim = Get-ChildItem -Path $ExtractDir -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
-        if ($ExtWim) { Scan-Wim $ExtWim[0].FullName $IsoPath } else { Log "KHONG TIM THAY FILE WIM! ISO loi." }
+        if ($ExtWim) { Scan-Wim $ExtWim[0].FullName $IsoPath } else { Log "KHONG TIM THAY FILE WIM!" }
     }
     $Form.Cursor = "Default"
 }
 
-# --- EVENTS ---
-$BtnAdd.Add_Click({ 
-    $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO/WIM|*.iso;*.wim;*.esd"; $O.Multiselect=$true
-    if($O.ShowDialog() -eq "OK"){ foreach($f in $O.FileNames){ if(!($TxtIsoList.Text.Contains($f))){ $TxtIsoList.Text+="$f; "; Process-Iso $f } } } 
-})
-
-$BtnEject.Add_Click({ 
-    Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue
-    Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue
-    $TxtIsoList.Text=""; $Grid.Rows.Clear(); Log "Da reset danh sach." 
-})
-$BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
-
-# --- 1. BUILD AIO ---
-$BtnBuild.Add_Click({
+# --- CORE BUILD LOGIC ---
+function Build-Core ($CopyBoot) {
     $Dir = $TxtOut.Text; if(!$Dir){return}; if(!(Test-Path $Dir)){New-Item -ItemType Directory -Path $Dir -Force | Out-Null}
     $Tasks = @(); foreach($r in $Grid.Rows){if($r.Cells[0].Value){$Tasks+=$r}}
     if($Tasks.Count -eq 0){ [System.Windows.Forms.MessageBox]::Show("Chua chon phien ban!", "Loi"); return }
 
     $BtnBuild.Enabled=$false
     
-    if ($ChkBootLayout.Checked) {
+    # 1. COPY BOOT (Neu chon Option 2)
+    if ($CopyBoot) {
         $FirstSource = $Tasks[0].Cells[1].Value
-        $FirstWim = $Tasks[0].Cells[5].Value 
-        
+        $FirstWim = $Tasks[0].Cells[5].Value
         Log "Dang tao Boot Layout..."
+        
         if ($FirstWim -match "PhatTan_Wims") {
-            $7z = Get-7Zip; Log "Trich xuat Boot tu ISO bang 7-Zip..."
+            $7z = Get-7Zip; Log "Trich xuat Boot bang 7-Zip..."
             Start-Process $7z -ArgumentList "x `"$FirstSource`" boot efi setup.exe autorun.inf bootmgr bootmgr.efi -o`"$Dir`" -y" -NoNewWindow -Wait
         } else {
-            # Dung ham thong minh de tim o dia
-            $Vol = Get-DiskImage -ImagePath $FirstSource | Get-Volume
-            if (!$Vol) { $Drv = Get-IsoDrive $FirstSource } else { $Drv = "$($Vol.DriveLetter):" }
-            
+            $Drv = Get-IsoDrive $FirstSource
             if ($Drv) {
                 Start-Process "robocopy.exe" -ArgumentList "`"$Drv`" `"$Dir`" /E /XD `"$Drv\sources`" `"$Drv\System Volume Information`" /MT:16 /NFL /NDL" -NoNewWindow -Wait
                 New-Item "$Dir\sources" -ItemType Directory -Force | Out-Null
             }
         }
+    } else {
+        # Neu chon Option 1 (Chi lay install.wim), dam bao thu muc sources ton tai
+        if (!(Test-Path "$Dir\sources")) { New-Item -ItemType Directory -Path "$Dir\sources" -Force | Out-Null }
     }
 
-    $DestWim = "$Dir\sources\install.wim"; if (!(Test-Path "$Dir\sources")) { New-Item -ItemType Directory -Path "$Dir\sources" -Force | Out-Null }
-    
+    # 2. EXPORT WIM
+    $DestWim = "$Dir\sources\install.wim"
     $Count = 1
     foreach ($T in $Tasks) {
         $SrcWim = $T.Cells[5].Value; $Idx = $T.Cells[2].Value; $Name = $T.Cells[3].Value
@@ -234,10 +185,13 @@ $BtnBuild.Add_Click({
         $Count++
     }
 
-    $Cmd = @"
+    # 3. TAO FILE CMD ADMIN (Chi cho Option 1)
+    if (!$CopyBoot) {
+        $Cmd = @"
 @echo off
+:: AUTO ADMIN
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
-if '%errorlevel%' NEQ '0' ( echo Request Admin... & goto UAC ) else ( goto Admin )
+if '%errorlevel%' NEQ '0' ( goto UAC ) else ( goto Admin )
 :UAC
 echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
 echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
@@ -245,77 +199,70 @@ echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
 :Admin
 pushd "%~dp0"
 title PHAT TAN PC - INSTALLER
-set WIM=
-for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do ( if exist "%%d:%~p0install.wim" set WIM=%%d:%~p0install.wim )
-if "%WIM%"=="" set WIM=%~dp0install.wim
+set WIM=%~dp0sources\install.wim
+if not exist "%WIM%" set WIM=%~dp0install.wim
+if not exist "%WIM%" ( echo KHONG THAY INSTALL.WIM & pause & exit )
 dism /Get-ImageInfo /ImageFile:"%WIM%"
 set /p idx="NHAP INDEX: "
 format C: /q /y /fs:ntfs
 dism /Apply-Image /ImageFile:"%WIM%" /Index:%idx% /ApplyDir:C:\
 bcdboot C:\Windows /s C:
-echo DONE! REBOOTING...
-timeout 5 & wpeutil reboot
+echo DONE!
+timeout 10
+wpeutil reboot
 "@
-    [IO.File]::WriteAllText("$Dir\AIO_Installer.cmd", $Cmd)
-    Log "BUILD THANH CONG!"; [System.Windows.Forms.MessageBox]::Show("Xong! File tai: $Dir", "OK"); Invoke-Item $Dir; $BtnBuild.Enabled=$true
-})
+        [IO.File]::WriteAllText("$Dir\AIO_Installer.cmd", $Cmd)
+        Log "Da tao AIO_Installer.cmd (Auto-Admin)."
+    }
 
-# --- 2. MAKE ISO ---
+    Log "HOAN TAT!"
+    [System.Windows.Forms.MessageBox]::Show("Da xong! File tai: $Dir", "Thanh Cong")
+    Invoke-Item $Dir
+    $BtnBuild.Enabled=$true
+}
+
+# --- EVENTS ---
+$BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO/WIM|*.iso;*.wim;*.esd"; $O.Multiselect=$true; if($O.ShowDialog() -eq "OK"){ foreach($f in $O.FileNames){ if(!($TxtIsoList.Text.Contains($f))){ $TxtIsoList.Text+="$f; "; Process-Iso $f } } } })
+$BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
+$BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
+
+# --- MENU HANDLERS ---
+$BtnBuild.Add_Click({ $MenuBuild.Show($BtnBuild, New-Object System.Drawing.Point(0, $BtnBuild.Height)) })
+$Item1.Add_Click({ Build-Core $false }) # Option 1: Chi lay WIM + CMD
+$Item2.Add_Click({ Build-Core $true })  # Option 2: Full ISO Layout
+
+# --- ISO MAKER ---
 $BtnMakeIso.Add_Click({
-    $Dir = $TxtOut.Text
-    $Oscd = Get-Oscdimg; if (!$Oscd) { return }
+    $Dir = $TxtOut.Text; $Oscd = Get-Oscdimg; if (!$Oscd) { return }
     $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName="WinAIO.iso"; $Save.Filter="ISO|*.iso"
     if ($Save.ShowDialog() -eq "OK") {
         $Target = $Save.FileName; Log "Creating ISO..."; $Form.Cursor="WaitCursor"
         $Args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$Dir\boot\etfsboot.com`"#pEF,e,b`"$Dir\efi\microsoft\boot\efisys.bin`" `"$Dir`" `"$Target`""
-        Start-Process $Oscd -ArgumentList $Args -NoNewWindow -Wait
-        Log "Done!"; [System.Windows.Forms.MessageBox]::Show("ISO Created!", "OK"); $Form.Cursor="Default"
+        Start-Process $Oscd -ArgumentList $Args -NoNewWindow -Wait; Log "Done!"; [System.Windows.Forms.MessageBox]::Show("ISO Created!", "OK"); $Form.Cursor="Default"
     }
 })
 
-# --- 3. HDD BOOT ---
+# --- HDD BOOT ---
 $BtnHddBoot.Add_Click({
-    $OutDir = $TxtOut.Text
-    if (!($Grid.Rows.Count)) { [System.Windows.Forms.MessageBox]::Show("Can it nhat 1 ISO!", "Loi"); return }
+    $OutDir = $TxtOut.Text; if (!($Grid.Rows.Count)) { return }
+    $FirstIso = $Grid.Rows[0].Cells[1].Value; $FirstWim = $Grid.Rows[0].Cells[5].Value
+    if ($FirstWim -match "PhatTan_Wims") { $7z = Get-7Zip; Log "Trich xuat boot.wim..."; Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait } 
+    else { $Drv = Get-IsoDrive $FirstIso; if ($Drv) { Log "Copy boot.wim..."; Copy-Item "$Drv\sources\boot.wim" "$OutDir\boot.wim" -Force; if (!(Test-Path "$OutDir\boot.sdi")) { Copy-Item "$Drv\boot\boot.sdi" "$OutDir\boot.sdi" -Force } } }
     
-    # Lay boot.wim
-    $FirstIso = $Grid.Rows[0].Cells[1].Value
-    $7z = Get-7Zip; Log "Trich xuat boot.wim..."
-    Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait
-    
-    # Inject
     $Mnt = "$env:TEMP\Mnt"; New-Item $Mnt -ItemType Directory -Force | Out-Null
     Start-Process "dism" "/Mount-Image /ImageFile:`"$OutDir\boot.wim`" /Index:2 /MountDir:`"$Mnt`"" -Wait -NoNewWindow
     [IO.File]::WriteAllText("$Mnt\Windows\System32\winpeshl.ini", "[LaunchApps]`r`n%SystemRoot%\System32\AutoRunAIO.cmd")
     [IO.File]::WriteAllText("$Mnt\Windows\System32\AutoRunAIO.cmd", "@echo off`r`nfor %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist `"%%d:\AIO_Output\AIO_Installer.cmd`" (%%d: & cd \AIO_Output & call AIO_Installer.cmd & exit))`r`ncmd.exe")
-    Start-Process "dism" "/Unmount-Image /MountDir:`"$Mnt`" /Commit" -Wait -NoNewWindow
+    Start-Process "dism" "/Unmount-Image /MountDir:`"$Mnt`" /Commit" -Wait -NoNewWindow; Remove-Item $Mnt -Recurse -Force
     
-    # BCD
     $Drive = $OutDir.Substring(0,2); $Wim = "\AIO_Output\boot.wim"
     cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk`"" 2>$null
-    cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"
-    cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \AIO_Output\boot.sdi" # Can file sdi
-    $ID_L = cmd /c "bcdedit /create /d `"PHAT TAN PC - HDD BOOT`" /application osloader"
-    if ($ID_L -match '{([a-f0-9\-]+)}') { 
-        $ID = $Matches[0]
-        cmd /c "bcdedit /set $ID device ramdisk=[$Drive]$Wim,{ramdiskoptions}"
-        cmd /c "bcdedit /set $ID osdevice ramdisk=[$Drive]$Wim,{ramdiskoptions}"
-        cmd /c "bcdedit /set $ID winpe yes"
-        cmd /c "bcdedit /displayorder $ID /addlast"
-    }
+    cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$Drive"; cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \AIO_Output\boot.sdi"
+    $ID_L = cmd /c "bcdedit /create /d `"PHAT TAN PC - HDD BOOT`" /application osloader"; if ($ID_L -match '{([a-f0-9\-]+)}') { $ID = $Matches[0]; cmd /c "bcdedit /set $ID device ramdisk=[$Drive]$Wim,{ramdiskoptions}"; cmd /c "bcdedit /set $ID osdevice ramdisk=[$Drive]$Wim,{ramdiskoptions}"; cmd /c "bcdedit /set $ID winpe yes"; cmd /c "bcdedit /displayorder $ID /addlast" }
     [System.Windows.Forms.MessageBox]::Show("HDD Boot Menu Created!", "Success")
 })
 
-# FIX EVENT: Use FormClosing
-$Form.Add_FormClosing({ 
-    try {
-        foreach ($Iso in $Global:MountedISOs) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }
-        Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue 
-    } catch {}
-})
-
+$Form.Add_FormClosing({ try { foreach ($Iso in $Global:MountedISOs) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue } catch {} })
 $Form.ShowDialog() | Out-Null
 
-} catch {
-    [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error")
-}
+} catch { [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error") }
