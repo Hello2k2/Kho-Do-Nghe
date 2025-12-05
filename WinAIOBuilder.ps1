@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 4.6 (WMIC Deep Scan + Multi-Mount + Auto Admin)
+    Version: 4.8 (Hybrid Drive Detection: ImagePath -> WMIC)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -16,11 +16,6 @@ Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- GLOBAL VARIABLES ---
-$Global:MountedISOs = @()
-$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
-if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
-
 # --- THEME ENGINE ---
 $Theme = @{
     Back      = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -33,7 +28,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V4.6 (VM SCAN FIX)"
+$Form.Text = "WINDOWS AIO BUILDER V4.8 (HYBRID FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -83,6 +78,10 @@ $LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Tự đ
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "20,600"; $TxtLog.Size = "895,140"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $Form.Controls.Add($TxtLog)
 
 # --- FUNCTIONS ---
+$Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
+if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
+$Global:MountedISOs = @()
+
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
 
 function Get-7Zip {
@@ -101,23 +100,30 @@ function Get-Oscdimg {
     return $null
 }
 
-# --- HÀM TÌM Ổ ĐĨA SIÊU MẠNH (GET-VOLUME + WMIC) ---
+# --- HÀM TÌM Ổ ĐĨA HYBRID (GOLDEN LOGIC) ---
 function Get-IsoDrive ($IsoPath) {
-    # 1. Thu bang Modern API
+    # 1. Thu bang Modern API (Check ImagePath) - CHINH XAC 100%
     try {
-        $Vol = Get-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Get-Volume
-        if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
+        $Img = Get-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
+        if ($Img -and $Img.Attached) {
+            $Vol = $Img | Get-Volume
+            if ($Vol -and $Vol.DriveLetter) { 
+                Log " [Mode 1] Da tim thay o chinh xac: $($Vol.DriveLetter):"
+                return "$($Vol.DriveLetter):" 
+            }
+        }
     } catch {}
 
-    # 2. Thu bang WMIC (Chuyen tri may ao/Win7)
+    # 2. Thu bang WMIC (Quet mu - Chi dung khi Mode 1 that bai)
+    Log " [Mode 1] Failed/Null. Chuyen sang WMIC Scan..."
     try {
         # Lay tat ca o CD/DVD (DriveType=5)
         $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
         foreach ($D in $Disks) {
             $CheckWim = "$($D.DeviceID)\sources\install.wim"
             $CheckEsd = "$($D.DeviceID)\sources\install.esd"
-            # Neu o nay co chua file cai dat Windows -> Chup luon
             if ((Test-Path $CheckWim) -or (Test-Path $CheckEsd)) {
+                Log " [Mode 2] WMIC tim thay file WIM tai: $($D.DeviceID)"
                 return $D.DeviceID
             }
         }
@@ -259,6 +265,7 @@ $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filt
 $BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
+# --- MENU FIX: WRAP NEW-OBJECT ---
 $BtnBuild.Add_Click({ 
     $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height)
     $MenuBuild.Show($BtnBuild, $Pt) 
