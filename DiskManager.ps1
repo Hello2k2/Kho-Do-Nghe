@@ -1,7 +1,3 @@
-{
-type: created file
-fileName: hello2k2/kho-do-nghe/Kho-Do-Nghe-4a7749560657567045b312000b11428433f6a31a/DiskManager.ps1
-fullContent:
 # --- 1. FORCE ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
@@ -276,4 +272,3 @@ function Run-Action ($Act) {
 
 $Form.Add_Shown({ Load-Data })
 $Form.ShowDialog() | Out-Null
-}
