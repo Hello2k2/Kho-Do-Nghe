@@ -1,6 +1,6 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 5.5 (Manual Select Oscdimg + Hybrid Mount + HDD Boot)
+    Version: 5.6 (GitHub Oscdimg Source + Hybrid Mount + HDD Boot)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -17,8 +17,11 @@ Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
 # --- GLOBAL VARIABLES ---
-$Global:MountedISOs = @{} # Hash Map: Path -> Drive Letter
+$Global:MountedISOs = @()
 $Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
+# QUAN TRỌNG: Biến này lưu map giữa Đường dẫn ISO -> Ký tự ổ đĩa
+$Global:IsoMap = @{} 
+
 if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
 
 # --- THEME ENGINE ---
@@ -33,7 +36,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V5.5 (MANUAL SELECT FIX)"
+$Form.Text = "WINDOWS AIO BUILDER V5.6 (GITHUB SOURCE)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -72,7 +75,7 @@ $BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "BẮT Đ�
 # 3. CREATE ISO
 $GbIsoTool = New-Object System.Windows.Forms.GroupBox; $GbIsoTool.Text = "3. Đóng Gói Ra File ISO"; $GbIsoTool.Location = "20,440"; $GbIsoTool.Size = "440,150"; $GbIsoTool.ForeColor = "Orange"; $Form.Controls.Add($GbIsoTool)
 $BtnMakeIso = New-Object System.Windows.Forms.Button; $BtnMakeIso.Text = "TẠO FILE ISO NGAY"; $BtnMakeIso.Location = "20,30"; $BtnMakeIso.Size = "400,50"; $BtnMakeIso.BackColor = "DarkOrange"; $BtnMakeIso.ForeColor = "Black"; $BtnMakeIso.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold); $GbIsoTool.Controls.Add($BtnMakeIso)
-$LblIsoNote = New-Object System.Windows.Forms.Label; $LblIsoNote.Text = "* Yêu cầu file oscdimg.exe (Tool sẽ tự tìm hoặc hỏi tải)."; $LblIsoNote.Location = "20,90"; $LblIsoNote.AutoSize = $true; $LblIsoNote.ForeColor = "Gray"; $GbIsoTool.Controls.Add($LblIsoNote)
+$LblIsoNote = New-Object System.Windows.Forms.Label; $LblIsoNote.Text = "* Tự động tải oscdimg.exe từ GitHub nếu thiếu."; $LblIsoNote.Location = "20,90"; $LblIsoNote.AutoSize = $true; $LblIsoNote.ForeColor = "Gray"; $GbIsoTool.Controls.Add($LblIsoNote)
 
 # 4. HDD BOOT
 $GbHdd = New-Object System.Windows.Forms.GroupBox; $GbHdd.Text = "4. HDD Boot (Không cần USB)"; $GbHdd.Location = "475,440"; $GbHdd.Size = "440,150"; $GbHdd.ForeColor = "Red"; $Form.Controls.Add($GbHdd)
@@ -90,31 +93,41 @@ function Get-7Zip {
     Log "Dang tai 7-Zip..."; try { (New-Object System.Net.WebClient).DownloadFile("https://www.7-zip.org/a/7zr.exe", $7z); return $7z } catch { Log "Loi tai 7-Zip!"; return $null }
 }
 
-# --- FIX: HAM TIM KIEM OSCDIMG (MANUAL SELECT) ---
+# --- FIX: ƯU TIÊN TẢI OSCDIMG TỪ GITHUB ---
 function Get-Oscdimg {
-    # 1. Kiem tra file ngay tai thu muc Tool (Uu tien)
-    $Tool = "$env:TEMP\oscdimg.exe"; if (Test-Path $Tool) { return $Tool }
+    $Tool = "$env:TEMP\oscdimg.exe"
     
-    # 2. Quet cac duong dan mac dinh (Ca x86 va x64)
+    # 1. Kiểm tra file ngay tại thư mục Tool (Ưu tiên 1)
+    if (Test-Path $Tool) { return $Tool }
+    
+    # 2. Tải từ GitHub của Bạn (Ưu tiên 2)
+    Log "Dang tai oscdimg.exe tu GitHub (Phat Tan PC)..."
+    try {
+        # Link Raw GitHub chuẩn
+        $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        (New-Object System.Net.WebClient).DownloadFile($Url, $Tool)
+        if ((Get-Item $Tool).Length -gt 100kb) { 
+            Log "Tai thanh cong oscdimg.exe!"
+            return $Tool 
+        }
+    } catch { Log "Link GitHub loi hoac File chua duoc Upload." }
+
+    # 3. Quet trong máy (ADK)
     $AdkPaths = @(
         "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-        "$env:ProgramFiles\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-        "$env:ProgramFiles(x86)\Windows Kits\8.1\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+        "$env:ProgramFiles\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
     )
     foreach ($P in $AdkPaths) { if (Test-Path $P) { Log "Tim thay ADK tai: $P"; return $P } }
 
-    # 3. HOI NGUOI DUNG CHON THU CONG (FIX YEU CAU)
+    # 4. Hỏi người dùng Chọn File thủ công
     if ([System.Windows.Forms.MessageBox]::Show("Khong tim thay 'oscdimg.exe' tu dong.`n`nBan co muon CHON FILE THU CONG (Browse) khong?", "Tim File", "YesNo", "Question") -eq "Yes") {
         $OFD = New-Object System.Windows.Forms.OpenFileDialog
         $OFD.Filter = "Oscdimg Tool (oscdimg.exe)|oscdimg.exe"
-        $OFD.Title = "Vui long tro den file oscdimg.exe da cai dat"
-        if ($OFD.ShowDialog() -eq "OK") { 
-            Log "Da chon file: $($OFD.FileName)"
-            return $OFD.FileName 
-        }
+        if ($OFD.ShowDialog() -eq "OK") { return $OFD.FileName }
     }
 
-    # 4. Tai ve neu khong chon
+    # 5. Hỏi tải ADK từ Microsoft (Cuối cùng)
     if ([System.Windows.Forms.MessageBox]::Show("Ban co muon tai ADK Setup tu Microsoft ngay bay gio?", "Download ADK", "YesNo") -eq "Yes") {
         (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", "$env:TEMP\adksetup.exe")
         Start-Process "$env:TEMP\adksetup.exe" -Wait
@@ -141,14 +154,10 @@ function Get-IsoDrive ($IsoPath) {
     try {
         $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
         foreach ($D in $Disks) {
-            # Kiem tra xem o nay da duoc gan cho ISO khac chua
             if ($Global:MountedISOs.Values -contains $D.DeviceID) { continue }
-            
             $CheckWim = "$($D.DeviceID)\sources\install.wim"
             $CheckEsd = "$($D.DeviceID)\sources\install.esd"
-            if ((Test-Path $CheckWim) -or (Test-Path $CheckEsd)) {
-                return $D.DeviceID
-            }
+            if ((Test-Path $CheckWim) -or (Test-Path $CheckEsd)) { return $D.DeviceID }
         }
     } catch { Log "WMIC Scan Error: $($_.Exception.Message)" }
     return $null
@@ -225,7 +234,7 @@ function Build-Core ($CopyBoot) {
     # 4. COPY BOOT (OPTION 2)
     if ($CopyBoot) {
         $FirstSource = $Tasks[0].Cells[1].Value
-        $FirstWim = $Tasks[0].Cells[6].Value
+        $FirstWim = $Tasks[0].Cells[6].Value 
         Log "Dang tao Boot Layout..."
         
         $Drv = $null
@@ -295,7 +304,7 @@ wpeutil reboot
 
 # --- EVENTS ---
 $BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO/WIM|*.iso;*.wim;*.esd"; $O.Multiselect=$true; if($O.ShowDialog() -eq "OK"){ foreach($f in $O.FileNames){ if(!($TxtIsoList.Text.Contains($f))){ $TxtIsoList.Text+="$f; "; Process-Iso $f } } } })
-$BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@{}; Log "Reset." })
+$BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:MountedISOs=@(); $Global:IsoMap=@{}; Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
 
 $BtnBuild.Add_Click({ 
