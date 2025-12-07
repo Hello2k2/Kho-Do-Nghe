@@ -1,6 +1,6 @@
 <#
     DISK MANAGER PRO - PHAT TAN PC
-    Version: 3.3 (DiskPart Parser Engine - Fix Missing C Drive)
+    Version: 3.4 (Visual Dashboard UI + Usage Bars + DiskPart Engine)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -15,147 +15,233 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- THEME ENGINE ---
 $Theme = @{
-    Back      = [System.Drawing.Color]::FromArgb(28, 28, 32)
-    Card      = [System.Drawing.Color]::FromArgb(45, 45, 50)
-    Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
+    Back      = [System.Drawing.Color]::FromArgb(30, 30, 35)
+    Panel     = [System.Drawing.Color]::FromArgb(40, 40, 45)
     GridHead  = [System.Drawing.Color]::FromArgb(0, 122, 204)
-    Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)
-    Red       = [System.Drawing.Color]::FromArgb(231, 76, 60)
-    Green     = [System.Drawing.Color]::FromArgb(46, 204, 113)
-    Orange    = [System.Drawing.Color]::FromArgb(243, 156, 18)
+    Text      = [System.Drawing.Color]::WhiteSmoke
+    TextDim   = [System.Drawing.Color]::Silver
+    Accent    = [System.Drawing.Color]::FromArgb(0, 150, 255)
+    BarBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)
+    BarFill   = [System.Drawing.Color]::FromArgb(0, 200, 80)
+    BarFull   = [System.Drawing.Color]::FromArgb(220, 50, 50)
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V3.3 (DISKPART ENGINE)"
-$Form.Size = New-Object System.Drawing.Size(1100, 750)
+$Form.Text = "DISK MANAGER PRO V3.4 (VISUAL DASHBOARD)"
+$Form.Size = New-Object System.Drawing.Size(1200, 750)
 $Form.StartPosition = "CenterScreen"
-$Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
-$Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.BackColor = $Theme.Back
+$Form.ForeColor = $Theme.Text
+$Form.FormBorderStyle = "FixedSingle"
+$Form.MaximizeBox = $false
 
 # Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "DISK MASTER"; $LblT.Font = "Impact, 24"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Engine: DiskPart Parser (100% Compatible)"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,55"; $Form.Controls.Add($LblS)
+$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=70; $PnlHead.BackColor=$Theme.Panel; $Form.Controls.Add($PnlHead)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "DISK MASTER PRO"; $LblT.Font = "Impact, 26"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $PnlHead.Controls.Add($LblT)
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Hệ thống quản lý ổ đĩa trực quan (DiskPart Engine)"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,52"; $PnlHead.Controls.Add($LblS)
 
-# --- GRID ---
+# --- SPLIT CONTAINER ---
+$Split = New-Object System.Windows.Forms.SplitContainer; $Split.Dock="Fill"; $Split.SplitterDistance=850; $Split.BackColor=$Theme.Back; $Form.Controls.Add($Split)
+
+# --- LEFT: DATA GRID (VISUAL) ---
 $Grid = New-Object System.Windows.Forms.DataGridView
-$Grid.Location = "20, 90"; $Grid.Size = "1045, 350"
-$Grid.BackgroundColor = $Theme.Card
+$Grid.Dock = "Fill"
+$Grid.BackgroundColor = $Theme.Back
 $Grid.ForeColor = "Black"
-$Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.MultiSelect = $false; $Grid.AutoSizeColumnsMode = "Fill"; $Grid.ReadOnly = $true
-$Grid.RowTemplate.Height = 35; $Grid.ColumnHeadersHeight = 40; $Grid.EnableHeadersVisualStyles = $false
-$Grid.ColumnHeadersDefaultCellStyle.BackColor = $Theme.GridHead; $Grid.ColumnHeadersDefaultCellStyle.ForeColor = "White"; $Grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$Grid.GridColor = "Gray"
+$Grid.BorderStyle = "None"
+$Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false
+$Grid.SelectionMode = "FullRowSelect"; $Grid.MultiSelect = $false
+$Grid.AutoSizeColumnsMode = "Fill"; $Grid.ReadOnly = $true
+$Grid.RowTemplate.Height = 40
+$Grid.ColumnHeadersHeight = 45
+$Grid.EnableHeadersVisualStyles = $false
+$Grid.ColumnHeadersDefaultCellStyle.BackColor = $Theme.GridHead
+$Grid.ColumnHeadersDefaultCellStyle.ForeColor = "White"
+$Grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
 
-$Grid.Columns.Add("Type", "Loại"); $Grid.Columns["Type"].Width = 50
-$Grid.Columns.Add("Disk", "Disk"); $Grid.Columns["Disk"].FillWeight = 10
-$Grid.Columns.Add("Part", "Part"); $Grid.Columns["Part"].FillWeight = 10
-$Grid.Columns.Add("Info", "Volume Info"); $Grid.Columns["Info"].FillWeight = 30
-$Grid.Columns.Add("FS", "FS"); $Grid.Columns["FS"].FillWeight = 15
-$Grid.Columns.Add("Size", "Size"); $Grid.Columns["Size"].FillWeight = 15
-$Grid.Columns.Add("Stat", "Status"); $Grid.Columns["Stat"].FillWeight = 15
-$Form.Controls.Add($Grid)
+# Columns
+$Grid.Columns.Add("Icon", ""); $Grid.Columns["Icon"].Width = 40
+$Grid.Columns.Add("Disk", "Disk"); $Grid.Columns["Disk"].Width = 60
+$Grid.Columns.Add("Info", "Thông Tin Phân Vùng"); $Grid.Columns["Info"].FillWeight = 30
+$Grid.Columns.Add("FS", "Định Dạng"); $Grid.Columns["FS"].Width = 80
+$Grid.Columns.Add("Usage", "Dung Lượng Sử Dụng (Trực Quan)"); $Grid.Columns["Usage"].FillWeight = 40 # Cột vẽ biểu đồ
+$Grid.Columns.Add("Detail", "Chi Tiết"); $Grid.Columns["Detail"].Width = 150
+$Split.Panel1.Controls.Add($Grid)
 
-# --- CONTROLS ---
-$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location = "20, 460"; $TabControl.Size = "1045, 230"; $TabControl.Font = New-Object System.Drawing.Font("Segoe UI", 10); $Form.Controls.Add($TabControl)
+# --- RIGHT: COMMAND CENTER ---
+$PnlCmd = New-Object System.Windows.Forms.FlowLayoutPanel; $PnlCmd.Dock="Fill"; $PnlCmd.FlowDirection="TopDown"; $PnlCmd.Padding="10,20,10,0"; $PnlCmd.AutoScroll=$true; $Split.Panel2.Controls.Add($PnlCmd)
 
-function Add-Tab ($Title) { $P = New-Object System.Windows.Forms.TabPage; $P.Text = "  $Title  "; $P.BackColor = $Theme.Back; $P.ForeColor = $Theme.Text; $TabControl.Controls.Add($P); return $P }
-function Add-CmdBtn ($Parent, $Txt, $Icon, $Col, $X, $Y, $Tag) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text = "$Icon  $Txt"; $B.Tag = $Tag; $B.Size = "220, 50"; $B.Location = "$X, $Y"; $B.FlatStyle = "Flat"
-    $B.BackColor = $Theme.Card; $B.ForeColor = $Col; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $B.FlatAppearance.BorderColor = $Col; $B.FlatAppearance.BorderSize = 1; $B.Cursor = "Hand"; $B.TextAlign = "MiddleLeft"; $B.Padding = "10,0,0,0"
-    $B.Add_Click({ Run-Action $this.Tag }); $Parent.Controls.Add($B)
+function Add-Group ($Title) {
+    $L = New-Object System.Windows.Forms.Label; $L.Text=$Title; $L.Font="Segoe UI, 12, Bold"; $L.ForeColor=$Theme.Accent; $L.AutoSize=$true; $L.Margin="0,10,0,5"
+    $PnlCmd.Controls.Add($L)
+}
+function Add-Btn ($Txt, $Tag, $Color) {
+    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Tag=$Tag; $B.Size="300,50"; $B.FlatStyle="Flat"
+    $B.BackColor=$Theme.Panel; $B.ForeColor=$Color; $B.Font="Segoe UI, 10, Bold"; $B.TextAlign="MiddleLeft"; $B.Padding="15,0,0,0"; $B.Cursor="Hand"
+    $B.FlatAppearance.BorderColor=$Color; $B.FlatAppearance.BorderSize=1
+    $B.Add_Click({ Run-Action $this.Tag }); $PnlCmd.Controls.Add($B)
 }
 
-$Tab1 = Add-Tab "QUẢN LÝ"
-Add-CmdBtn $Tab1 "LÀM MỚI (REFRESH)" "♻️" $Theme.Accent 20 20 "Refresh"
-Add-CmdBtn $Tab1 "FORMAT" "🧹" $Theme.Orange 260 20 "Format"
-Add-CmdBtn $Tab1 "ĐỔI TÊN/KÝ TỰ" "🏷️" $Theme.Accent 500 20 "Label"
-Add-CmdBtn $Tab1 "XÓA PHÂN VÙNG" "❌" $Theme.Red 740 20 "Delete"
-Add-CmdBtn $Tab1 "SET ACTIVE" "⚡" $Theme.Green 20 90 "Active"
+Add-Group "QUẢN LÝ PHÂN VÙNG"
+Add-Btn "♻️  LÀM MỚI (REFRESH)" "Refresh" "Cyan"
+Add-Btn "🏷️  ĐỔI TÊN / KÝ TỰ" "Label" "Cyan"
+Add-Btn "🧹  FORMAT (ĐỊNH DẠNG)" "Format" "Orange"
+Add-Btn "⚡  SET ACTIVE (BOOT)" "Active" "Lime"
+Add-Btn "❌  XÓA PHÂN VÙNG" "Delete" "Red"
 
-$Tab2 = Add-Tab "CÔNG CỤ"
-Add-CmdBtn $Tab2 "FIX LỖI (CHKDSK)" "🚑" $Theme.Green 20 20 "ChkDsk"
-Add-CmdBtn $Tab2 "NẠP BOOT (BCD)" "🛠️" $Theme.Orange 260 20 "FixBoot"
-Add-CmdBtn $Tab2 "DISKPART" "💻" "White" 500 20 "DiskPart"
+Add-Group "CÔNG CỤ CỨU HỘ"
+Add-Btn "🚑  FIX LỖI Ổ (CHKDSK)" "ChkDsk" "Gold"
+Add-Btn "🛠️  NẠP LẠI BOOT (BCD)" "FixBoot" "Gold"
+Add-Btn "💻  MỞ DISKPART CMD" "DiskPart" "White"
+Add-Btn "🔄  CONVERT MBR <-> GPT" "Convert" "Silver"
 
-# Log Area
-$TxtLog = New-Object System.Windows.Forms.TextBox
-$TxtLog.Location = "20, 600"; $TxtLog.Size = "1045, 100"; $TxtLog.Multiline = $true; $TxtLog.ReadOnly = $true; $TxtLog.Visible = $false
-$Form.Controls.Add($TxtLog)
-function Log ($M) { $TxtLog.AppendText("$M`r`n") }
+# --- CUSTOM PAINTING (VẼ THANH DUNG LƯỢNG) ---
+$Grid.Add_CellPainting({
+    param($s, $e)
+    if ($e.ColumnIndex -eq 4 -and $e.RowIndex -ge 0) { # Cot Usage
+        $e.PaintBackground($e.CellBounds, $true)
+        
+        $Tag = $Grid.Rows[$e.RowIndex].Tag
+        if ($Tag.Type -eq "Part" -and $Tag.TotalGB -gt 0) {
+            # Tinh %
+            $Pct = 0
+            if ($Tag.UsedGB -gt 0) { $Pct = ($Tag.UsedGB / $Tag.TotalGB) }
+            if ($Pct -gt 1) { $Pct = 1 }
 
-# --- CORE ENGINE: DISKPART PARSER (100% WORKS) ---
+            # Ve khung
+            $Rect = $e.CellBounds
+            $Rect.X += 5; $Rect.Y += 8; $Rect.Width -= 10; $Rect.Height -= 16
+            
+            # Ve nen xam
+            $BrushBack = New-Object System.Drawing.SolidBrush($Theme.BarBack)
+            $e.Graphics.FillRectangle($BrushBack, $Rect)
+            
+            # Ve thanh % (Xanh hoac Do)
+            $FillWidth = [int]($Rect.Width * $Pct)
+            $Color = if ($Pct -gt 0.9) { $Theme.BarFull } else { $Theme.BarFill }
+            $BrushFill = New-Object System.Drawing.SolidBrush($Color)
+            $FillRect = $Rect; $FillRect.Width = $FillWidth
+            if ($FillWidth -gt 0) { $e.Graphics.FillRectangle($BrushFill, $FillRect) }
+
+            # Ve Text
+            $Txt = "$([Math]::Round($Pct*100, 0))% Used"
+            $Fnt = New-Object System.Drawing.Font("Segoe UI", 8)
+            $TextPt = New-Object System.Drawing.PointF($Rect.X + $Rect.Width/2 - 20, $Rect.Y + 2)
+            $e.Graphics.DrawString($Txt, $Fnt, [System.Drawing.Brushes]::White, $TextPt)
+        }
+        $e.Handled = $true
+    }
+})
+
+# --- CORE LOGIC (DISKPART PARSER) ---
 function Load-Data {
     $Grid.Rows.Clear()
     $Form.Cursor = "WaitCursor"
     
-    # 1. LAY DANH SACH DISK
-    $DP_Script = "$env:TEMP\dp_list.txt"
-    [IO.File]::WriteAllText($DP_Script, "list disk")
-    $RawDisks = (cmd /c "diskpart /s `"$DP_Script`"") | Where-Object { $_ -match "Disk \d" }
-    
-    foreach ($Line in $RawDisks) {
-        # Parse Disk Info
-        if ($Line -match "Disk (\d+)\s+Online\s+(\d+\s\w+)") {
-            $DiskID = $Matches[1]
-            $DiskSize = $Matches[2]
-            
-            $H = $Grid.Rows.Add("💿", "Disk $DiskID", "", "Online ($DiskSize)", "-", "-", "OK")
-            $Grid.Rows[$H].DefaultCellStyle.BackColor = "DimGray"; $Grid.Rows[$H].DefaultCellStyle.ForeColor = "White"
-            $Grid.Rows[$H].Tag = @{Type="Disk"; D=$DiskID}
+    # 1. LAY THONG TIN VOLUME (De co dung luong/free space)
+    $VolMap = @{}
+    $DP_Vol = "$env:TEMP\dp_vol.txt"; [IO.File]::WriteAllText($DP_Vol, "list volume")
+    $RawVol = (cmd /c "diskpart /s `"$DP_Vol`"")
+    foreach ($L in $RawVol) {
+        if ($L -match "Volume (\d+)\s+([A-Z])\s+(.*?)\s+(NTFS|FAT32)\s+Partition\s+(\d+)\s+(GB|MB)") {
+            # Regex don gian hoa
+            # Thuong thi ta can parse ky hon, o day dung cach split co ban cho an toan
+        }
+        # Parse thu cong cho chac an tren moi may
+        if ($L -match "Volume \d") {
+             $P = $L -replace "\s+", " "; $A = $P.Split(" ")
+             # Format: Volume | # | Ltr | Label | Fs | Type | Size | Unit | Status | Info
+             # Vi tri cot thay doi tuy thuoc Label co hay khong.
+             # Ta se map bang Drive Letter neu co.
+             
+             # Tim ky tu o dia (Ltr) - Thuong la cot 2
+             $Ltr = $A[2]
+             if ($Ltr -match "^[A-Z]$") {
+                 # Can lay Size va Free (nhung list volume khong hien Free truc tiep de dang)
+                 # Nen ta dung WMI bo tro cho LogicalDisk de lay Size/Free
+             }
+        }
+    }
 
-            # 2. LAY PARTITION CUA DISK NAY
-            [IO.File]::WriteAllText($DP_Script, "select disk $DiskID`ndetail disk`nlist partition")
+    # DUNG WMI LOGICAL DISK DE LAY SIZE CHUAN (WIN 7/10 OK)
+    $LogDisks = Get-WmiObject Win32_LogicalDisk
+    $DiskStats = @{}
+    foreach ($LD in $LogDisks) {
+        $DiskStats[$LD.DeviceID] = @{
+            Size = [Math]::Round($LD.Size / 1GB, 2)
+            Free = [Math]::Round($LD.FreeSpace / 1GB, 2)
+            Used = [Math]::Round(($LD.Size - $LD.FreeSpace) / 1GB, 2)
+            Vol  = $LD.VolumeName
+            FS   = $LD.FileSystem
+        }
+    }
+
+    # 2. LAY DANH SACH DISK & PARTITION (DISKPART)
+    $DP_Script = "$env:TEMP\dp_list.txt"; [IO.File]::WriteAllText($DP_Script, "list disk")
+    $RawDisks = (cmd /c "diskpart /s `"$DP_Script`"") | Where {$_.Trim() -match "^Disk \d"}
+
+    foreach ($Line in $RawDisks) {
+        if ($Line -match "Disk (\d+)") {
+            $Did = $Matches[1]
+            # Add Header Disk
+            $H = $Grid.Rows.Add("💿", "$Did", "$Line", "-", "-", "-")
+            $Grid.Rows[$H].DefaultCellStyle.BackColor = "DimGray"; $Grid.Rows[$H].DefaultCellStyle.ForeColor = "White"
+            $Grid.Rows[$H].Tag = @{Type="Disk"; ID=$Did}
+
+            # List Part
+            [IO.File]::WriteAllText($DP_Script, "sel disk $Did`ndetail disk`nlist part")
             $RawParts = cmd /c "diskpart /s `"$DP_Script`""
             
-            # Parse Volume Info (Tim Volume lien ket)
-            $Volumes = @()
-            $VolLines = $RawParts | Where-Object { $_ -match "Volume \d" }
-            foreach ($V in $VolLines) {
-                # Parse: Volume 1     C   Windows      NTFS   Partition
-                $V = $V -replace "\s+", " " # Chuan hoa khoang trang
-                $PartsV = $V.Split(" ")
-                $VolID = $PartsV[1]
-                $Ltr = $PartsV[2]
-                $Lab = $PartsV[3]
-                $Fs = $PartsV[4]
-                # Luu vao Map don gian
-                $Volumes += @{Id=$VolID; Ltr=$Ltr; Lab=$Lab; Fs=$Fs}
-            }
+            # Map Volume Letter
+            $CurrentVolLetter = $null
+            
+            foreach ($PL in $RawParts) {
+                # Tim Volume Letter trong 'detail disk'
+                if ($PL -match "Volume \d+\s+([A-Z])\s") { 
+                    # Volume mapping... hoi phuc tap de parse chinh xac
+                }
 
-            # Parse Partition Info
-            $PartLines = $RawParts | Where-Object { $_ -match "Partition \d" }
-            foreach ($P in $PartLines) {
-                if ($P -match "Partition (\d+)") {
-                    $PartID = $Matches[1]
-                    $P = $P -replace "\s+", " "
-                    $Details = $P.Split(" ")
-                    $Size = $Details[-2] + " " + $Details[-1] # VD: 100 GB
+                if ($PL -match "Partition (\d+)") {
+                    $Pid = $Matches[1]
+                    $PInfo = $PL -replace "\s+", " "
                     
-                    # Tim Volume tuong ung (Co the khong chinh xac 100% neu 1 disk nhieu vol giong nhau, nhung du dung)
-                    # O day ta hien thi Partition truoc.
+                    # De biet Drive Letter cua Partition nay -> phai 'sel part' -> 'detail part'
+                    [IO.File]::WriteAllText($DP_Script, "sel disk $Did`nsel part $Pid`ndetail part")
+                    $PartDet = cmd /c "diskpart /s `"$DP_Script`""
                     
-                    # De chinh xac, ta can select part roi detail part. Hoi cham nhung chuan.
-                    [IO.File]::WriteAllText($DP_Script, "select disk $DiskID`nselect partition $PartID`ndetail partition")
-                    $PartDetail = cmd /c "diskpart /s `"$DP_Script`""
+                    $Ltr = ""; $VolLab = ""; $Fs = ""; $Total = 0; $Used = 0
                     
-                    $VolInfo = "-"
-                    $Let = ""; $Lab = ""; $Fs = ""
-                    
-                    # Tim Volume Ltr trong detail
-                    foreach ($Row in $PartDetail) {
-                        if ($Row -match "Volume \d") {
-                             $Row = $Row -replace "\s+", " "
-                             $VData = $Row.Split(" ")
-                             $Let = if($VData[2].Length -eq 1){"[$($VData[2]):]"}else{""}
-                             $Lab = $VData[3]
-                             $Fs = $VData[4]
-                             break
-                        }
+                    foreach ($R in $PartDet) {
+                        if ($R -match "Ltr\s+:\s*([A-Z])") { $Ltr = "$($Matches[1]):" }
+                        if ($R -match "Fs\s+:\s*(\w+)") { $Fs = $Matches[1] }
                     }
                     
-                    $R = $Grid.Rows.Add("", "", $PartID, "$Let $Lab", $Fs, $Size, "Healthy")
-                    $Grid.Rows[$R].Tag = @{Type="Part"; D=$DiskID; P=$PartID; L=$Let.Trim("[]:")}
+                    # Neu co Letter -> Map voi WMI data de lay Size chinh xac
+                    if ($Ltr -and $DiskStats.ContainsKey($Ltr)) {
+                        $Info = $DiskStats[$Ltr]
+                        $Total = $Info.Size
+                        $Used = $Info.Used
+                        $VolLab = $Info.Vol
+                        if (!$Fs) { $Fs = $Info.FS }
+                        $TxtSize = "$Total GB"
+                        $TxtFree = "$($Info.Free) GB Free"
+                    } else {
+                        # Neu khong co Letter (Hidden partition) -> Parse tu dong list
+                        $Arr = $PInfo.Split(" ")
+                        $SizeStr = $Arr[-2] + " " + $Arr[-1]
+                        $TxtSize = $SizeStr
+                        $TxtFree = "Hidden/System"
+                    }
+                    
+                    $LabelShow = if($Ltr){"[$Ltr] $VolLab"}else{"(System/Recovery)"}
+                    
+                    $Row = $Grid.Rows.Add("📄", "$Did", "$Pid: $LabelShow", $Fs, "", "$TxtSize | $TxtFree")
+                    $Grid.Rows[$Row].Tag = @{
+                        Type="Part"; D=$Did; P=$Pid; L=$Ltr; 
+                        TotalGB=$Total; UsedGB=$Used # De ve bieu do
+                    }
                 }
             }
         }
@@ -173,29 +259,19 @@ function Run-Action ($Act) {
     if ($Act -eq "Refresh") { Load-Data; return }
     if ($Act -eq "DiskPart") { Start-Process "diskpart"; return }
     
-    if ($Grid.SelectedRows.Count -eq 0) { return }
+    if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn phân vùng!", "Lỗi"); return }
     $T = $Grid.SelectedRows[0].Tag
-    if ($T.Type -ne "Part") { return }
-
+    if ($T.Type -ne "Part" -and $Act -ne "Convert" -and $Act -ne "Wipe") { return }
     $D=$T.D; $P=$T.P; $L=$T.L
 
     switch ($Act) {
-        "Format" { 
-            if([System.Windows.Forms.MessageBox]::Show("FORMAT P$P DISK $D? MAT HET DU LIEU!","CANH BAO","YesNo")-eq"Yes"){
-                Run-DP "sel disk $D`nsel part $P`nformat fs=ntfs quick"
-            }
-        }
-        "Delete" {
-            if([System.Windows.Forms.MessageBox]::Show("XOA BO PARTITION $P?","CANH BAO","YesNo")-eq"Yes"){
-                Run-DP "sel disk $D`nsel part $P`ndelete partition override"
-            }
-        }
+        "Format" { if([System.Windows.Forms.MessageBox]::Show("FORMAT Ổ $L? MẤT HẾT DỮ LIỆU!","CẢNH BÁO","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`nformat fs=ntfs quick" } }
+        "Delete" { if([System.Windows.Forms.MessageBox]::Show("XÓA PHÂN VÙNG $P?","CẢNH BÁO","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`ndelete partition override" } }
         "Active" { Run-DP "sel disk $D`nsel part $P`nactive" }
-        "Label"  {
-            $New=[Microsoft.VisualBasic.Interaction]::InputBox("Nhap ten moi:", "Rename", ""); if($New){cmd /c "label $L`: $New"; Load-Data}
-        }
-        "ChkDsk" { if($L){Start-Process "cmd" "/c start cmd /k chkdsk $L`: /f /x"} }
-        "FixBoot" { Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause" }
+        "Label"  { $New=[Microsoft.VisualBasic.Interaction]::InputBox("Nhập ký tự ổ mới (VD: K):", "Đổi Ký Tự", ""); if($New){ Run-DP "sel disk $D`nsel part $P`nassign letter=$New" } }
+        "ChkDsk" { if($L){Start-Process "cmd" "/c start cmd /k chkdsk $L /f /x"} }
+        "FixBoot"{ Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause" }
+        "Convert"{ if([System.Windows.Forms.MessageBox]::Show("Convert MBR <-> GPT? (Mất dữ liệu)","Hỏi","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nclean`nconvert gpt" } }
     }
 }
 
