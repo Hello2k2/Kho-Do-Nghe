@@ -1,10 +1,10 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V13.0 TITANIUM EDITION)
-    Feature: Full Functional Actions + Custom Gradient UI
-    Fix: Console Stay Open (Chống thoát) + WMI Smart Indexing
+    DISK MANAGER PRO - PHAT TAN PC (V13.1 TITANIUM STABLE)
+    Fix: System.Drawing.Rectangle cast error (Lỗi vẽ nút bấm)
+    Feature: Full Functional Actions + Gradient UI
 #>
 
-# --- 0. KEEP CONSOLE OPEN WRAPPER ---
+# --- 0. ANTI-CLOSE WRAPPER ---
 try {
 
 # --- 1. LOGGING SETUP ---
@@ -49,7 +49,7 @@ $Global:SelectedPart = $null
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V13.0 - TITANIUM"
+$Form.Text = "DISK MANAGER PRO V13.1 - TITANIUM"
 $Form.Size = New-Object System.Drawing.Size(1200, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $T.BgForm
@@ -75,7 +75,7 @@ $PaintPanel = {
     $Br.Dispose(); $Pen.Dispose()
 }
 
-# 2. Custom Button Function
+# 2. Custom Button Function (ĐÃ FIX LỖI DRAWSTRING)
 function Add-TitanBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $IsDanger=$false) {
     $Btn = New-Object System.Windows.Forms.Label 
     $Btn.Text = "$Icon  $Txt"
@@ -91,18 +91,26 @@ function Add-TitanBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $IsDanger=$false)
     $Btn.Add_Paint({
         param($s, $e)
         $R = $s.ClientRectangle
+        
+        # Chọn màu nền
         $C1 = if($s.Tag.Danger){$T.BtnDanger1}else{$T.BtnNormal1}
         $C2 = if($s.Tag.Danger){$T.BtnDanger2}else{$T.BtnNormal2}
         
         if($s.Tag.Hover){ $C1=[System.Windows.Forms.ControlPaint]::Light($C1); $C2=[System.Windows.Forms.ControlPaint]::Light($C2) }
         
+        # Vẽ nền Gradient
         $Br = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $C1, $C2, 45)
         $e.Graphics.FillRectangle($Br, $R)
+        
+        # Vẽ viền
         $Pen = New-Object System.Drawing.Pen($C2, 1)
         $e.Graphics.DrawRectangle($Pen, 0, 0, $s.Width-1, $s.Height-1)
         
+        # Vẽ chữ (FIXED: Ép kiểu RectangleF)
         $Format = New-Object System.Drawing.StringFormat; $Format.Alignment="Center"; $Format.LineAlignment="Center"
-        $e.Graphics.DrawString($s.Text, $s.Font, [System.Drawing.Brushes]::White, $R, $Format)
+        $RectF = [System.Drawing.RectangleF]::new($R.X, $R.Y, $R.Width, $R.Height)
+        $e.Graphics.DrawString($s.Text, $s.Font, [System.Drawing.Brushes]::White, $RectF, $Format)
+        
         $Br.Dispose(); $Pen.Dispose()
     })
     $Parent.Controls.Add($Btn)
@@ -120,7 +128,7 @@ $Form.Controls.Add($PnlDisk)
 $Lbl1 = New-Object System.Windows.Forms.Label; $Lbl1.Text="DANH SÁCH Ổ CỨNG VẬT LÝ"; $Lbl1.Location="15,10"; $Lbl1.AutoSize=$true; $Lbl1.ForeColor=$T.TextMuted; $Lbl1.BackColor=[System.Drawing.Color]::Transparent; $PnlDisk.Controls.Add($Lbl1)
 
 $GridD = New-Object System.Windows.Forms.DataGridView; $GridD.Location="15,35"; $GridD.Size="1115,170"; $GridD.BorderStyle="None"
-$GridD.BackgroundColor=[System.Drawing.Color]::FromArgb(30,30,35); $GridD.ForeColor="Black" # Fix text color
+$GridD.BackgroundColor=[System.Drawing.Color]::FromArgb(30,30,35); $GridD.ForeColor="Black"
 $GridD.AllowUserToAddRows=$false; $GridD.RowHeadersVisible=$false; $GridD.SelectionMode="FullRowSelect"; $GridD.MultiSelect=$false; $GridD.ReadOnly=$true; $GridD.AutoSizeColumnsMode="Fill"
 $GridD.Columns.Add("ID","Disk #"); $GridD.Columns[0].Width=60
 $GridD.Columns.Add("Mod","Model"); $GridD.Columns[1].FillWeight=150
@@ -175,9 +183,7 @@ function Load-Data {
     try {
         $Disks = @(Get-WmiObject Win32_DiskDrive)
         foreach ($D in $Disks) {
-            # Tính Size
             $GB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
-            # Thêm vào Grid Disk
             $Row = $GridD.Rows.Add($D.Index, $D.Model, $GB, "MBR/GPT", $D.Status)
             $GridD.Rows[$Row].Tag = $D
         }
@@ -196,11 +202,10 @@ function Load-Partitions ($DiskObj) {
     Log "INFO" "Loading partitions for Disk $($DiskObj.Index)"
     
     try {
-        # --- THUẬT TOÁN SORTING (QUAN TRỌNG ĐỂ KHỚP DISKPART) ---
         $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($DiskObj.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
         $Parts = @(Get-WmiObject -Query $Query | Sort-Object StartingOffset)
         
-        $RealID = 1 # Diskpart ID luôn bắt đầu từ 1
+        $RealID = 1
         foreach ($P in $Parts) {
             $LogQuery = "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
             $LogDisk = Get-WmiObject -Query $LogQuery
@@ -215,7 +220,6 @@ function Load-Partitions ($DiskObj) {
                 $Row = $GridP.Rows.Add("", "[Hidden/System]", "RAW", "$Total GB", "-", $P.Type)
             }
             
-            # Lưu RealID để dùng cho lệnh Diskpart
             $GridP.Rows[$Row].Tag = @{ Did=$DiskObj.Index; Pid=$RealID; Let=$Let; Lab=$Lab }
             $RealID++ 
         }
@@ -232,7 +236,7 @@ $GridP.Add_SelectionChanged({
     }
 })
 
-# ==================== ACTIONS HANDLER ====================
+# ==================== ACTIONS HANDLER (GUI CON) ====================
 function Run-DP ($Cmd) {
     Log "INFO" "Exec Diskpart: $Cmd"
     $F = "$env:TEMP\dp.txt"; [IO.File]::WriteAllText($F, $Cmd)
