@@ -1,26 +1,29 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V11.0 FINAL BOSS)
-    Engine: WMI Stable + Smart Indexing (Fix lỗi chọn nhầm phân vùng)
-    GUI: Cyberpunk Gradient + Custom Sub-Forms (Cửa sổ con xịn xò)
+    DISK MANAGER PRO - PHAT TAN PC (V11.1 STABLE FIX)
+    Fix: Syntax Error Get-Theme (Sửa lỗi sập script)
+    Fix: Admin Check cho IEX (Chạy qua mạng mượt hơn)
 #>
 
-# --- 1. ADMIN CHECK ---
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell "-NoP -File `"$PSCommandPath`"" -Verb RunAs; Exit
+# --- 1. ADMIN CHECK (SAFE MODE) ---
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+if (!$IsAdmin) {
+    Write-Host "Vui long chay PowerShell duoi quyen Administrator (Run as Admin)!" -ForegroundColor Red
+    if ($PSCommandPath) { Start-Process powershell "-NoP -File `"$PSCommandPath`"" -Verb RunAs }
+    Exit
 }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME ENGINE (CYBERPUNK / LIGHT NEON) ---
+# --- THEME ENGINE ---
 $Themes = @{
     Dark = @{
         FormBg      = [System.Drawing.Color]::FromArgb(18, 18, 24)
         PanelBg     = [System.Drawing.Color]::FromArgb(30, 30, 35)
         TextMain    = [System.Drawing.Color]::White
         TextDim     = [System.Drawing.Color]::Silver
-        Accent      = [System.Drawing.Color]::FromArgb(0, 255, 200) # Cyan Neon
+        Accent      = [System.Drawing.Color]::FromArgb(0, 255, 200)
         Grad1       = [System.Drawing.Color]::FromArgb(30, 30, 40)
         Grad2       = [System.Drawing.Color]::FromArgb(15, 15, 20)
         BtnText     = [System.Drawing.Color]::White
@@ -32,7 +35,7 @@ $Themes = @{
         PanelBg     = [System.Drawing.Color]::White
         TextMain    = [System.Drawing.Color]::Black
         TextDim     = [System.Drawing.Color]::DimGray
-        Accent      = [System.Drawing.Color]::FromArgb(0, 120, 215) # Blue Metro
+        Accent      = [System.Drawing.Color]::FromArgb(0, 120, 215)
         Grad1       = [System.Drawing.Color]::White
         Grad2       = [System.Drawing.Color]::FromArgb(230, 230, 240)
         BtnText     = [System.Drawing.Color]::Black
@@ -47,7 +50,7 @@ $Global:SelectedPart = $null
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V11.0 - PHAT TAN PC"
+$Form.Text = "DISK MANAGER PRO V11.1 - PHAT TAN PC"
 $Form.Size = New-Object System.Drawing.Size(1200, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
@@ -59,7 +62,10 @@ $F_Bold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSty
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 9)
 
 # ==================== CUSTOM PAINTING HELPER ====================
-function Get-Theme { return if ($Global:IsDark) { $Themes.Dark } else { $Themes.Light } }
+# FIX LỖI CÚ PHÁP TẠI ĐÂY
+function Get-Theme { 
+    if ($Global:IsDark) { return $Themes.Dark } else { return $Themes.Light } 
+}
 
 $PaintGrad = {
     param($s, $e)
@@ -81,7 +87,7 @@ $PnlHead.Controls.Add($LblLogo)
 
 $BtnMode = New-Object System.Windows.Forms.Button
 $BtnMode.Text = "☀ / 🌙 ĐỔI MÀU"; $BtnMode.Size="120,35"; $BtnMode.Location="1050,12"; $BtnMode.FlatStyle="Flat"
-$BtnMode.Cursor="Hand"; $BtnMode.Click += { Switch-Theme }
+$BtnMode.Cursor="Hand"; $BtnMode.Add_Click({ Switch-Theme })
 $PnlHead.Controls.Add($BtnMode)
 
 # --- LAYOUT PANELS ---
@@ -252,7 +258,7 @@ function Show-Dialog ($Action) {
     
     if ($Action -eq "Convert") {
         if ([System.Windows.Forms.MessageBox]::Show("Chuyển đổi Disk $Did sang GPT/MBR?`n(Lưu ý: Disk phải trống/Clean mới convert được)", "Xác nhận", "YesNo", "Question") -eq "Yes") {
-            Run-DP "sel disk $Did`nclean`nconvert gpt" # Mặc định sang GPT, cần logic check nếu muốn MBR
+            Run-DP "sel disk $Did`nclean`nconvert gpt" 
         }
     }
     
