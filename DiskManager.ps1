@@ -1,7 +1,7 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V8.6 RGB NEON ULTIMATE)
-    Feature: RGB Rainbow Text + Neon Glow Border
-    Fix: Light Mode Contrast (Chữ đen nền trắng)
+    DISK MANAGER PRO - PHAT TAN PC (V8.6 REAL RGB FIX)
+    Fix: RGB Text chạy mượt 100% (Dùng thuật toán Sine Wave nội bộ)
+    Fix: Light Mode tương phản cao, viền Neon rõ nét.
 #>
 
 # --- 1. ADMIN CHECK ---
@@ -13,7 +13,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME DEFINITIONS (RGB READY) ---
+# --- THEME DEFINITIONS ---
 $Themes = @{
     Dark = @{
         FormBg      = [System.Drawing.Color]::FromArgb(15, 15, 20)
@@ -26,19 +26,19 @@ $Themes = @{
         BtnText     = [System.Drawing.Color]::White
     }
     Light = @{
-        FormBg      = [System.Drawing.Color]::WhiteSmoke
+        FormBg      = [System.Drawing.Color]::FromArgb(245, 245, 250)
         Text        = [System.Drawing.Color]::Black
         GridBg      = [System.Drawing.Color]::White
         GridText    = [System.Drawing.Color]::Black
-        GridLine    = [System.Drawing.Color]::LightGray
-        PanelBg     = [System.Drawing.Color]::FromArgb(230, 230, 235)
-        NeonColor   = [System.Drawing.Color]::DeepPink # Neon hồng cho Light Mode
+        GridLine    = [System.Drawing.Color]::DarkGray
+        PanelBg     = [System.Drawing.Color]::White
+        NeonColor   = [System.Drawing.Color]::DeepPink # Hồng đậm cho nổi trên nền trắng
         BtnText     = [System.Drawing.Color]::Black
     }
 }
 
 $Global:IsDark = $true
-$Global:Hue = 0
+$Global:TickCount = 0
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
@@ -52,7 +52,7 @@ $Form.MaximizeBox = $false
 $F_Head = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 9)
 
-# -- RGB LOGO --
+# -- RGB LOGO (LABEL) --
 $LblLogo = New-Object System.Windows.Forms.Label
 $LblLogo.Text = "DISK MANAGER PRO - PHAT TAN PC"
 $LblLogo.Font = New-Object System.Drawing.Font("Impact", 24)
@@ -68,27 +68,26 @@ $BtnTheme.Cursor = "Hand"
 $Form.Controls.Add($BtnTheme)
 
 # ==================== PAINT NEON BORDER (HÀM VẼ VIỀN) ====================
+# Sự kiện vẽ viền Neon cho Panel
 $NeonPaint = {
     param($s, $e)
     $T = if ($Global:IsDark) { $Themes.Dark } else { $Themes.Light }
-    $Color = $T.NeonColor
     
     # Vẽ viền Neon (Dày 2px)
-    $Pen = New-Object System.Drawing.Pen($Color, 2)
+    $Pen = New-Object System.Drawing.Pen($T.NeonColor, 2)
     $Rect = $s.ClientRectangle
     $Rect.Width -= 2; $Rect.Height -= 2; $Rect.X += 1; $Rect.Y += 1
     
-    # Bo góc (Giả lập bằng DrawRectangle vì WinForm k hỗ trợ bo góc native tốt)
     $e.Graphics.DrawRectangle($Pen, $Rect)
     $Pen.Dispose()
 }
 
-# ==================== MAIN PANELS (NEON BOXES) ====================
+# ==================== MAIN PANELS ====================
 
 # 1. GRID BOX
 $PnlGrid = New-Object System.Windows.Forms.Panel
 $PnlGrid.Location = "20, 70"; $PnlGrid.Size = "995, 250"
-$PnlGrid.Add_Paint($NeonPaint) # Kích hoạt viền Neon
+$PnlGrid.Add_Paint($NeonPaint) # Gán sự kiện vẽ
 $PnlGrid.Padding = "5,5,5,5"
 $Form.Controls.Add($PnlGrid)
 
@@ -137,7 +136,7 @@ function Add-Btn ($Txt, $X, $Y, $Col, $Tag) {
     $B.FlatAppearance.BorderSize = 0
     
     # Màu nền nút (Pha nhẹ)
-    $B.BackColor = [System.Drawing.Color]::FromArgb(50, $Col.R, $Col.G, $Col.B)
+    $B.BackColor = [System.Drawing.Color]::FromArgb(30, $Col.R, $Col.G, $Col.B) # Nền mờ
     # Viền dưới đậm
     $Pn = New-Object System.Windows.Forms.Panel; $Pn.Height=3; $Pn.Dock="Bottom"; $Pn.BackColor=$Col; $B.Controls.Add($Pn)
     
@@ -162,38 +161,22 @@ Add-Btn "Format (Định Dạng)" 30 150 $Col3 "Format"
 Add-Btn "Xóa Phân Vùng" 270 150 $Col3 "Delete"
 Add-Btn "Nạp Boot (BCD)" 510 150 $Col3 "FixBoot"
 
-# ==================== RGB ENGINE ====================
-# Hàm chuyển đổi HSL sang RGB để tạo hiệu ứng cầu vồng
-function Get-RainbowColor ($hue) {
-    $h = $hue / 360; $s = 1; $l = 0.5
-    if ($s -eq 0) { return [System.Drawing.Color]::FromArgb(255, $l*255, $l*255, $l*255) }
-    $q = if ($l -lt 0.5) { $l * (1 + $s) } else { $l + $s - $l * $s }
-    $p = 2 * $l - $q
-    $r = [Math]::Max(0, [Math]::Min(255, [int](HueToRgb $p $q ($h + 1/3) * 255)))
-    $g = [Math]::Max(0, [Math]::Min(255, [int](HueToRgb $p $q $h * 255)))
-    $b = [Math]::Max(0, [Math]::Min(255, [int](HueToRgb $p $q ($h - 1/3) * 255)))
-    return [System.Drawing.Color]::FromArgb(255, $r, $g, $b)
-}
-function HueToRgb ($p, $q, $t) {
-    if ($t -lt 0) { $t += 1 }; if ($t -gt 1) { $t -= 1 }
-    if ($t -lt 1/6) { return $p + ($q - $p) * 6 * $t }
-    if ($t -lt 1/2) { return $q }
-    if ($t -lt 2/3) { return $p + ($q - $p) * (2/3 - $t) * 6 }
-    return $p
-}
+# ==================== RGB ENGINE (FIXED) ====================
+# Dùng thuật toán Sine Wave trực tiếp trong Timer để không bị lỗi Scope
+$RgbTimer = New-Object System.Windows.Forms.Timer
+$RgbTimer.Interval = 50 # Tốc độ đổi màu (ms)
 
-# Timer RGB
-$RgbTimer = New-Object System.Windows.Forms.Timer; $RgbTimer.Interval = 50
 $RgbTimer.Add_Tick({
-    $Global:Hue += 5; if ($Global:Hue -ge 360) { $Global:Hue = 0 }
-    $Rainbow = Get-RainbowColor $Global:Hue
+    $Script:TickCount++
     
-    # Áp dụng màu RGB cho Logo & Viền
-    $LblLogo.ForeColor = $Rainbow
+    # Thuật toán sóng Sine tạo màu RGB mượt mà
+    $f = 0.1
+    $r = [Math]::Floor([Math]::Sin($f * $Script:TickCount + 0) * 127 + 128)
+    $g = [Math]::Floor([Math]::Sin($f * $Script:TickCount + 2) * 127 + 128)
+    $b = [Math]::Floor([Math]::Sin($f * $Script:TickCount + 4) * 127 + 128)
     
-    # Cập nhật màu viền Neon động (nếu muốn viền nhấp nháy theo nhạc :D)
-    # $Themes.Dark.NeonColor = $Rainbow 
-    # $PnlGrid.Invalidate(); $PnlInfo.Invalidate(); $PnlTool.Invalidate() 
+    # Áp dụng màu cho Logo
+    $LblLogo.ForeColor = [System.Drawing.Color]::FromArgb(255, $r, $g, $b)
 })
 $RgbTimer.Start()
 
@@ -214,25 +197,29 @@ function Apply-Theme {
     $Grid.DefaultCellStyle.ForeColor = $T.GridText
     $Grid.ColumnHeadersDefaultCellStyle.BackColor = $T.PanelBg
     $Grid.ColumnHeadersDefaultCellStyle.ForeColor = $T.GridText
+    $Grid.EnableHeadersVisualStyles = $false
     
-    # Panels BackColor (Để làm nền cho viền Neon)
+    # Panels BackColor
     $PnlGrid.BackColor = $T.PanelBg
     $PnlInfo.BackColor = $T.PanelBg
     $PnlTool.BackColor = $T.PanelBg
     
-    # Label Colors (Fix lỗi chữ chìm)
+    # Label Colors
     $LblDet.ForeColor = $T.NeonColor
     $LblPct.ForeColor = $T.Text
     
     # Button Colors
     foreach ($C in $PnlTool.Controls) {
         if ($C -is [System.Windows.Forms.Button]) {
-            $C.ForeColor = $T.BtnText # Fix chữ đen/trắng
+            $C.ForeColor = $T.BtnText
+            # Light Mode thì làm nền nút sáng lên xíu
+            if (!$Global:IsDark) { $C.BackColor = [System.Drawing.Color]::FromArgb(20, 0, 0, 0) } 
+            else { $C.BackColor = [System.Drawing.Color]::FromArgb(30, 255, 255, 255) }
         }
     }
     
-    # Redraw Borders
-    $PnlGrid.Invalidate(); $PnlInfo.Invalidate(); $PnlTool.Invalidate()
+    # Vẽ lại viền Neon ngay lập tức
+    $Form.Refresh()
 }
 
 $BtnTheme.Add_Click({ $Global:IsDark = -not $Global:IsDark; Apply-Theme })
@@ -279,14 +266,31 @@ function Run-Action ($Act) {
     $P = $Global:SelectedPart; if (!$P) { return }
     $Did = $P.Did; $Pid = $P.Pid; $Let = $P.Let
     
-    # (Giữ nguyên logic xử lý Diskpart như bản trước để tiết kiệm chỗ hiển thị)
     if ($Act -eq "Refresh") { Load-Data; return }
-    if ($Act -eq "Format") { if([System.Windows.Forms.MessageBox]::Show("Format $Let?","Canh bao","YesNo")-eq"Yes"){ Start-Process "diskpart" "/s `"$env:TEMP\dp.txt`"" -Wait; Load-Data } }
-    # ... Các lệnh khác tương tự
-    [System.Windows.Forms.MessageBox]::Show("Đã nhận lệnh: $Act cho Disk $Did Part $Pid", "Info") 
+    
+    # Logic Diskpart
+    $Script = "$env:TEMP\dp.txt"
+    $Cmd = "sel disk $Did`nsel part $Pid`n"
+    
+    switch ($Act) {
+        "ChkDsk" { if($Let){Start-Process "cmd" "/k chkdsk $Let /f /x"; return} }
+        "Convert"{ $Cmd+="clean`nconvert gpt"; $Msg="Convert Disk $Did -> GPT (Xóa dữ liệu)?" }
+        "Format" { $Cmd+="format fs=ntfs quick"; $Msg="Format $Let?" }
+        "Delete" { $Cmd+="delete partition override"; $Msg="Xóa Part $Pid?" }
+        "Active" { $Cmd+="active"; $Msg="Set Active?" }
+        "Letter" { $N=[Microsoft.VisualBasic.Interaction]::InputBox("Ký tự mới:",""); if($N){$Cmd+="assign letter=$N"; $Msg="Đổi sang $N?"}else{return} }
+        "Label"  { $N=[Microsoft.VisualBasic.Interaction]::InputBox("Tên mới:",""); if($N){ cmd /c "label $Let $N"; Load-Data; return } else{return} }
+        "FixBoot"{ Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause"; return }
+    }
+    
+    if([System.Windows.Forms.MessageBox]::Show($Msg, "Xác nhận", "YesNo") -eq "Yes") {
+        [IO.File]::WriteAllText($Script, $Cmd)
+        Start-Process "diskpart" "/s `"$Script`"" -Wait -NoNewWindow
+        Load-Data
+    }
 }
 
 # --- INIT ---
 Apply-Theme
-$T = New-Object System.Windows.Forms.Timer; $T.Interval=300; $T.Add_Tick({$T.Stop(); Load-Data}); $T.Start()
+$T = New-Object System.Windows.Forms.Timer; $T.Interval=500; $T.Add_Tick({$T.Stop(); Load-Data}); $T.Start()
 $Form.ShowDialog() | Out-Null
