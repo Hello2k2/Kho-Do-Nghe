@@ -1,46 +1,78 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V11.1 STABLE FIX)
-    Fix: Syntax Error Get-Theme (Sửa lỗi sập script)
-    Fix: Admin Check cho IEX (Chạy qua mạng mượt hơn)
+    DISK MANAGER PRO - PHAT TAN PC (V12.0 DEBUG MODE)
+    Feature: Full Logging, Error Trapping, Cyberpunk UI
+    Fix: Admin Check for 'iex' execution
 #>
 
-# --- 1. ADMIN CHECK (SAFE MODE) ---
-$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-if (!$IsAdmin) {
-    Write-Host "Vui long chay PowerShell duoi quyen Administrator (Run as Admin)!" -ForegroundColor Red
-    if ($PSCommandPath) { Start-Process powershell "-NoP -File `"$PSCommandPath`"" -Verb RunAs }
+# --- 0. DEBUG LOGGER ---
+function Log-Info ($Msg) { Write-Host "[INFO] $Msg" -ForegroundColor Cyan }
+function Log-Err  ($Msg) { Write-Host "[ERROR] $Msg" -ForegroundColor Red }
+function Log-Warn ($Msg) { Write-Host "[WARN] $Msg" -ForegroundColor Yellow }
+
+Clear-Host
+Log-Info "Dang khoi dong Disk Manager V12.0..."
+
+# --- 1. ADMIN CHECK (ENHANCED) ---
+try {
+    $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+    if (!$IsAdmin) {
+        Log-Warn "Phat hien chua chay duoi quyen Administrator."
+        if ($PSCommandPath) {
+            Log-Info "Dang khoi dong lai voi quyen Admin..."
+            Start-Process powershell "-NoP -File `"$PSCommandPath`"" -Verb RunAs
+            Exit
+        } else {
+            # Trường hợp chạy qua IEX (không có file path)
+            Log-Err "BAN DANG CHAY QUA MANG (IEX)."
+            Log-Err "VUI LONG TAT CUA SO NAY, CHUOT PHAI VAO POWERSHELL -> RUN AS ADMINISTRATOR!"
+            Read-Host "Bam Enter de thoat..."
+            Exit
+        }
+    }
+    Log-Info "Quyen Admin: OK"
+} catch {
+    Log-Err "Loi khi kiem tra Admin: $($_.Exception.Message)"
+}
+
+# --- 2. LOAD LIBRARIES ---
+try {
+    Log-Info "Dang tai thu vien do hoa (Windows Forms)..."
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    Log-Info "Tai thu vien: OK"
+} catch {
+    Log-Err "Khong the tai thu vien GUI. May ban co the thieu .NET Framework."
+    Read-Host "Bam Enter de thoat..."
     Exit
 }
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME ENGINE ---
+# --- THEME CONFIG ---
 $Themes = @{
     Dark = @{
-        FormBg      = [System.Drawing.Color]::FromArgb(18, 18, 24)
-        PanelBg     = [System.Drawing.Color]::FromArgb(30, 30, 35)
-        TextMain    = [System.Drawing.Color]::White
-        TextDim     = [System.Drawing.Color]::Silver
-        Accent      = [System.Drawing.Color]::FromArgb(0, 255, 200)
-        Grad1       = [System.Drawing.Color]::FromArgb(30, 30, 40)
-        Grad2       = [System.Drawing.Color]::FromArgb(15, 15, 20)
-        BtnText     = [System.Drawing.Color]::White
-        GridBg      = [System.Drawing.Color]::FromArgb(25, 25, 28)
-        GridText    = [System.Drawing.Color]::White
+        FormBg    = [System.Drawing.Color]::FromArgb(18, 18, 24)
+        PanelBg   = [System.Drawing.Color]::FromArgb(30, 30, 35)
+        TextMain  = [System.Drawing.Color]::White
+        TextDim   = [System.Drawing.Color]::Silver
+        Accent    = [System.Drawing.Color]::FromArgb(0, 255, 200)
+        Grad1     = [System.Drawing.Color]::FromArgb(30, 30, 40)
+        Grad2     = [System.Drawing.Color]::FromArgb(15, 15, 20)
+        BtnText   = [System.Drawing.Color]::White
+        GridBg    = [System.Drawing.Color]::FromArgb(25, 25, 28)
+        GridText  = [System.Drawing.Color]::White
     }
     Light = @{
-        FormBg      = [System.Drawing.Color]::WhiteSmoke
-        PanelBg     = [System.Drawing.Color]::White
-        TextMain    = [System.Drawing.Color]::Black
-        TextDim     = [System.Drawing.Color]::DimGray
-        Accent      = [System.Drawing.Color]::FromArgb(0, 120, 215)
-        Grad1       = [System.Drawing.Color]::White
-        Grad2       = [System.Drawing.Color]::FromArgb(230, 230, 240)
-        BtnText     = [System.Drawing.Color]::Black
-        GridBg      = [System.Drawing.Color]::White
-        GridText    = [System.Drawing.Color]::Black
+        FormBg    = [System.Drawing.Color]::WhiteSmoke
+        PanelBg   = [System.Drawing.Color]::White
+        TextMain  = [System.Drawing.Color]::Black
+        TextDim   = [System.Drawing.Color]::DimGray
+        Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215)
+        Grad1     = [System.Drawing.Color]::White
+        Grad2     = [System.Drawing.Color]::FromArgb(230, 230, 240)
+        BtnText   = [System.Drawing.Color]::Black
+        GridBg    = [System.Drawing.Color]::White
+        GridText  = [System.Drawing.Color]::Black
     }
 }
 
@@ -49,8 +81,9 @@ $Global:SelectedDisk = $null
 $Global:SelectedPart = $null
 
 # --- GUI SETUP ---
+Log-Info "Dang dung giao dien (GUI)..."
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V11.1 - PHAT TAN PC"
+$Form.Text = "DISK MANAGER PRO V12.0 - DEBUG EDITION"
 $Form.Size = New-Object System.Drawing.Size(1200, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
@@ -62,7 +95,6 @@ $F_Bold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSty
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 9)
 
 # ==================== CUSTOM PAINTING HELPER ====================
-# FIX LỖI CÚ PHÁP TẠI ĐÂY
 function Get-Theme { 
     if ($Global:IsDark) { return $Themes.Dark } else { return $Themes.Light } 
 }
@@ -86,7 +118,7 @@ $LblLogo.Text = "CYBER DISK MANAGER"; $LblLogo.Font = $F_Logo; $LblLogo.AutoSize
 $PnlHead.Controls.Add($LblLogo)
 
 $BtnMode = New-Object System.Windows.Forms.Button
-$BtnMode.Text = "☀ / 🌙 ĐỔI MÀU"; $BtnMode.Size="120,35"; $BtnMode.Location="1050,12"; $BtnMode.FlatStyle="Flat"
+$BtnMode.Text = "☯ ĐỔI MÀU"; $BtnMode.Size="120,35"; $BtnMode.Location="1050,12"; $BtnMode.FlatStyle="Flat"
 $BtnMode.Cursor="Hand"; $BtnMode.Add_Click({ Switch-Theme })
 $PnlHead.Controls.Add($BtnMode)
 
@@ -156,9 +188,10 @@ function Switch-Theme {
     
     $Form.BackColor = $T.FormBg; $Form.ForeColor = $T.TextMain
     $BtnMode.BackColor = $T.PanelBg; $BtnMode.ForeColor = $T.TextMain
+    $BtnMode.Text = if ($Global:IsDark) { "☀ LIGHT" } else { "🌙 DARK" }
     $LblLogo.ForeColor = $T.Accent
     
-    foreach ($P in @($PnlDisk, $PnlPart, $PnlTool)) { $P.Invalidate() } # Redraw Gradients
+    foreach ($P in @($PnlDisk, $PnlPart, $PnlTool)) { $P.Invalidate() }
     
     # Update Labels
     foreach ($L in @($LblD, $LblP, $L1, $L2, $L3)) { $L.ForeColor = $T.TextDim }
@@ -180,7 +213,7 @@ function Switch-Theme {
     }
 }
 
-# ==================== DIALOG SYSTEM (GUI CON) ====================
+# ==================== DIALOG SYSTEM ====================
 function Create-SubForm ($Title, $H) {
     $T = Get-Theme
     $F = New-Object System.Windows.Forms.Form
@@ -191,11 +224,12 @@ function Create-SubForm ($Title, $H) {
 }
 
 function Show-Dialog ($Action) {
+    Log-Info "User click Action: $Action"
     if ($Action -eq "Refresh") { Load-Data; return }
     if ($Action -eq "FixBoot") { Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause"; return }
     
     $P = $Global:SelectedPart
-    if (!$P) { [System.Windows.Forms.MessageBox]::Show("Bạn chưa chọn phân vùng ở bảng dưới!", "Chưa chọn đối tượng"); return }
+    if (!$P) { [System.Windows.Forms.MessageBox]::Show("Bạn chưa chọn phân vùng ở bảng dưới!", "Lỗi"); return }
     
     $Did = $P.Did; $Pid = $P.Pid; $Let = $P.Let; $Lab = $P.Lab
     
@@ -226,7 +260,7 @@ function Show-Dialog ($Action) {
         $Btn = New-Object System.Windows.Forms.Button; $Btn.Text="XÁC NHẬN"; $Btn.Location="250,90"; $Btn.Size="150,35"; $Btn.BackColor=[System.Drawing.Color]::Orange; $Btn.DialogResult="OK"; $F.Controls.Add($Btn)
         
         if ($F.ShowDialog() -eq "OK") {
-            if ($Let) { cmd /c "label $Let $($Txt.Text)"; Load-Data } else { [System.Windows.Forms.MessageBox]::Show("Ổ cần ký tự để đổi tên bằng lệnh Label.","Lỗi") }
+            if ($Let) { cmd /c "label $Let $($Txt.Text)"; Load-Data } else { [System.Windows.Forms.MessageBox]::Show("Ổ cần ký tự để đổi tên.","Lỗi") }
         }
     }
     
@@ -249,7 +283,7 @@ function Show-Dialog ($Action) {
     
     # --- SIMPLE CONFIRMS ---
     if ($Action -eq "Delete") {
-        if ([System.Windows.Forms.MessageBox]::Show("BẠN CHẮC CHẮN MUỐN XÓA PHÂN VÙNG $Pid TRÊN DISK $Did?`n`nDữ liệu sẽ mất vĩnh viễn!", "CẢNH BÁO NGUY HIỂM", "YesNo", "Error") -eq "Yes") {
+        if ([System.Windows.Forms.MessageBox]::Show("XÓA PHÂN VÙNG $Pid TRÊN DISK $Did?`n`nMẤT DỮ LIỆU VĨNH VIỄN!", "CẢNH BÁO", "YesNo", "Error") -eq "Yes") {
             Run-DP "sel disk $Did`nsel part $Pid`ndelete partition override"
         }
     }
@@ -257,46 +291,53 @@ function Show-Dialog ($Action) {
     if ($Action -eq "Active") { Run-DP "sel disk $Did`nsel part $Pid`nactive" }
     
     if ($Action -eq "Convert") {
-        if ([System.Windows.Forms.MessageBox]::Show("Chuyển đổi Disk $Did sang GPT/MBR?`n(Lưu ý: Disk phải trống/Clean mới convert được)", "Xác nhận", "YesNo", "Question") -eq "Yes") {
+        if ([System.Windows.Forms.MessageBox]::Show("Chuyển đổi Disk $Did sang GPT/MBR?`n(Yêu cầu Disk phải trống/Clean)", "Xác nhận", "YesNo", "Question") -eq "Yes") {
             Run-DP "sel disk $Did`nclean`nconvert gpt" 
         }
     }
     
     if ($Action -eq "ChkDsk") {
-        if ($Let) { Start-Process "cmd" "/k chkdsk $Let /f /x" } else { [System.Windows.Forms.MessageBox]::Show("Phân vùng này không có ký tự ổ!", "Lỗi") }
+        if ($Let) { Start-Process "cmd" "/k chkdsk $Let /f /x" } else { [System.Windows.Forms.MessageBox]::Show("Phân vùng không có ký tự ổ!", "Lỗi") }
     }
 }
 
-# ==================== CORE ENGINE (WMI + SORTING FIX) ====================
+# ==================== CORE ENGINE (WMI + LOGGING) ====================
 function Load-Data {
+    Log-Info "Dang tai danh sach o cung..."
     $GridD.Rows.Clear(); $GridP.Rows.Clear(); $Global:SelectedPart = $null
     $Form.Cursor = "WaitCursor"; $Form.Refresh()
     
     try {
         $Disks = @(Get-WmiObject Win32_DiskDrive)
+        Log-Info "Tim thay $($Disks.Count) o cung vat ly."
         foreach ($D in $Disks) {
             # LOAD DISK
             $GB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
             $RowD = $GridD.Rows.Add($D.Index, $D.Model, $GB, "MBR/GPT", $D.Status)
             $GridD.Rows[$RowD].Tag = $D
         }
-    } catch {}
+    } catch {
+        Log-Err "Loi WMI Load Disk: $($_.Exception.Message)"
+    }
     
-    if ($GridD.Rows.Count -gt 0) { $GridD.Rows[0].Selected=$true; Load-Partitions $GridD.Rows[0].Tag }
+    if ($GridD.Rows.Count -gt 0) { 
+        $GridD.Rows[0].Selected=$true
+        Load-Partitions $GridD.Rows[0].Tag 
+    }
     $Form.Cursor = "Default"
+    Log-Info "Hoan tat tai du lieu."
 }
 
 function Load-Partitions ($DiskObj) {
+    Log-Info "Dang doc phan vung cho Disk $($DiskObj.Index)..."
     $GridP.Rows.Clear(); $Global:SelectedDisk = $DiskObj
     
     try {
-        # --- FIX LỖI SAI INDEX PHÂN VÙNG (QUAN TRỌNG) ---
-        # WMI Index không phải lúc nào cũng khớp Diskpart ID.
-        # Giải pháp: Lấy tất cả phân vùng, sắp xếp theo Offset (Vị trí vật lý), rồi đánh số lại từ 1.
         $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($DiskObj.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
         $Parts = @(Get-WmiObject -Query $Query | Sort-Object StartingOffset)
         
-        $RealID = 1 # Diskpart ID bắt đầu từ 1
+        Log-Info "Tim thay $($Parts.Count) phan vung."
+        $RealID = 1 # Diskpart ID starts at 1
         foreach ($P in $Parts) {
             $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
             $Total = [Math]::Round($P.Size / 1GB, 2)
@@ -306,14 +347,15 @@ function Load-Partitions ($DiskObj) {
                 $Free = [Math]::Round($LogDisk.FreeSpace / 1GB, 2)
                 $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", "$Free GB", "OK")
             } else {
+                $Let=$null; $Lab="[Hidden]"; $FS="RAW"
                 $Row = $GridP.Rows.Add("", "[Hidden/System]", "RAW", "$Total GB", "-", $P.Type)
             }
             
-            # Tag lưu ID Diskpart chính xác (RealID)
+            # Save ID for Diskpart
             $GridP.Rows[$Row].Tag = @{ Did=$DiskObj.Index; Pid=$RealID; Let=$Let; Lab=$Lab }
             $RealID++ 
         }
-    } catch {}
+    } catch { Log-Err "Loi Load Partitions: $($_.Exception.Message)" }
 }
 
 # --- EVENTS & RUNNER ---
@@ -321,12 +363,15 @@ $GridD.Add_SelectionChanged({ if($GridD.SelectedRows.Count -gt 0){ Load-Partitio
 $GridP.Add_SelectionChanged({ if($GridP.SelectedRows.Count -gt 0){ $Global:SelectedPart = $GridP.SelectedRows[0].Tag } })
 
 function Run-DP ($Cmd) {
+    Log-Info "Dang chay lenh Diskpart: $Cmd"
     $F = "$env:TEMP\dp.txt"; [IO.File]::WriteAllText($F, $Cmd)
     Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
     Remove-Item $F; Load-Data
 }
 
 # --- INIT ---
+Log-Info "Khoi tao giao dien..."
 Switch-Theme # Load màu lần đầu
-$Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval=300; $Timer.Add_Tick({$Timer.Stop(); Load-Data}); $Timer.Start()
+$Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval=500; $Timer.Add_Tick({$Timer.Stop(); Load-Data}); $Timer.Start()
+Log-Info "Hien thi Form..."
 $Form.ShowDialog() | Out-Null
