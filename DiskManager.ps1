@@ -1,6 +1,6 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC
-    Version: 4.0 (Neon Cyberpunk UI + Card Style + Theme Switcher)
+    DISK MANAGER PRO - PHAT TAN PC (REMASTERED UI)
+    Version: 5.0 (True Neon Cyberpunk - Modern Flat UI)
 #>
 
 # --- 1. ADMIN CHECK ---
@@ -14,137 +14,217 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME ENGINE ---
-$Global:IsDark = $true
-$Themes = @{
-    Dark = @{
-        Back=[System.Drawing.Color]::FromArgb(20,20,25); Panel=[System.Drawing.Color]::FromArgb(35,35,40)
-        Text=[System.Drawing.Color]::Cyan; Text2=[System.Drawing.Color]::WhiteSmoke
-        Border=[System.Drawing.Color]::Cyan; Glow=[System.Drawing.Color]::FromArgb(50, 0, 255, 255)
-        P_Pri=[System.Drawing.Color]::FromArgb(0, 120, 215); P_Log=[System.Drawing.Color]::FromArgb(46, 204, 113)
-        Btn=[System.Drawing.Color]::FromArgb(50,50,60)
-    }
-    Light = @{
-        Back=[System.Drawing.Color]::FromArgb(240,240,245); Panel=[System.Drawing.Color]::White
-        Text=[System.Drawing.Color]::DeepPink; Text2=[System.Drawing.Color]::Black
-        Border=[System.Drawing.Color]::DeepPink; Glow=[System.Drawing.Color]::FromArgb(50, 255, 20, 147)
-        P_Pri=[System.Drawing.Color]::FromArgb(100, 149, 237); P_Log=[System.Drawing.Color]::FromArgb(255, 165, 0)
-        Btn=[System.Drawing.Color]::FromArgb(220,220,220)
-    }
+# --- THEME CONFIGURATION (CYBERPUNK PALETTE) ---
+$Colors = @{
+    BgForm      = [System.Drawing.Color]::FromArgb(18, 18, 24)       # Đen sâu
+    BgPanel     = [System.Drawing.Color]::FromArgb(30, 30, 38)       # Xám đen
+    BgPartBar   = [System.Drawing.Color]::FromArgb(45, 45, 55)       # Nền thanh Disk
+    TextMain    = [System.Drawing.Color]::FromArgb(240, 240, 240)    # Trắng
+    TextDim     = [System.Drawing.Color]::FromArgb(160, 160, 160)    # Xám nhạt
+    Accent      = [System.Drawing.Color]::FromArgb(0, 255, 200)      # Cyan Neon (Màu chủ đạo)
+    PartPri     = [System.Drawing.Color]::FromArgb(0, 120, 215)      # Xanh Primary Partition
+    PartLog     = [System.Drawing.Color]::FromArgb(138, 43, 226)     # Tím Logical Partition
+    BtnNormal   = [System.Drawing.Color]::FromArgb(50, 50, 60)
+    BtnHover    = [System.Drawing.Color]::FromArgb(70, 70, 80)
+    BtnActive   = [System.Drawing.Color]::FromArgb(0, 150, 136)
+    Danger      = [System.Drawing.Color]::FromArgb(255, 50, 80)      # Đỏ báo động
 }
-$CurrentTheme = $Themes.Dark
 
 # --- GLOBAL STATE ---
-$Global:SelectedPart = $null # Luu thong tin part dang chon {Disk, Part, Letter}
-$Global:DiskData = @() # Cache du lieu
+$Global:SelectedPart = $null 
+$Global:DiskData = @()
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V4.0 (NEON EDITION)"
-$Form.Size = New-Object System.Drawing.Size(1250, 780); $Form.StartPosition = "CenterScreen"
-$Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "DISK MANAGER PRO V5.0 - PHAT TAN PC"
+$Form.Size = New-Object System.Drawing.Size(1280, 800)
+$Form.StartPosition = "CenterScreen"
+$Form.BackColor = $Colors.BgForm
+$Form.ForeColor = $Colors.TextMain
+$Form.FormBorderStyle = "FixedSingle"
+$Form.MaximizeBox = $false
 
-# Header Panel
-$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=70; $Form.Controls.Add($PnlHead)
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="DISK MASTER"; $LblTitle.Font="Impact, 26"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,10"; $PnlHead.Controls.Add($LblTitle)
-$BtnTheme = New-Object System.Windows.Forms.Button; $BtnTheme.Text="🎨 SWITCH THEME"; $BtnTheme.Size="150,40"; $BtnTheme.Location="1060,15"; $BtnTheme.FlatStyle="Flat"; $PnlHead.Controls.Add($BtnTheme)
+# -- FONTS --
+$FontTitle = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$FontBold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$FontNorm  = New-Object System.Drawing.Font("Segoe UI", 9)
+$FontSmall = New-Object System.Drawing.Font("Consolas", 8)
 
-# Main Container
-$PnlMain = New-Object System.Windows.Forms.Panel; $PnlMain.Dock="Fill"; $Form.Controls.Add($PnlMain)
+# -- HEADER --
+$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=60; $PnlHead.BackColor=[System.Drawing.Color]::FromArgb(25, 25, 30)
+$Form.Controls.Add($PnlHead)
 
-# Left: Disk Cards (Flow)
+# Logo Text với hiệu ứng vạch màu
+$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="DISK MANAGER"; $LblLogo.Font=$FontTitle; $LblLogo.ForeColor=$Colors.Accent; $LblLogo.AutoSize=$true; $LblLogo.Location="20,15"
+$PnlHead.Controls.Add($LblLogo)
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="PRO EDITION"; $LblSub.Font=$FontNorm; $LblSub.ForeColor=$Colors.TextDim; $LblSub.AutoSize=$true; $LblSub.Location="180,22"
+$PnlHead.Controls.Add($LblSub)
+
+# -- MAIN LAYOUT --
+$PnlBody = New-Object System.Windows.Forms.Panel; $PnlBody.Dock="Fill"; $PnlBody.Padding="20,20,20,20"
+$Form.Controls.Add($PnlBody)
+
+# 1. Left Panel (Disk List) - Chiếm 75%
 $FlowDisk = New-Object System.Windows.Forms.FlowLayoutPanel
-$FlowDisk.Location="20,10"; $FlowDisk.Size="880,640"; $FlowDisk.AutoScroll=$true; $FlowDisk.FlowDirection="TopDown"; $FlowDisk.WrapContents=$false
-$PnlMain.Controls.Add($FlowDisk)
+$FlowDisk.Dock = "Left"; $FlowDisk.Width = 900; $FlowDisk.AutoScroll = $true; $FlowDisk.FlowDirection = "TopDown"; $FlowDisk.WrapContents = $false
+$PnlBody.Controls.Add($FlowDisk)
 
-# Right: Tools
-$PnlTool = New-Object System.Windows.Forms.Panel; $PnlTool.Location="920,10"; $PnlTool.Size="300,640"; $PnlMain.Controls.Add($PnlTool)
-$LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="CHƯA CHỌN PHÂN VÙNG"; $LblInfo.AutoSize=$false; $LblInfo.Size="280,60"; $LblInfo.Location="10,10"; $LblInfo.Font="Segoe UI, 11, Bold"; $LblInfo.TextAlign="MiddleCenter"; $LblInfo.BorderStyle="FixedSingle"; $PnlTool.Controls.Add($LblInfo)
+# 2. Right Panel (Tools) - Chiếm phần còn lại
+$PnlTools = New-Object System.Windows.Forms.Panel
+$PnlTools.Dock = "Fill"; $PnlTools.Padding = "20,0,0,0" # Cách trái 20px
+$PnlBody.Controls.Add($PnlTools)
 
-# --- HELPER FUNCTIONS ---
-function Apply-Theme {
-    $T = if ($Global:IsDark) { $Themes.Dark } else { $Themes.Light }
-    $Script:CurrentTheme = $T
-    
-    $Form.BackColor = $T.Back
-    $PnlHead.BackColor = $T.Panel
-    $LblTitle.ForeColor = $T.Text
-    $BtnTheme.ForeColor = $T.Text; $BtnTheme.BackColor = $T.Btn
-    $LblInfo.ForeColor = $T.Text2
-    
-    # Redraw all Cards
-    $FlowDisk.Controls.Clear()
-    foreach ($Disk in $Global:DiskData) { Draw-DiskCard $Disk }
-    
-    # Redraw Tools
-    foreach ($C in $PnlTool.Controls) { if ($C -is [System.Windows.Forms.Button]) { $C.BackColor=$T.Btn; $C.ForeColor=$T.Text2; $C.FlatAppearance.BorderColor=$T.Border } }
+# Info Box (Hiển thị phân vùng đang chọn)
+$GbInfo = New-Object System.Windows.Forms.GroupBox; $GbInfo.Text = "THÔNG TIN ĐANG CHỌN"; $GbInfo.ForeColor=$Colors.TextDim; $GbInfo.Location="20,0"; $GbInfo.Size="320,100"
+$PnlTools.Controls.Add($GbInfo)
+
+$LblInfoMain = New-Object System.Windows.Forms.Label; $LblInfoMain.Text="CHƯA CHỌN"; $LblInfoMain.Font=$FontTitle; $LblInfoMain.ForeColor=$Colors.Danger; $LblInfoMain.AutoSize=$false; $LblInfoMain.Dock="Top"; $LblInfoMain.Height=40; $LblInfoMain.TextAlign="MiddleCenter"
+$GbInfo.Controls.Add($LblInfoMain)
+$LblInfoSub = New-Object System.Windows.Forms.Label; $LblInfoSub.Text="Click vào phân vùng để thao tác"; $LblInfoSub.Font=$FontNorm; $LblInfoSub.ForeColor=$Colors.TextDim; $LblInfoSub.AutoSize=$false; $LblInfoSub.Dock="Top"; $LblInfoSub.Height=30; $LblInfoSub.TextAlign="MiddleCenter"
+$GbInfo.Controls.Add($LblInfoSub)
+
+# Action Buttons Container
+$FlowAct = New-Object System.Windows.Forms.FlowLayoutPanel; $FlowAct.Location="20,120"; $FlowAct.Size="320,600"; $FlowAct.FlowDirection="TopDown"
+$PnlTools.Controls.Add($FlowAct)
+
+# --- CUSTOM UI FUNCTIONS ---
+
+# Hàm tạo nút bấm đẹp (Flat Style)
+function Add-NeonButton ($Parent, $Text, $Tag, $Color, $Icon) {
+    $Btn = New-Object System.Windows.Forms.Button
+    $Btn.Text = "  $Icon  $Text"
+    $Btn.Tag = $Tag
+    $Btn.Size = New-Object System.Drawing.Size(300, 45)
+    $Btn.Margin = "0,0,0,10"
+    $Btn.FlatStyle = "Flat"
+    $Btn.FlatAppearance.BorderSize = 0
+    $Btn.BackColor = $Colors.BtnNormal
+    $Btn.ForeColor = $Colors.TextMain
+    $Btn.Font = $FontBold
+    $Btn.TextAlign = "MiddleLeft"
+    $Btn.Cursor = "Hand"
+
+    # Border trái màu (Accent)
+    $PnlAccent = New-Object System.Windows.Forms.Panel; $PnlAccent.Width=4; $PnlAccent.Dock="Left"; $PnlAccent.BackColor=$Color
+    $Btn.Controls.Add($PnlAccent)
+
+    # Hover Effect
+    $Btn.Add_MouseEnter({ $this.BackColor = $Colors.BtnHover })
+    $Btn.Add_MouseLeave({ $this.BackColor = $Colors.BtnNormal })
+    $Btn.Add_Click({ Run-Action $this.Tag })
+
+    $Parent.Controls.Add($Btn)
 }
 
-$BtnTheme.Add_Click({ 
-    $Global:IsDark = -not $Global:IsDark
-    Apply-Theme
-})
-
-# --- DRAWING ENGINE (CARD SYSTEM) ---
+# Hàm vẽ Card ổ đĩa
 function Draw-DiskCard ($Disk) {
-    $T = $Script:CurrentTheme
-    
-    # 1. Main Card Panel
+    # Main Card
     $Card = New-Object System.Windows.Forms.Panel
-    $Card.Size = New-Object System.Drawing.Size(850, 130); $Card.Margin = "0,0,0,20"; $Card.BackColor = $T.Panel
-    # Glow Border Paint
+    $Card.Size = New-Object System.Drawing.Size(860, 140)
+    $Card.Margin = "0,0,0,15"
+    $Card.BackColor = $Colors.BgPanel
+    # Vẽ viền mỏng
     $Card.Add_Paint({ 
         param($s, $e) 
-        $p = New-Object System.Drawing.Pen($T.Border, 2)
-        $e.Graphics.DrawRectangle($p, 1, 1, $s.Width-2, $s.Height-2)
+        $p = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(50,50,50), 1)
+        $e.Graphics.DrawRectangle($p, 0, 0, $s.Width-1, $s.Height-1)
     })
-    
-    # 2. Header Info
-    $LblD = New-Object System.Windows.Forms.Label; $LblD.Text="💿 DISK $($Disk.ID) - $($Disk.Status) - $($Disk.Size)"; $LblD.Font="Segoe UI, 10, Bold"; $LblD.ForeColor=$T.Text2; $LblD.AutoSize=$true; $LblD.Location="15,10"
-    $Card.Controls.Add($LblD)
 
-    # 3. Partition Visual Bar (Container)
-    $BarContainer = New-Object System.Windows.Forms.Panel; $BarContainer.Location="15,40"; $BarContainer.Size="820,70"; $BarContainer.BackColor=[System.Drawing.Color]::Gray
-    $Card.Controls.Add($BarContainer)
+    # Header: Icon + Tên Disk
+    $ImgDisk = New-Object System.Windows.Forms.Label; $ImgDisk.Text="💾"; $ImgDisk.Font=$FontTitle; $ImgDisk.AutoSize=$true; $ImgDisk.Location="15,10"; $ImgDisk.ForeColor=$Colors.Accent
+    $Card.Controls.Add($ImgDisk)
     
-    # 4. Draw Partitions
+    $LblName = New-Object System.Windows.Forms.Label; $LblName.Text="DISK $($Disk.ID)"; $LblName.Font=$FontBold; $LblName.ForeColor=$Colors.TextMain; $LblName.AutoSize=$true; $LblName.Location="50,12"
+    $Card.Controls.Add($LblName)
+    
+    $LblDetail = New-Object System.Windows.Forms.Label; $LblDetail.Text="$($Disk.Status) • $($Disk.Size)"; $LblDetail.Font=$FontNorm; $LblDetail.ForeColor=$Colors.TextDim; $LblDetail.AutoSize=$true; $LblDetail.Location="50,32"
+    $Card.Controls.Add($LblDetail)
+
+    # Partition Bar Container (Thanh ngang chứa các phân vùng)
+    $BarPanel = New-Object System.Windows.Forms.Panel
+    $BarPanel.Location="15, 60"; $BarPanel.Size="830, 60"
+    $BarPanel.BackColor = $Colors.BgPartBar
+    $Card.Controls.Add($BarPanel)
+
+    # Render Partitions
     $TotalSizeMB = $Disk.SizeMB; if ($TotalSizeMB -eq 0) { $TotalSizeMB = 1 }
     $CurrentX = 0
-    
-    foreach ($Part in $Disk.Partitions) {
-        $Width = [Math]::Max(5, [int](($Part.SizeMB / $TotalSizeMB) * 820))
-        if ($CurrentX + $Width -gt 820) { $Width = 820 - $CurrentX } # Trim overflow
+    $MaxW = 830
 
-        $PBox = New-Object System.Windows.Forms.Button # Dung Button cho de click
-        $PBox.FlatStyle = "Flat"; $PBox.FlatAppearance.BorderSize = 0
-        $PBox.BackColor = if ($Part.Type -eq "Primary") { $T.P_Pri } else { $T.P_Log }
-        $PBox.Location = "$CurrentX, 0"; $PBox.Size = "$Width, 70"
-        $PBox.Text = "$($Part.Letter)`n$($Part.Label)`n$($Part.FS)`n$($Part.SizeGB)"
-        $PBox.ForeColor = "White"; $PBox.Font = "Segoe UI, 8"
-        $PBox.Cursor = "Hand"
+    foreach ($Part in $Disk.Partitions) {
+        # Tính toán độ rộng theo %
+        $Percent = $Part.SizeMB / $TotalSizeMB
+        $Width = [Math]::Max(2, [int]($Percent * $MaxW))
         
-        # Save Data to Tag
-        $PBox.Tag = @{Disk=$Disk.ID; Part=$Part.ID; Let=$Part.Letter; Lab=$Part.Label}
+        # Tránh tràn khung
+        if ($CurrentX + $Width -gt $MaxW) { $Width = $MaxW - $CurrentX }
+
+        # Tạo nút đại diện phân vùng
+        $PBtn = New-Object System.Windows.Forms.Button
+        $PBtn.FlatStyle = "Flat"; $PBtn.FlatAppearance.BorderSize = 0
         
-        # Click Event
-        $PBox.Add_Click({ 
+        # Màu sắc dựa trên loại Partition
+        if ($Part.Type -eq "Primary") { $PBtn.BackColor = $Colors.PartPri }
+        else { $PBtn.BackColor = $Colors.PartLog }
+        
+        $PBtn.Location = "$CurrentX, 0"; $PBtn.Size = "$Width, 60"
+        
+        # Text hiển thị (Chỉ hiện nếu đủ rộng)
+        if ($Width -gt 40) {
+            $Txt = ""
+            if ($Part.Letter) { $Txt += "$($Part.Letter)`n" }
+            $Txt += "$($Part.Label)`n$($Part.SizeGB)"
+            $PBtn.Text = $Txt
+        }
+        $PBtn.ForeColor = "White"; $PBtn.Font = $FontSmall
+        $PBtn.Cursor = "Hand"
+        
+        # Tag dữ liệu để xử lý khi click
+        $PBtn.Tag = @{Disk=$Disk.ID; Part=$Part.ID; Let=$Part.Letter; Lab=$Part.Label; FS=$Part.FS}
+        
+        # Sự kiện Click
+        $PBtn.Add_Click({ 
             $Global:SelectedPart = $this.Tag
-            $LblInfo.Text = "ĐANG CHỌN:`nDISK $($this.Tag.Disk) | PART $($this.Tag.Part) | $($this.Tag.Let)"
-            $LblInfo.ForeColor = $Script:CurrentTheme.Text
+            Update-InfoPanel $this.Tag
         })
         
-        $BarContainer.Controls.Add($PBox)
+        # Vẽ viền trắng nhỏ ngăn cách
+        $Sep = New-Object System.Windows.Forms.Panel; $Sep.Width=1; $Sep.Dock="Right"; $Sep.BackColor=$Colors.BgPanel
+        $PBtn.Controls.Add($Sep)
+
+        $BarPanel.Controls.Add($PBtn)
         $CurrentX += $Width
     }
-    
-    # 5. Add to Flow
+
+    # Phần dung lượng trống (Unallocated - Màu xám)
+    if ($CurrentX -lt $MaxW) {
+        $UnallocW = $MaxW - $CurrentX
+        $UnBtn = New-Object System.Windows.Forms.Panel
+        $UnBtn.Location = "$CurrentX, 0"; $UnBtn.Size = "$UnallocW, 60"
+        $UnBtn.BackColor = [System.Drawing.Color]::FromArgb(40,40,40)
+        # Hatch Style (Gạch chéo cho vùng trống) - Advanced drawing
+        $UnBtn.Add_Paint({
+            param($s, $e)
+            $hatchBrush = New-Object System.Drawing.Drawing2D.HatchBrush([System.Drawing.Drawing2D.HatchStyle]::BackwardDiagonal, [System.Drawing.Color]::Gray, [System.Drawing.Color]::Transparent)
+            $e.Graphics.FillRectangle($hatchBrush, $s.ClientRectangle)
+        })
+        $BarPanel.Controls.Add($UnBtn)
+    }
+
     $FlowDisk.Controls.Add($Card)
 }
 
-# --- DATA LOADER (DISKPART PARSER) ---
+function Update-InfoPanel ($Tag) {
+    $LblInfoMain.Text = if ($Tag.Let) { "Ổ $($Tag.Let)" } else { "PARTITION $($Tag.Part)" }
+    $LblInfoMain.ForeColor = $Colors.Accent
+    $LblInfoSub.Text = "Disk $($Tag.Disk) | FS: $($Tag.FS) | Label: $($Tag.Lab)"
+}
+
+# --- LOGIC (GIỮ NGUYÊN CORE CŨ NHƯNG TỐI ƯU) ---
 function Load-Data {
-    $FlowDisk.Controls.Clear(); $Global:DiskData = @(); $Global:SelectedPart = $null; $LblInfo.Text="HÃY CHỌN PHÂN VÙNG"
-    $Form.Cursor = "WaitCursor"
+    $FlowDisk.Controls.Clear(); $Global:DiskData = @(); $Global:SelectedPart = $null
+    $LblInfoMain.Text="ĐANG QUÉT..."; $LblInfoMain.ForeColor=$Colors.TextDim; $LblInfoSub.Text="..."
+    $Form.Cursor = "WaitCursor"; $Form.Refresh()
 
     $Script = "$env:TEMP\dp_scan.txt"; [IO.File]::WriteAllText($Script, "list disk")
     $RawDisks = (cmd /c "diskpart /s `"$Script`"") | Where { $_ -match "Disk \d" }
@@ -165,62 +245,64 @@ function Load-Data {
                     $Pid = $Matches[1]; $Type = $Matches[2]; $PSize = $Matches[3]; $PUnit = $Matches[4]
                     $PSizeMB = if($PUnit -eq "GB") { [int]$PSize * 1024 } else { [int]$PSize }
                     
-                    # Deep Scan for Letter/Label/FS
+                    # Deep Scan
                     [IO.File]::WriteAllText($Script, "sel disk $Did`nsel part $Pid`ndetail part")
                     $Det = cmd /c "diskpart /s `"$Script`""
-                    $Ltr=""; $Lab="NoName"; $Fs="RAW"
+                    $Ltr=""; $Lab="No Label"; $Fs="RAW"
                     foreach ($R in $Det) {
                         if ($R -match "Ltr\s+:\s*([A-Z])") { $Ltr = "$($Matches[1]):" }
                         if ($R -match "Fs\s+:\s*(\w+)") { $Fs = $Matches[1] }
                         if ($R -match "Label\s+:\s*(.+)") { $Lab = $Matches[1] }
                     }
-                    
                     $DiskObj.Partitions += @{ID=$Pid; Type=$Type; SizeGB="$PSize $PUnit"; SizeMB=$PSizeMB; Letter=$Ltr; Label=$Lab; FS=$Fs}
                 }
             }
             $Global:DiskData += $DiskObj
+            Draw-DiskCard $DiskObj # Vẽ luôn từng cái cho mượt
+            [System.Windows.Forms.Application]::DoEvents()
         }
     }
     Remove-Item $Script -ErrorAction SilentlyContinue
-    Apply-Theme # Render GUI
+    
+    $LblInfoMain.Text="SẴN SÀNG"; $LblInfoMain.ForeColor=$Colors.TextMain
+    $LblInfoSub.Text="Đã tải xong dữ liệu ổ đĩa."
     $Form.Cursor = "Default"
 }
 
-# --- TOOL BUTTONS ---
-function Add-BtnTool ($Txt, $Tag, $Y) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Tag=$Tag
-    $B.Size="280,45"; $B.Location="10,$Y"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 10, Bold"
-    $B.Add_Click({ Run-Action $this.Tag }); $PnlTool.Controls.Add($B)
+function Run-DP ($Cmd) { 
+    $F="$env:TEMP\d.txt"; [IO.File]::WriteAllText($F,$Cmd)
+    Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
+    Remove-Item $F; Load-Data 
 }
-
-Add-BtnTool "♻️ REFRESH (LÀM MỚI)" "Refresh" 80
-Add-BtnTool "🏷️ ĐỔI TÊN / KÝ TỰ" "Label" 135
-Add-BtnTool "🧹 FORMAT (ĐỊNH DẠNG)" "Format" 190
-Add-BtnTool "⚡ SET ACTIVE" "Active" 245
-Add-BtnTool "❌ XÓA PHÂN VÙNG" "Delete" 300
-Add-BtnTool "🚑 FIX LỖI Ổ (CHKDSK)" "ChkDsk" 380
-Add-BtnTool "🛠️ NẠP LẠI BOOT" "FixBoot" 435
-Add-BtnTool "🔄 CONVERT MBR/GPT" "Convert" 490
-
-function Run-DP ($Cmd) { $F="$env:TEMP\d.txt"; [IO.File]::WriteAllText($F,$Cmd); Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow; Remove-Item $F; Load-Data }
 
 function Run-Action ($Act) {
     if ($Act -eq "Refresh") { Load-Data; return }
     if ($Act -eq "FixBoot") { Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause"; return }
     
     $S = $Global:SelectedPart
-    if (!$S) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn phân vùng nào trên biểu đồ!", "Lỗi"); return }
+    if (!$S) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn phân vùng nào!", "Lỗi"); return }
     $D=$S.Disk; $P=$S.Part; $L=$S.Let
 
     switch ($Act) {
-        "Format" { if([System.Windows.Forms.MessageBox]::Show("FORMAT Ổ $L (Disk $D Part $P)? MẤT HẾT DỮ LIỆU!","CẢNH BÁO","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`nformat fs=ntfs quick" } }
-        "Delete" { if([System.Windows.Forms.MessageBox]::Show("XÓA PHÂN VÙNG $P?","CẢNH BÁO","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`ndelete partition override" } }
+        "Format" { if([System.Windows.Forms.MessageBox]::Show("FORMAT Ổ $L (Disk $D Part $P)?`nDỮ LIỆU SẼ BỊ XÓA VĨNH VIỄN!","CẢNH BÁO","YesNo","Warning")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`nformat fs=ntfs quick" } }
+        "Delete" { if([System.Windows.Forms.MessageBox]::Show("XÓA PHÂN VÙNG $P TRÊN DISK $D?","CẢNH BÁO","YesNo","Error")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`ndelete partition override" } }
         "Active" { Run-DP "sel disk $D`nsel part $P`nactive" }
         "Label"  { $New=[Microsoft.VisualBasic.Interaction]::InputBox("Nhập ký tự ổ mới (VD: K):", "Đổi Ký Tự", ""); if($New){ Run-DP "sel disk $D`nsel part $P`nassign letter=$New" } }
         "ChkDsk" { if($L){Start-Process "cmd" "/c start cmd /k chkdsk $L /f /x"} else {[System.Windows.Forms.MessageBox]::Show("Phân vùng này chưa có ký tự ổ!", "Lỗi")} }
-        "Convert"{ if([System.Windows.Forms.MessageBox]::Show("Convert Disk $D sang GPT/MBR? (Cần Clean Disk)","Hỏi","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nclean`nconvert gpt" } }
+        "Convert"{ if([System.Windows.Forms.MessageBox]::Show("Convert Disk $D sang GPT/MBR? (Yêu cầu Clean Disk)","Hỏi","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nclean`nconvert gpt" } }
     }
 }
 
+# --- ADD TOOL BUTTONS ---
+Add-NeonButton $FlowAct "Làm mới (Refresh)" "Refresh" $Colors.Accent "♻️"
+Add-NeonButton $FlowAct "Đổi tên / Ký tự" "Label" [System.Drawing.Color]::Orange "🏷️"
+Add-NeonButton $FlowAct "Format (Định dạng)" "Format" $Colors.Danger "🧹"
+Add-NeonButton $FlowAct "Set Active (Boot)" "Active" [System.Drawing.Color]::Gold "⚡"
+Add-NeonButton $FlowAct "Xóa Phân Vùng" "Delete" $Colors.Danger "❌"
+Add-NeonButton $FlowAct "Sửa Lỗi (ChkDsk)" "ChkDsk" [System.Drawing.Color]::LightGreen "🚑"
+Add-NeonButton $FlowAct "Nạp lại Boot (BCD)" "FixBoot" [System.Drawing.Color]::Violet "🛠️"
+Add-NeonButton $FlowAct "Convert GPT/MBR" "Convert" [System.Drawing.Color]::Gray "🔄"
+
+# --- INIT ---
 $Form.Add_Shown({ Load-Data })
 $Form.ShowDialog() | Out-Null
