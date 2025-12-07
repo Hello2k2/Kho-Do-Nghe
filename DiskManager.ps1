@@ -1,7 +1,7 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V6.1 WMI EDITION)
-    Engine: WMI/CIM (Native Windows Management) - Chính xác & Chi tiết
-    Layout: Master-Detail Grid (Disk List -> Partition List)
+    DISK MANAGER PRO - PHAT TAN PC (V6.2 HYBRID ENGINE)
+    Engine: Hybrid (Ưu tiên Modern Storage -> Fallback sang Legacy WMI nếu lỗi)
+    Layout: Split Grid (Danh sách Ổ cứng trên -> Danh sách Phân vùng dưới)
 #>
 
 # --- 1. ADMIN CHECK ---
@@ -28,12 +28,13 @@ $C = @{
 
 # --- GLOBAL VARS ---
 $Global:SelectedDisk = $null
-$Global:SelectedPart = $null # Object Partition
+$Global:SelectedPart = $null
+$Global:EngineMode = "Modern" # Modern hoặc Legacy
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V6.1 - PHAT TAN PC"
-$Form.Size = New-Object System.Drawing.Size(1100, 700)
+$Form.Text = "DISK MANAGER PRO V6.2 - PHAT TAN PC"
+$Form.Size = New-Object System.Drawing.Size(1150, 700)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $C.BgForm
 $Form.ForeColor = $C.Text
@@ -44,38 +45,39 @@ $Form.MaximizeBox = $false
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $FontNorm = New-Object System.Drawing.Font("Segoe UI", 9)
 
-# -- LAYOUT --
+# -- LAYOUT STRUCTURE (SPLIT CONTAINER) --
 $Split = New-Object System.Windows.Forms.SplitContainer
-$Split.Dock = "Fill"; $Split.Orientation = "Vertical"; $Split.SplitterDistance = 850
+$Split.Dock = "Fill"
+$Split.Orientation = "Vertical"
+$Split.SplitterDistance = 900 # Phần trái chứa bảng rộng hơn
 $Form.Controls.Add($Split)
 
-# LEFT PANEL (DATA GRIDS)
+# === LEFT PANEL (DATA) ===
 $PnlLeft = $Split.Panel1
 $PnlLeft.Padding = "10,10,10,10"
 
-# -- SECTION 1: PHYSICAL DISKS --
-$GbDisk = New-Object System.Windows.Forms.GroupBox; $GbDisk.Text = "1. DANH SÁCH Ổ CỨNG VẬT LÝ (PHYSICAL DISKS)"; $GbDisk.ForeColor = $C.Accent; $GbDisk.Dock = "Top"; $GbDisk.Height = 200
+# 1. DISK GRID (TOP)
+$GbDisk = New-Object System.Windows.Forms.GroupBox; $GbDisk.Text = "1. DANH SÁCH Ổ CỨNG VẬT LÝ"; $GbDisk.ForeColor = $C.Accent; $GbDisk.Dock = "Top"; $GbDisk.Height = 220
 $PnlLeft.Controls.Add($GbDisk)
 
 $GridDisk = New-Object System.Windows.Forms.DataGridView
-$GridDisk.Dock = "Fill"; $GridDisk.BackgroundColor = $C.GridBg; $GridDisk.ForeColor = "Black" # Text đen cho dễ đọc trên nền trắng mặc định của cell
+$GridDisk.Dock = "Fill"; $GridDisk.BackgroundColor = $C.GridBg; $GridDisk.ForeColor = "Black"
 $GridDisk.AllowUserToAddRows = $false; $GridDisk.RowHeadersVisible = $false; $GridDisk.SelectionMode = "FullRowSelect"; $GridDisk.MultiSelect = $false; $GridDisk.ReadOnly = $true; $GridDisk.AutoSizeColumnsMode = "Fill"
 $GridDisk.GridColor = $C.GridLine
 # Columns
 $GridDisk.Columns.Add("ID", "Disk #"); $GridDisk.Columns[0].Width = 60
 $GridDisk.Columns.Add("Model", "Tên Ổ Cứng (Model)"); $GridDisk.Columns[1].FillWeight = 150
-$GridDisk.Columns.Add("Type", "Loại (MBR/GPT)"); $GridDisk.Columns[2].Width = 100
+$GridDisk.Columns.Add("Type", "Loại"); $GridDisk.Columns[2].Width = 100
 $GridDisk.Columns.Add("Size", "Tổng Dung Lượng"); $GridDisk.Columns[3].Width = 120
-$GridDisk.Columns.Add("Health", "Sức Khỏe"); $GridDisk.Columns[4].Width = 100
-$GridDisk.Columns.Add("Status", "Trạng Thái"); $GridDisk.Columns[5].Width = 100
+$GridDisk.Columns.Add("Status", "Trạng Thái"); $GridDisk.Columns[4].Width = 100
 $GbDisk.Controls.Add($GridDisk)
 
-# -- SECTION 2: PARTITIONS --
-$GbPart = New-Object System.Windows.Forms.GroupBox; $GbPart.Text = "2. CHI TIẾT PHÂN VÙNG (PARTITIONS & VOLUMES)"; $GbPart.ForeColor = $C.Accent; $GbPart.Dock = "Fill"
-$GbPart.Padding = "3,10,3,3" # Top padding để cách title ra
+# SPACER
+$PnlSep = New-Object System.Windows.Forms.Panel; $PnlSep.Dock="Top"; $PnlSep.Height=15; $PnlLeft.Controls.Add($PnlSep)
+
+# 2. PARTITION GRID (BOTTOM)
+$GbPart = New-Object System.Windows.Forms.GroupBox; $GbPart.Text = "2. CHI TIẾT PHÂN VÙNG"; $GbPart.ForeColor = $C.Accent; $GbPart.Dock = "Fill"
 $PnlLeft.Controls.Add($GbPart)
-# Spacer Panel để tạo khoảng cách giữa 2 groupbox
-$PnlSpacer = New-Object System.Windows.Forms.Panel; $PnlSpacer.Dock="Top"; $PnlSpacer.Height=10; $PnlLeft.Controls.Add($PnlSpacer)
 
 $GridPart = New-Object System.Windows.Forms.DataGridView
 $GridPart.Dock = "Fill"; $GridPart.BackgroundColor = $C.GridBg; $GridPart.ForeColor = "Black"
@@ -83,18 +85,17 @@ $GridPart.AllowUserToAddRows = $false; $GridPart.RowHeadersVisible = $false; $Gr
 $GridPart.GridColor = $C.GridLine
 # Columns Chi Tiết
 $GridPart.Columns.Add("Let", "Ký Tự"); $GridPart.Columns[0].Width = 50
-$GridPart.Columns.Add("Label", "Tên Ổ (Label)"); $GridPart.Columns[1].FillWeight = 120
-$GridPart.Columns.Add("FS", "Định Dạng"); $GridPart.Columns[2].Width = 80
-$GridPart.Columns.Add("Total", "Tổng (GB)"); $GridPart.Columns[3].Width = 80
-$GridPart.Columns.Add("Used", "Đã Dùng (GB)"); $GridPart.Columns[4].Width = 90
-$GridPart.Columns.Add("Free", "Còn Lại (GB)"); $GridPart.Columns[5].Width = 90
-$GridPart.Columns.Add("PctUsed", "% Dùng"); $GridPart.Columns[6].Width = 70
+$GridPart.Columns.Add("Label", "Tên Ổ"); $GridPart.Columns[1].FillWeight = 120
+$GridPart.Columns.Add("FS", "FS"); $GridPart.Columns[2].Width = 60
+$GridPart.Columns.Add("Total", "Tổng"); $GridPart.Columns[3].Width = 80
+$GridPart.Columns.Add("Used", "Đã Dùng"); $GridPart.Columns[4].Width = 80
+$GridPart.Columns.Add("PctUsed", "% Dùng"); $GridPart.Columns[5].Width = 70
+$GridPart.Columns.Add("Free", "Còn Lại"); $GridPart.Columns[6].Width = 80
 $GridPart.Columns.Add("PctFree", "% Trống"); $GridPart.Columns[7].Width = 70
 $GridPart.Columns.Add("Stat", "Trạng Thái"); $GridPart.Columns[8].Width = 100
 $GbPart.Controls.Add($GridPart)
 
-
-# RIGHT PANEL (TOOLS)
+# === RIGHT PANEL (TOOLS) ===
 $PnlRight = $Split.Panel2
 $PnlRight.BackColor = $C.BgPanel
 $PnlRight.Padding = "10,20,10,10"
@@ -137,102 +138,113 @@ Add-BtnTool "Xóa Phân Vùng" "Delete" [System.Drawing.Color]::Red
 Add-BtnTool "Check Disk (Fix Lỗi)" "ChkDsk" [System.Drawing.Color]::LightGreen
 Add-BtnTool "Convert MBR <-> GPT" "Convert" [System.Drawing.Color]::Gray
 
-# --- CORE LOGIC (WMI ENGINE) ---
+# --- CORE ENGINE (HYBRID) ---
 
 function Load-Disks {
     $GridDisk.Rows.Clear(); $GridPart.Rows.Clear()
     $Global:SelectedDisk = $null; $Global:SelectedPart = $null
     $Form.Cursor = "WaitCursor"
 
-    # Lấy danh sách Disk vật lý
-    $Disks = Get-Disk | Sort-Object Number
-    
-    foreach ($D in $Disks) {
-        $SizeGB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
-        $Style = if ($D.PartitionStyle -eq "RAW") { "Chưa Init" } else { $D.PartitionStyle }
-        $Health = if ($D.HealthStatus -eq "Healthy") { "Tốt (Healthy)" } else { "Cảnh báo ($($D.HealthStatus))" }
-        $Status = if ($D.OperationalStatus -eq "Online") { "Online" } else { "Offline" }
+    # 1. THỬ MODERN ENGINE (Get-Disk)
+    try {
+        $Disks = Get-Disk -ErrorAction Stop
+        if ($Disks.Count -eq 0) { throw "Empty" }
+        $Global:EngineMode = "Modern"
+        $GbDisk.Text = "1. DANH SÁCH Ổ CỨNG (MODERN MODE)"
         
-        $Idx = $GridDisk.Rows.Add($D.Number, $D.FriendlyName, $Style, $SizeGB, $Health, $Status)
-        $GridDisk.Rows[$Idx].Tag = $D # Lưu object Disk vào Row
+        foreach ($D in $Disks) {
+            $SizeGB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
+            $Style = if ($D.PartitionStyle -eq "RAW") { "Chưa Init" } else { $D.PartitionStyle }
+            $Status = if ($D.OperationalStatus -eq "Online") { "Online" } else { "Offline" }
+            $GridDisk.Rows.Add($D.Number, $D.FriendlyName, $Style, $SizeGB, $Status) | Out-Null
+        }
+    } 
+    catch {
+        # 2. FALLBACK LEGACY ENGINE (WMI - Win32_DiskDrive)
+        $Global:EngineMode = "Legacy"
+        $GbDisk.Text = "1. DANH SÁCH Ổ CỨNG (LEGACY WMI MODE)"
+        try {
+            $Disks = Get-WmiObject Win32_DiskDrive
+            foreach ($D in $Disks) {
+                $SizeGB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
+                # Legacy không hiện GPT/MBR trực tiếp dễ dàng, phải check Partition
+                $GridDisk.Rows.Add($D.Index, $D.Model, "Unknown", $SizeGB, $D.Status) | Out-Null
+            }
+        } catch {}
     }
     
     if ($GridDisk.Rows.Count -gt 0) {
         $GridDisk.Rows[0].Selected = $true
-        Load-Partitions $GridDisk.Rows[0].Tag
+        Load-Partitions $GridDisk.Rows[0].Cells[0].Value # Pass Disk Index
     }
     $Form.Cursor = "Default"
 }
 
-function Load-Partitions ($DiskObj) {
+function Load-Partitions ($DiskIndex) {
     $GridPart.Rows.Clear()
-    $Global:SelectedDisk = $DiskObj
-    $GbPart.Text = "2. CHI TIẾT PHÂN VÙNG CỦA DISK $($DiskObj.Number) - $($DiskObj.FriendlyName)"
     
-    # Lấy Partitions của Disk này
-    $Parts = Get-Partition -DiskNumber $DiskObj.Number | Sort-Object PartitionNumber
-    
-    foreach ($P in $Parts) {
-        # Lấy Volume Info (Label, Size, Free...)
-        $Vol = $null
-        try { $Vol = $P | Get-Volume -ErrorAction SilentlyContinue } catch {}
+    # === MODERN ENGINE ===
+    if ($Global:EngineMode -eq "Modern") {
+        $Parts = Get-Partition -DiskNumber $DiskIndex | Sort-Object PartitionNumber
+        foreach ($P in $Parts) {
+            $Vol = $null; try { $Vol = $P | Get-Volume -ErrorAction SilentlyContinue } catch {}
+            $Let = if ($P.DriveLetter) { "$($P.DriveLetter):" } else { "" }
+            
+            if ($Vol) {
+                $Lab = if ($Vol.FileSystemLabel) { $Vol.FileSystemLabel } else { "(No Name)" }
+                $FS = $Vol.FileSystem
+                $Total = [Math]::Round($Vol.Size / 1GB, 2)
+                $Free  = [Math]::Round($Vol.SizeRemaining / 1GB, 2)
+                $Used  = [Math]::Round($Total - $Free, 2)
+                $P_Fr  = if($Total -gt 0){[Math]::Round(($Free/$Total)*100,0)}else{0}
+                $P_Us  = 100 - $P_Fr
+                $Stat = "OK"
+            } else {
+                $Lab = $P.Type; $FS = "-"; $Total = [Math]::Round($P.Size / 1GB, 2)
+                $Used = "-"; $Free = "-"; $P_Us = "-"; $P_Fr = "-"; $Stat = "Hidden"
+            }
+            
+            $Idx = $GridPart.Rows.Add($Let, $Lab, $FS, "$Total GB", "$Used GB", "$P_Us %", "$Free GB", "$P_Fr %", $Stat)
+            $GridPart.Rows[$Idx].Tag = @{ Did=$DiskIndex; Pid=$P.PartitionNumber; Let=$Let; Lab=$Lab }
+        }
+    } 
+    # === LEGACY WMI ENGINE (FALLBACK) ===
+    else {
+        # Query Phức tạp để link Disk -> Partition -> LogicalDisk
+        $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='\\.\PHYSICALDRIVE$DiskIndex'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
+        $Parts = Get-WmiObject -Query $Query
         
-        $Let = if ($P.DriveLetter) { "$($P.DriveLetter):" } else { "" }
-        $Type = $P.Type
-        
-        if ($Vol) {
-            $Lab = if ($Vol.FileSystemLabel) { $Vol.FileSystemLabel } else { "(No Name)" }
-            $FS = $Vol.FileSystem
+        foreach ($P in $Parts) {
+            $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
             
-            $Total = [Math]::Round($Vol.Size / 1GB, 2)
-            $Free  = [Math]::Round($Vol.SizeRemaining / 1GB, 2)
-            $Used  = [Math]::Round($Total - $Free, 2)
-            
-            if ($Total -gt 0) {
-                $PctFree = [Math]::Round(($Free / $Total) * 100, 1)
-                $PctUsed = [Math]::Round(100 - $PctFree, 1)
-            } else { $PctFree=0; $PctUsed=0 }
-            
-            $Stat = "OK"
-        } else {
-            # Phân vùng hệ thống / Recovery / Hidden
-            $Lab = $Type
-            $FS = "-"
             $Total = [Math]::Round($P.Size / 1GB, 2)
-            $Used = "-"; $Free = "-"; $PctUsed = "-"; $PctFree = "-"
-            $Stat = "System/Hidden"
+            
+            if ($LogDisk) {
+                $Let = $LogDisk.DeviceID
+                $Lab = $LogDisk.VolumeName
+                $FS  = $LogDisk.FileSystem
+                $Free = [Math]::Round($LogDisk.FreeSpace / 1GB, 2)
+                $Used = [Math]::Round($Total - $Free, 2)
+                $P_Fr = if($Total -gt 0){[Math]::Round(($Free/$Total)*100,0)}else{0}
+                $P_Us = 100 - $P_Fr
+                $Stat = "OK"
+            } else {
+                $Let = ""; $Lab = "Partition #$($P.Index)"; $FS = "RAW/Hidden"
+                $Used="-"; $Free="-"; $P_Us="-"; $P_Fr="-"; $Stat = "System"
+            }
+            
+            $Idx = $GridPart.Rows.Add($Let, $Lab, $FS, "$Total GB", "$Used GB", "$P_Us %", "$Free GB", "$P_Fr %", $Stat)
+            # Legacy Tag (Simple Data)
+            $GridPart.Rows[$Idx].Tag = @{ Did=$DiskIndex; Pid=$P.Index; Let=$Let; Lab=$Lab }
         }
-        
-        # Add to Grid
-        $Idx = $GridPart.Rows.Add($Let, $Lab, $FS, $Total, $Used, $Free, "$PctUsed%", "$PctFree%", $Stat)
-        
-        # Tạo Object tùy chỉnh để lưu vào Tag phục vụ cho các nút Tool
-        $PartInfo = @{
-            DiskId = $DiskObj.Number
-            PartId = $P.PartitionNumber
-            Letter = if($P.DriveLetter){"$($P.DriveLetter)"}else{$null}
-            Label  = $Lab
-            Obj    = $P # Lưu object gốc để thao tác
-        }
-        $GridPart.Rows[$Idx].Tag = $PartInfo
     }
 }
 
-# Sự kiện Click chọn Disk -> Load Partition
-$GridDisk.Add_CellClick({
-    if ($GridDisk.SelectedRows.Count -gt 0) {
-        Load-Partitions $GridDisk.SelectedRows[0].Tag
-    }
-})
+# Events
+$GridDisk.Add_CellClick({ if ($GridDisk.SelectedRows.Count -gt 0) { Load-Partitions $GridDisk.SelectedRows[0].Cells[0].Value } })
+$GridPart.Add_CellClick({ if ($GridPart.SelectedRows.Count -gt 0) { $Global:SelectedPart = $GridPart.SelectedRows[0].Tag } })
 
-# Sự kiện Click chọn Partition
-$GridPart.Add_CellClick({
-    if ($GridPart.SelectedRows.Count -gt 0) {
-        $Global:SelectedPart = $GridPart.SelectedRows[0].Tag
-    }
-})
-
-# --- ACTION HANDLERS ---
+# --- TOOL LOGIC ---
 function Run-DP ($Cmd) {
     $F = "$env:TEMP\dp.txt"; [IO.File]::WriteAllText($F, $Cmd)
     Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
@@ -241,49 +253,32 @@ function Run-DP ($Cmd) {
 
 function Run-Action ($Act) {
     if ($Act -eq "Refresh") { Load-Disks; return }
-    
     $P = $Global:SelectedPart
-    if (!$P) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn 1 Phân Vùng ở bảng dưới!", "Chưa chọn"); return }
+    if (!$P) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn phân vùng bảng dưới!", "Lỗi"); return }
+    $Did = $P.Did; $Let = $P.Let; $PartIdx = $P.Pid # WMI Index khác Diskpart ID đôi chút, nhưng thường khớp
+
+    # Cần map Partition Index WMI sang ID Diskpart (Thường là +1 hoặc dùng select partition)
+    # Để an toàn, dùng select disk -> select partition index (diskpart hỗ trợ select partition <index>)
     
-    $Did = $P.DiskId; $Pid = $P.PartId; $Let = $P.Letter
+    # Fix ID cho Diskpart: WMI Index thường bắt đầu từ 0, Diskpart Partition bắt đầu từ 1.
+    # Nhưng select partition <n> trong diskpart dùng index hoặc id. 
+    # Cách tốt nhất: Select Disk -> Select Partition (Index + 1)
+    
+    # Tuy nhiên, Engine Modern (Get-Partition) trả về PartitionNumber chuẩn.
+    # Engine Legacy trả về Index. Ta sẽ thử Index + 1 cho Legacy.
+    $DpPartID = if ($Global:EngineMode -eq "Legacy") { $PartIdx + 1 } else { $PartIdx }
 
     switch ($Act) {
-        "Letter" {
-            $New = [Microsoft.VisualBasic.Interaction]::InputBox("Nhập ký tự mới (VD: Z):", "Đổi Ký Tự", "")
-            if ($New) { 
-                # Dùng Native PowerShell thay vì Diskpart cho nhanh
-                try { Set-Partition -DiskNumber $Did -PartitionNumber $Pid -NewDriveLetter $New; Load-Disks } 
-                catch { [System.Windows.Forms.MessageBox]::Show("Lỗi: $($_.Exception.Message)", "Error") }
-            }
-        }
-        "Label" {
-            $New = [Microsoft.VisualBasic.Interaction]::InputBox("Nhập tên ổ mới:", "Đổi Tên", $P.Label)
-            if ($New) {
-                try { Set-Volume -DriveLetter $Let -NewFileSystemLabel $New; Load-Disks }
-                catch { [System.Windows.Forms.MessageBox]::Show("Lỗi (Có thể ổ chưa có ký tự?): $($_.Exception.Message)", "Error") }
-            }
-        }
-        "Format" {
-            if ([System.Windows.Forms.MessageBox]::Show("FORMAT Ổ $Let (Disk $Did Part $Pid)?`nDữ liệu sẽ mất hết!", "CẢNH BÁO", "YesNo", "Warning") -eq "Yes") {
-                Run-DP "sel disk $Did`nsel part $Pid`nformat fs=ntfs quick"
-            }
-        }
-        "Delete" {
-            if ([System.Windows.Forms.MessageBox]::Show("XÓA PHÂN VÙNG $Pid?`n(Disk $Did)", "NGUY HIỂM", "YesNo", "Error") -eq "Yes") {
-                Run-DP "sel disk $Did`nsel part $Pid`ndelete partition override"
-            }
-        }
-        "Active" { Run-DP "sel disk $Did`nsel part $Pid`nactive" }
-        "ChkDsk" {
-            if ($Let) { Start-Process "cmd" "/k chkdsk $Let`: /f /x" } 
-            else { [System.Windows.Forms.MessageBox]::Show("Phân vùng này không có Ký tự ổ!", "Lỗi") }
-        }
-        "Convert" {
-            if ([System.Windows.Forms.MessageBox]::Show("Chuyển đổi Disk $Did sang GPT/MBR?`nYêu cầu Disk phải Trống (Clean)!", "Hỏi", "YesNo") -eq "Yes") {
-                if ($Global:SelectedDisk.PartitionStyle -eq "MBR") { Run-DP "sel disk $Did`nclean`nconvert gpt" }
-                else { Run-DP "sel disk $Did`nclean`nconvert mbr" }
-            }
-        }
+        "Format" { if([System.Windows.Forms.MessageBox]::Show("FORMAT $Let? Mất dữ liệu!","Cảnh báo","YesNo")-eq"Yes"){ Run-DP "sel disk $Did`nsel part $DpPartID`nformat fs=ntfs quick" } }
+        "Delete" { if([System.Windows.Forms.MessageBox]::Show("XÓA PARTITION?","Nguy hiểm","YesNo")-eq"Yes"){ Run-DP "sel disk $Did`nsel part $DpPartID`ndelete partition override" } }
+        "Active" { Run-DP "sel disk $Did`nsel part $DpPartID`nactive" }
+        "Label"  { $N=[Microsoft.VisualBasic.Interaction]::InputBox("Tên mới:","Rename",$P.Lab); if($N){ 
+            if($Let){ cmd /c "label $Let $N" } else { [System.Windows.Forms.MessageBox]::Show("Ổ chưa có ký tự!","Lỗi") }
+            Load-Disks
+        }}
+        "Letter" { $N=[Microsoft.VisualBasic.Interaction]::InputBox("Ký tự mới (VD: Z):","Assign",""); if($N){ Run-DP "sel disk $Did`nsel part $DpPartID`nassign letter=$N" } }
+        "ChkDsk" { if($Let){Start-Process "cmd" "/c chkdsk $Let /f /x"} }
+        "Convert"{ if([System.Windows.Forms.MessageBox]::Show("Convert Disk $Did? (Cần Clean)","Hỏi","YesNo")-eq"Yes"){ Run-DP "sel disk $Did`nclean`nconvert gpt" } }
     }
 }
 
