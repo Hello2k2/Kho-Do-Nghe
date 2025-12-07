@@ -1,6 +1,6 @@
 <#
     DISK MANAGER PRO - PHAT TAN PC
-    Version: 3.0 (Modern Dashboard UI + Hybrid Engine)
+    Version: 3.1 (VM Fix: Force WMI if Modern API returns Empty)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -23,12 +23,11 @@ $Theme = @{
     Red       = [System.Drawing.Color]::FromArgb(231, 76, 60)
     Green     = [System.Drawing.Color]::FromArgb(46, 204, 113)
     Orange    = [System.Drawing.Color]::FromArgb(243, 156, 18)
-    Border    = [System.Drawing.Color]::FromArgb(80, 80, 80)
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V3.0 - PHAT TAN PC"
+$Form.Text = "DISK MANAGER PRO V3.1 (VM FIXED)"
 $Form.Size = New-Object System.Drawing.Size(1100, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
@@ -38,9 +37,9 @@ $Form.MaximizeBox = $false
 
 # Header
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "DISK MASTER"; $LblT.Font = "Impact, 24"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Hybrid Engine: Modern API & WMI Fallback"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,55"; $Form.Controls.Add($LblS)
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Mode: Auto-Detect (VM Compatible)"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "25,55"; $Form.Controls.Add($LblS)
 
-# --- 1. DATA GRID (CHIẾM PHẦN TRÊN) ---
+# --- 1. DATA GRID ---
 $Grid = New-Object System.Windows.Forms.DataGridView
 $Grid.Location = "20, 90"; $Grid.Size = "1045, 350"
 $Grid.BackgroundColor = $Theme.Card
@@ -70,7 +69,7 @@ $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns["Size"].FillWeight = 1
 $Grid.Columns.Add("Free", "Còn Trống"); $Grid.Columns["Free"].FillWeight = 15
 $Form.Controls.Add($Grid)
 
-# --- 2. CONTROL CENTER (CHIẾM PHẦN DƯỚI) ---
+# --- 2. CONTROL CENTER ---
 $TabControl = New-Object System.Windows.Forms.TabControl
 $TabControl.Location = "20, 460"; $TabControl.Size = "1045, 230"
 $TabControl.Font = "Segoe UI, 10"
@@ -92,37 +91,70 @@ function Add-CmdBtn ($Parent, $Txt, $Icon, $Col, $X, $Y, $Tag) {
     $Parent.Controls.Add($B)
 }
 
-# > TAB 1: THAO TÁC CƠ BẢN
 $Tab1 = Add-Tab "QUẢN LÝ PHÂN VÙNG"
 Add-CmdBtn $Tab1 "LÀM MỚI (REFRESH)" "♻️" $Theme.Accent 20 20 "Refresh"
 Add-CmdBtn $Tab1 "FORMAT (ĐỊNH DẠNG)" "🧹" $Theme.Orange 260 20 "Format"
 Add-CmdBtn $Tab1 "ĐỔI TÊN / KÝ TỰ" "🏷️" $Theme.Accent 500 20 "Label"
 Add-CmdBtn $Tab1 "XÓA PHÂN VÙNG" "❌" $Theme.Red 740 20 "Delete"
-
 Add-CmdBtn $Tab1 "TẠO Ổ MỚI" "➕" $Theme.Green 20 90 "Create"
 Add-CmdBtn $Tab1 "SET ACTIVE (BOOT)" "⚡" $Theme.Orange 260 90 "Active"
 Add-CmdBtn $Tab1 "HIDE / UNHIDE" "👁️" $Theme.Accent 500 90 "Hide"
 
-# > TAB 2: CÔNG CỤ HỆ THỐNG
 $Tab2 = Add-Tab "CÔNG CỤ & CỨU HỘ"
 Add-CmdBtn $Tab2 "FIX LỖI Ổ (CHKDSK)" "🚑" $Theme.Green 20 20 "ChkDsk"
 Add-CmdBtn $Tab2 "NẠP LẠI BOOT (BCD)" "🛠️" $Theme.Orange 260 20 "FixBoot"
 Add-CmdBtn $Tab2 "TỐI ƯU (TRIM/DEFRAG)" "🚀" $Theme.Accent 500 20 "Trim"
 Add-CmdBtn $Tab2 "DISKPART CONSOLE" "💻" "White" 740 20 "DiskPart"
-
 Add-CmdBtn $Tab2 "CONVERT MBR <-> GPT" "🔄" $Theme.Orange 20 90 "ConvStyle"
 Add-CmdBtn $Tab2 "WIPE DISK (HỦY DIỆT)" "💣" $Theme.Red 260 90 "Wipe"
 
-# --- CORE LOGIC (HYBRID ENGINE) ---
+# --- CORE LOGIC (HYBRID ENGINE - VM FIXED) ---
+function Load-Legacy {
+    Log " >> Chạy chế độ Legacy (WMI)..."
+    try {
+        # Quét ổ vật lý trước (Win32_DiskDrive)
+        $PhyDisks = Get-WmiObject Win32_DiskDrive
+        foreach ($D in $PhyDisks) {
+            $SizeGB = [Math]::Round($D.Size / 1GB, 1)
+            # Header Disk
+            $H = $Grid.Rows.Add("💿", "Disk $($D.Index)", "", "$($D.Model)", "MBR/GPT", "$SizeGB GB", "-")
+            $Grid.Rows[$H].DefaultCellStyle.BackColor = "DimGray"; $Grid.Rows[$H].DefaultCellStyle.ForeColor = "White"
+            $Grid.Rows[$H].Tag = @{Type="Disk"; ID=$D.Index}
+
+            # Quét Partition thuộc ổ này
+            $Parts = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($D.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
+            
+            foreach ($P in $Parts) {
+                # Map Partition -> LogicalDisk (Để lấy ký tự ổ)
+                $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition" | Select-Object -First 1
+                
+                $Let = if($LogDisk){"[$($LogDisk.DeviceID)]"}else{""}
+                $Lab = if($LogDisk){$LogDisk.VolumeName}else{"Partition"}
+                $FS = if($LogDisk){$LogDisk.FileSystem}else{"RAW"}
+                $S = [Math]::Round($P.Size/1GB, 2)
+                $F = if($LogDisk){[Math]::Round($LogDisk.FreeSpace/1GB, 2)}else{"-"}
+
+                $R = $Grid.Rows.Add("", "", $P.Index, "$Let $Lab", $FS, "$S GB", "$F GB")
+                $Grid.Rows[$R].Tag = @{Type="Part"; D=$D.Index; P=$P.Index; L=$LogDisk.DeviceID.Trim(":")}
+            }
+        }
+    } catch { 
+        [System.Windows.Forms.MessageBox]::Show("Lỗi quét ổ cứng (WMI): $($_.Exception.Message)", "Error") 
+    }
+}
+
 function Load-Data {
     $Grid.Rows.Clear()
     $Form.Cursor = "WaitCursor"
     
-    # 1. THU DUNG MODERN API (GET-DISK)
+    # 1. THỬ MODERN API (GET-DISK)
     try {
         $Disks = Get-Disk -ErrorAction Stop | Sort-Object Number
+        
+        # QUAN TRỌNG: Nếu Get-Disk chạy nhưng trả về 0 ổ (Lỗi thường gặp ở VM) -> Ép chạy Legacy
+        if ($Disks.Count -eq 0) { throw "No disk found (VM Issue)" }
+
         foreach ($D in $Disks) {
-            # Header Disk
             $SizeGB = [Math]::Round($D.Size / 1GB, 1)
             $H = $Grid.Rows.Add("💿", "Disk $($D.Number)", "", "$($D.FriendlyName) ($($D.PartitionStyle))", "ONLINE", "$SizeGB GB", "-")
             $Grid.Rows[$H].DefaultCellStyle.BackColor = "DimGray"; $Grid.Rows[$H].DefaultCellStyle.ForeColor = "White"
@@ -141,32 +173,15 @@ function Load-Data {
                 $Grid.Rows[$R].Tag = @{Type="Part"; D=$D.Number; P=$P.PartitionNumber; L=$P.DriveLetter}
             }
         }
-        $Form.Cursor = "Default"; return
     } catch {
         # 2. FAIL -> CHUYEN SANG WMI LEGACY
+        Load-Legacy
     }
-
-    # LEGACY MODE
-    try {
-        $Parts = Get-WmiObject Win32_DiskPartition
-        foreach ($P in $Parts) {
-            $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition" | Select-Object -First 1
-            $Let = if($LogDisk){"[$($LogDisk.DeviceID)]"}else{""}
-            $Lab = if($LogDisk){$LogDisk.VolumeName}else{"Partition"}
-            $FS = if($LogDisk){$LogDisk.FileSystem}else{"RAW"}
-            $S = [Math]::Round($P.Size/1GB, 2)
-            
-            $R = $Grid.Rows.Add("💾", $P.DiskIndex, $P.Index, "$Let $Lab", $FS, "$S GB", "-")
-            $Grid.Rows[$R].Tag = @{Type="Part"; D=$P.DiskIndex; P=$P.Index; L=$LogDisk.DeviceID.Trim(":")}
-        }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Khong doc duoc thong tin dia!", "Loi") }
     $Form.Cursor = "Default"
 }
 
 # --- ACTIONS ---
-function Run-DP ($Cmd) {
-    $F="$env:TEMP\d.txt"; [IO.File]::WriteAllText($F,$Cmd); Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow; Remove-Item $F; Load-Data
-}
+function Run-DP ($Cmd) { $F="$env:TEMP\d.txt"; [IO.File]::WriteAllText($F,$Cmd); Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow; Remove-Item $F; Load-Data }
 
 function Run-Action ($Act) {
     if ($Act -eq "Refresh") { Load-Data; return }
@@ -175,38 +190,20 @@ function Run-Action ($Act) {
     if ($Grid.SelectedRows.Count -eq 0) { return }
     $T = $Grid.SelectedRows[0].Tag
     if ($T.Type -ne "Part" -and $Act -ne "Wipe" -and $Act -ne "ConvStyle") { return }
-
     $D=$T.D; $P=$T.P; $L=$T.L
 
     switch ($Act) {
-        "Format" { 
-            if([System.Windows.Forms.MessageBox]::Show("FORMAT P$P DISK $D? MAT HET DU LIEU!","CANH BAO","YesNo")-eq"Yes"){
-                Run-DP "sel disk $D`nsel part $P`nformat fs=ntfs quick"
-            }
-        }
-        "Delete" {
-            if([System.Windows.Forms.MessageBox]::Show("XOA BO PARTITION $P?","CANH BAO","YesNo")-eq"Yes"){
-                Run-DP "sel disk $D`nsel part $P`ndelete partition override"
-            }
-        }
+        "Format" { if([System.Windows.Forms.MessageBox]::Show("FORMAT P$P DISK $D? MAT HET DU LIEU!","CANH BAO","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`nformat fs=ntfs quick" } }
+        "Delete" { if([System.Windows.Forms.MessageBox]::Show("XOA BO PARTITION $P?","CANH BAO","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nsel part $P`ndelete partition override" } }
         "Active" { Run-DP "sel disk $D`nsel part $P`nactive" }
         "Hide"   { Run-DP "sel disk $D`nsel part $P`nremove" }
-        "Label"  {
-            $New=[Microsoft.VisualBasic.Interaction]::InputBox("Nhap ten moi:", "Rename", ""); if($New){cmd /c "label $L`: $New"; Load-Data}
-        }
+        "Label"  { $New=[Microsoft.VisualBasic.Interaction]::InputBox("Nhap ten moi:", "Rename", ""); if($New){cmd /c "label $L`: $New"; Load-Data} }
         "ChkDsk" { if($L){Start-Process "cmd" "/c start cmd /k chkdsk $L`: /f /x"} }
         "FixBoot" { Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause" }
         "Trim"   { if($L){Start-Process "defrag" "/C /O $L`: /U /V" -NoNewWindow -Wait} }
-        "Wipe"   { 
-            if([System.Windows.Forms.MessageBox]::Show("XOA TRANG DISK $D (CLEAN ALL)?","NGUY HIEM","YesNo","Error")-eq"Yes"){
-                Run-DP "sel disk $D`nclean"
-            }
-        }
-        "ConvStyle" {
-             if([System.Windows.Forms.MessageBox]::Show("Convert MBR/GPT? (Mat du lieu neu khong backup)","Hoi","YesNo")-eq"Yes"){
-                Run-DP "sel disk $D`nclean`nconvert gpt"
-             }
-        }
+        "Wipe"   { if([System.Windows.Forms.MessageBox]::Show("XOA TRANG DISK $D (CLEAN ALL)?","NGUY HIEM","YesNo","Error")-eq"Yes"){ Run-DP "sel disk $D`nclean" } }
+        "ConvStyle" { if([System.Windows.Forms.MessageBox]::Show("Convert MBR/GPT? (Mat du lieu neu khong backup)","Hoi","YesNo")-eq"Yes"){ Run-DP "sel disk $D`nclean`nconvert gpt" } }
+        "Create" { [System.Windows.Forms.MessageBox]::Show("Vui long dung DiskPart Console de tao moi.", "Info") }
     }
 }
 
