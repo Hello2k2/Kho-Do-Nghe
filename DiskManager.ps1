@@ -1,7 +1,7 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V10.0 CYBER CORE)
-    Style: Gradient Neon + Custom Drawn Controls (Giao diện vẽ tay)
-    Engine: WMI Stable (Full Actions)
+    DISK MANAGER PRO - PHAT TAN PC (V11.0 FINAL BOSS)
+    Engine: WMI Stable + Smart Indexing (Fix lỗi chọn nhầm phân vùng)
+    GUI: Cyberpunk Gradient + Custom Sub-Forms (Cửa sổ con xịn xò)
 #>
 
 # --- 1. ADMIN CHECK ---
@@ -13,266 +13,314 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME CONFIG (CYBERPUNK GRADIENTS) ---
-$T = @{
-    BgForm      = [System.Drawing.Color]::FromArgb(15, 15, 20)
-    BgPanel     = [System.Drawing.Color]::FromArgb(25, 25, 30)
-    TextMain    = [System.Drawing.Color]::White
-    TextMuted   = [System.Drawing.Color]::FromArgb(150, 150, 150)
-    
-    # Gradient Colors (Start -> End)
-    GradBtn1    = [System.Drawing.Color]::FromArgb(0, 120, 215) # Blue
-    GradBtn2    = [System.Drawing.Color]::FromArgb(0, 200, 255) # Cyan
-    
-    GradDanger1 = [System.Drawing.Color]::FromArgb(200, 0, 0)   # Red Dark
-    GradDanger2 = [System.Drawing.Color]::FromArgb(255, 80, 80) # Red Light
-    
-    NeonBorder  = [System.Drawing.Color]::FromArgb(0, 255, 200) # Cyan Neon
+# --- THEME ENGINE (CYBERPUNK / LIGHT NEON) ---
+$Themes = @{
+    Dark = @{
+        FormBg      = [System.Drawing.Color]::FromArgb(18, 18, 24)
+        PanelBg     = [System.Drawing.Color]::FromArgb(30, 30, 35)
+        TextMain    = [System.Drawing.Color]::White
+        TextDim     = [System.Drawing.Color]::Silver
+        Accent      = [System.Drawing.Color]::FromArgb(0, 255, 200) # Cyan Neon
+        Grad1       = [System.Drawing.Color]::FromArgb(30, 30, 40)
+        Grad2       = [System.Drawing.Color]::FromArgb(15, 15, 20)
+        BtnText     = [System.Drawing.Color]::White
+        GridBg      = [System.Drawing.Color]::FromArgb(25, 25, 28)
+        GridText    = [System.Drawing.Color]::White
+    }
+    Light = @{
+        FormBg      = [System.Drawing.Color]::WhiteSmoke
+        PanelBg     = [System.Drawing.Color]::White
+        TextMain    = [System.Drawing.Color]::Black
+        TextDim     = [System.Drawing.Color]::DimGray
+        Accent      = [System.Drawing.Color]::FromArgb(0, 120, 215) # Blue Metro
+        Grad1       = [System.Drawing.Color]::White
+        Grad2       = [System.Drawing.Color]::FromArgb(230, 230, 240)
+        BtnText     = [System.Drawing.Color]::Black
+        GridBg      = [System.Drawing.Color]::White
+        GridText    = [System.Drawing.Color]::Black
+    }
 }
 
+$Global:IsDark = $true
 $Global:SelectedDisk = $null
 $Global:SelectedPart = $null
-$Global:Hue = 0
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V10.0 - CYBER CORE"
-$Form.Size = New-Object System.Drawing.Size(1150, 780)
+$Form.Text = "DISK MANAGER PRO V11.0 - PHAT TAN PC"
+$Form.Size = New-Object System.Drawing.Size(1200, 800)
 $Form.StartPosition = "CenterScreen"
-$Form.BackColor = $T.BgForm
-$Form.ForeColor = $T.TextMain
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 # -- FONTS --
-$F_Logo = New-Object System.Drawing.Font("Impact", 22)
-$F_Head = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$F_Logo = New-Object System.Drawing.Font("Impact", 20)
+$F_Bold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 9)
-$F_Btn  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 
-# ==================== CUSTOM PAINTING (VẼ GIAO DIỆN) ====================
+# ==================== CUSTOM PAINTING HELPER ====================
+function Get-Theme { return if ($Global:IsDark) { $Themes.Dark } else { $Themes.Light } }
 
-# 1. Hàm vẽ Gradient Background cho Panel
-$PaintGradient = {
+$PaintGrad = {
     param($s, $e)
-    $Rect = $s.ClientRectangle
-    $Brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($Rect, [System.Drawing.Color]::FromArgb(40,40,45), [System.Drawing.Color]::FromArgb(20,20,25), 90)
-    $e.Graphics.FillRectangle($Brush, $Rect)
-    
-    # Vẽ viền Neon mỏng
-    $Pen = New-Object System.Drawing.Pen($T.NeonBorder, 1)
+    $T = Get-Theme
+    $Br = New-Object System.Drawing.Drawing2D.LinearGradientBrush($s.ClientRectangle, $T.Grad1, $T.Grad2, 90)
+    $e.Graphics.FillRectangle($Br, $s.ClientRectangle)
+    $Pen = New-Object System.Drawing.Pen($T.Accent, 1)
     $e.Graphics.DrawRectangle($Pen, 0, 0, $s.Width-1, $s.Height-1)
-    $Brush.Dispose(); $Pen.Dispose()
+    $Br.Dispose(); $Pen.Dispose()
 }
 
-# 2. Custom Button Class (Giả lập nút bấm xịn)
-function Add-CyberBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $IsDanger=$false) {
-    $Btn = New-Object System.Windows.Forms.Label # Dùng Label để vẽ custom dễ hơn Button
-    $Btn.Text = "$Icon  $Txt"
-    $Btn.Tag = $Tag
-    $Btn.Location = "$X, $Y"; $Btn.Size = "$W, 40"
-    $Btn.Font = $F_Btn; $Btn.TextAlign = "MiddleCenter"
-    $Btn.ForeColor = $T.TextMain
-    $Btn.Cursor = "Hand"
-    
-    # Lưu màu vào Tag để dùng khi vẽ
-    $Btn.Tag = @{ Act=$Tag; Hover=$false; Danger=$IsDanger }
-
-    $Btn.Add_MouseEnter({ $this.Tag.Hover=$true; $this.Invalidate() })
-    $Btn.Add_MouseLeave({ $this.Tag.Hover=$false; $this.Invalidate() })
-    $Btn.Add_Click({ Run-Action $this.Tag.Act })
-    
-    $Btn.Add_Paint({
-        param($s, $e)
-        $R = $s.ClientRectangle
-        
-        # Chọn màu Gradient
-        $C1 = if($s.Tag.Danger){$T.GradDanger1}else{$T.GradBtn1}
-        $C2 = if($s.Tag.Danger){$T.GradDanger2}else{$T.GradBtn2}
-        
-        # Nếu Hover thì sáng hơn
-        if($s.Tag.Hover){ 
-            $C1 = [System.Windows.Forms.ControlPaint]::Light($C1)
-            $C2 = [System.Windows.Forms.ControlPaint]::Light($C2)
-        } else {
-            # Mặc định thì mờ đi chút (Glass effect)
-            $C1 = [System.Drawing.Color]::FromArgb(50, $C1)
-            $C2 = [System.Drawing.Color]::FromArgb(50, $C2)
-        }
-
-        $Br = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $C1, $C2, 45)
-        $e.Graphics.FillRectangle($Br, $R)
-        
-        # Viền nút
-        $Pen = New-Object System.Drawing.Pen($C2, 1)
-        $e.Graphics.DrawRectangle($Pen, 0, 0, $s.Width-1, $s.Height-1)
-        
-        # Text (Vẽ lại text để căn giữa chuẩn)
-        $Sf = New-Object System.Drawing.StringFormat; $Sf.Alignment="Center"; $Sf.LineAlignment="Center"
-        $e.Graphics.DrawString($s.Text, $s.Font, [System.Drawing.Brushes]::White, $R, $Sf)
-        
-        $Br.Dispose(); $Pen.Dispose()
-    })
-    
-    $Parent.Controls.Add($Btn)
-}
-
-# ==================== HEADER (RGB LOGO) ====================
-$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=70; $PnlHead.BackColor=[System.Drawing.Color]::Transparent
+# --- HEADER ---
+$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=60; $PnlHead.BackColor=[System.Drawing.Color]::Transparent
 $Form.Controls.Add($PnlHead)
 
 $LblLogo = New-Object System.Windows.Forms.Label
-$LblLogo.Text = "DISK MANAGER V10 - CYBER CORE"
-$LblLogo.Font = $F_Logo; $LblLogo.AutoSize = $true; $LblLogo.Location = "20, 15"
+$LblLogo.Text = "CYBER DISK MANAGER"; $LblLogo.Font = $F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="15,10"
 $PnlHead.Controls.Add($LblLogo)
 
-# ==================== MAIN GRIDS ====================
-# 1. DISK GRID PANEL
-$PnlGrid = New-Object System.Windows.Forms.Panel
-$PnlGrid.Location = "20, 80"; $PnlGrid.Size = "1095, 220"
-$PnlGrid.Add_Paint($PaintGradient) # Áp dụng nền Gradient
-$Form.Controls.Add($PnlGrid)
+$BtnMode = New-Object System.Windows.Forms.Button
+$BtnMode.Text = "☀ / 🌙 ĐỔI MÀU"; $BtnMode.Size="120,35"; $BtnMode.Location="1050,12"; $BtnMode.FlatStyle="Flat"
+$BtnMode.Cursor="Hand"; $BtnMode.Click += { Switch-Theme }
+$PnlHead.Controls.Add($BtnMode)
 
-$LblG1 = New-Object System.Windows.Forms.Label; $LblG1.Text="DANH SÁCH Ổ CỨNG VẬT LÝ"; $LblG1.Location="15,10"; $LblG1.AutoSize=$true; $LblG1.ForeColor=$T.TextMuted; $LblG1.BackColor=[System.Drawing.Color]::Transparent
-$PnlGrid.Controls.Add($LblG1)
+# --- LAYOUT PANELS ---
+$PnlDisk = New-Object System.Windows.Forms.Panel; $PnlDisk.Location="15,70"; $PnlDisk.Size="1155,200"; $PnlDisk.Add_Paint($PaintGrad)
+$Form.Controls.Add($PnlDisk)
 
-$GridD = New-Object System.Windows.Forms.DataGridView
-$GridD.Location="15,35"; $GridD.Size="1065,170"; $GridD.BorderStyle="None"; $GridD.BackgroundColor=[System.Drawing.Color]::FromArgb(30,30,35)
-$GridD.AllowUserToAddRows=$false; $GridD.RowHeadersVisible=$false; $GridD.SelectionMode="FullRowSelect"; $GridD.MultiSelect=$false; $GridD.ReadOnly=$true; $GridD.AutoSizeColumnsMode="Fill"
-$GridD.EnableHeadersVisualStyles=$false
-$GridD.ColumnHeadersDefaultCellStyle.BackColor=[System.Drawing.Color]::FromArgb(50,50,60); $GridD.ColumnHeadersDefaultCellStyle.ForeColor=[System.Drawing.Color]::White
-$GridD.DefaultCellStyle.BackColor=[System.Drawing.Color]::FromArgb(35,35,40); $GridD.DefaultCellStyle.ForeColor=[System.Drawing.Color]::White; $GridD.DefaultCellStyle.SelectionBackColor=[System.Drawing.Color]::FromArgb(0,100,180)
-$GridD.Columns.Add("ID","Disk #"); $GridD.Columns[0].Width=60
-$GridD.Columns.Add("Mod","Model"); $GridD.Columns[1].FillWeight=150
-$GridD.Columns.Add("Size","Dung Lượng"); $GridD.Columns[2].Width=120
-$GridD.Columns.Add("Type","Loại"); $GridD.Columns[3].Width=80
-$GridD.Columns.Add("Stat","Trạng Thái"); $GridD.Columns[4].Width=100
-$PnlGrid.Controls.Add($GridD)
-
-# 2. PARTITION GRID PANEL
-$PnlPart = New-Object System.Windows.Forms.Panel
-$PnlPart.Location = "20, 315"; $PnlPart.Size = "1095, 200"
-$PnlPart.Add_Paint($PaintGradient)
+$PnlPart = New-Object System.Windows.Forms.Panel; $PnlPart.Location="15,285"; $PnlPart.Size="1155,200"; $PnlPart.Add_Paint($PaintGrad)
 $Form.Controls.Add($PnlPart)
 
-$LblG2 = New-Object System.Windows.Forms.Label; $LblG2.Text="CHI TIẾT PHÂN VÙNG"; $LblG2.Location="15,10"; $LblG2.AutoSize=$true; $LblG2.ForeColor=$T.TextMuted; $LblG2.BackColor=[System.Drawing.Color]::Transparent
-$PnlPart.Controls.Add($LblG2)
-
-$GridP = New-Object System.Windows.Forms.DataGridView
-$GridP.Location="15,35"; $GridP.Size="1065,150"; $GridP.BorderStyle="None"; $GridP.BackgroundColor=[System.Drawing.Color]::FromArgb(30,30,35)
-$GridP.AllowUserToAddRows=$false; $GridP.RowHeadersVisible=$false; $GridP.SelectionMode="FullRowSelect"; $GridP.MultiSelect=$false; $GridP.ReadOnly=$true; $GridP.AutoSizeColumnsMode="Fill"
-$GridP.EnableHeadersVisualStyles=$false
-$GridP.ColumnHeadersDefaultCellStyle.BackColor=[System.Drawing.Color]::FromArgb(50,50,60); $GridP.ColumnHeadersDefaultCellStyle.ForeColor=[System.Drawing.Color]::White
-$GridP.DefaultCellStyle.BackColor=[System.Drawing.Color]::FromArgb(35,35,40); $GridP.DefaultCellStyle.ForeColor=[System.Drawing.Color]::White; $GridP.DefaultCellStyle.SelectionBackColor=[System.Drawing.Color]::FromArgb(0,100,180)
-$GridP.Columns.Add("Let","Ký Tự"); $GridP.Columns[0].Width=60
-$GridP.Columns.Add("Lab","Label"); $GridP.Columns[1].FillWeight=150
-$GridP.Columns.Add("FS","FS"); $GridP.Columns[2].Width=80
-$GridP.Columns.Add("Tot","Tổng"); $GridP.Columns[3].Width=100
-$GridP.Columns.Add("Fre","Còn Lại"); $GridP.Columns[4].Width=100
-$GridP.Columns.Add("Sta","Trạng Thái"); $GridP.Columns[5].Width=100
-$PnlPart.Controls.Add($GridP)
-
-# ==================== INFO & TOOLS PANEL ====================
-$PnlTool = New-Object System.Windows.Forms.Panel
-$PnlTool.Location = "20, 530"; $PnlTool.Size = "1095, 200"
-$PnlTool.Add_Paint($PaintGradient)
+$PnlTool = New-Object System.Windows.Forms.Panel; $PnlTool.Location="15,500"; $PnlTool.Size="1155,240"; $PnlTool.Add_Paint($PaintGrad)
 $Form.Controls.Add($PnlTool)
 
-# Info Label
-$LblInfo = New-Object System.Windows.Forms.Label
-$LblInfo.Text = "Đang chọn: [Chưa chọn]"; $LblInfo.Font = $F_Head; $LblInfo.ForeColor = $T.NeonBorder
-$LblInfo.AutoSize = $true; $LblInfo.Location = "15, 15"; $LblInfo.BackColor=[System.Drawing.Color]::Transparent
-$PnlTool.Controls.Add($LblInfo)
+# --- GRIDS ---
+function Make-Grid ($Parent, $Cols) {
+    $G = New-Object System.Windows.Forms.DataGridView
+    $G.Location="10,30"; $G.Size="$($Parent.Width-20),$($Parent.Height-40)"; $G.BorderStyle="None"
+    $G.AllowUserToAddRows=$false; $G.RowHeadersVisible=$false; $G.SelectionMode="FullRowSelect"
+    $G.MultiSelect=$false; $G.ReadOnly=$true; $G.AutoSizeColumnsMode="Fill"; $G.EnableHeadersVisualStyles=$false
+    foreach ($C in $Cols) { $G.Columns.Add($C[0], $C[1]) | Out-Null; $G.Columns[$G.Columns.Count-1].Width=$C[2] }
+    $Parent.Controls.Add($G); return $G
+}
 
-# Buttons Row 1
-Add-CyberBtn $PnlTool "LÀM MỚI" "♻️" 15 50 160 "Refresh"
-Add-CyberBtn $PnlTool "CHECK DISK" "🚑" 190 50 160 "ChkDsk"
-Add-CyberBtn $PnlTool "CONVERT GPT" "🔄" 365 50 160 "Convert"
-Add-CyberBtn $PnlTool "NẠP BOOT" "🛠️" 540 50 160 "FixBoot"
+$LblD = New-Object System.Windows.Forms.Label; $LblD.Text="1. DANH SÁCH Ổ CỨNG VẬT LÝ"; $LblD.Location="10,8"; $LblD.AutoSize=$true; $PnlDisk.Controls.Add($LblD)
+$GridD = Make-Grid $PnlDisk @(@("ID","Disk #",50), @("Mod","Tên Ổ Cứng",200), @("Size","Dung Lượng",100), @("Type","Loại",80), @("Stat","Trạng Thái",100))
 
-# Buttons Row 2
-Add-CyberBtn $PnlTool "ĐỔI KÝ TỰ" "🔠" 15 105 160 "Letter"
-Add-CyberBtn $PnlTool "ĐỔI TÊN" "🏷️" 190 105 160 "Label"
-Add-CyberBtn $PnlTool "SET ACTIVE" "⚡" 365 105 160 "Active"
+$LblP = New-Object System.Windows.Forms.Label; $LblP.Text="2. CHI TIẾT PHÂN VÙNG"; $LblP.Location="10,8"; $LblP.AutoSize=$true; $PnlPart.Controls.Add($LblP)
+$GridP = Make-Grid $PnlPart @(@("Let","Ký Tự",60), @("Lab","Tên Ổ (Label)",150), @("FS","Định Dạng",80), @("Tot","Tổng",80), @("Fre","Còn Lại",80), @("Sta","Trạng Thái",100))
 
-# Danger Zone
-Add-CyberBtn $PnlTool "FORMAT" "🧹" 750 50 160 "Format" $true
-Add-CyberBtn $PnlTool "DELETE" "❌" 920 50 160 "Delete" $true
+# --- CUSTOM ACTION BUTTONS ---
+function Add-Btn ($Txt, $Icon, $X, $Y, $Tag, $IsDanger=$false) {
+    $B = New-Object System.Windows.Forms.Button; $B.Text="$Icon  $Txt"; $B.Tag=$Tag
+    $B.Location="$X,$Y"; $B.Size="210,45"; $B.FlatStyle="Flat"; $B.FlatAppearance.BorderSize=0
+    $B.Font=$F_Bold; $B.TextAlign="MiddleLeft"; $B.Cursor="Hand"
+    
+    $P = New-Object System.Windows.Forms.Panel; $P.Width=5; $P.Dock="Left"; $B.Controls.Add($P)
+    
+    # Store Danger flag for painting
+    $B.Tag = @{Action=$Tag; Danger=$IsDanger}
+    
+    $B.Add_Click({ Show-Dialog $this.Tag.Action })
+    $PnlTool.Controls.Add($B); return $B
+}
 
-# ==================== RGB LOGIC ====================
-$Tmr = New-Object System.Windows.Forms.Timer; $Tmr.Interval=30
-$Tmr.Add_Tick({
-    $Global:Hue += 2; if($Global:Hue -gt 255){$Global:Hue=0}
-    $H=$Global:Hue; $R=0;$G=0;$B=0
-    if($H -lt 85){$R=$H*3;$G=255-$H*3} elseif($H -lt 170){$H-=85;$R=255-$H*3;$B=$H*3} else{$H-=170;$G=$H*3;$B=255-$H*3}
-    $LblLogo.ForeColor = [System.Drawing.Color]::FromArgb(255, $R, $G, $B)
-})
-$Tmr.Start()
+$L1=New-Object System.Windows.Forms.Label; $L1.Text="CÔNG CỤ CƠ BẢN"; $L1.Location="20,20"; $L1.AutoSize=$true; $PnlTool.Controls.Add($L1)
+Add-Btn "Làm Mới (Refresh)" "♻️" 20 50 "Refresh"
+Add-Btn "Đổi Tên (Label)" "🏷️" 20 105 "Label"
+Add-Btn "Đổi Ký Tự (Letter)" "🔠" 20 160 "Letter"
 
-# ==================== ENGINE (WMI) ====================
+$L2=New-Object System.Windows.Forms.Label; $L2.Text="HỆ THỐNG & BOOT"; $L2.Location="250,20"; $L2.AutoSize=$true; $PnlTool.Controls.Add($L2)
+Add-Btn "Set Active (Boot)" "⚡" 250 50 "Active"
+Add-Btn "Nạp Boot (BCD)" "🛠️" 250 105 "FixBoot"
+Add-Btn "Convert GPT/MBR" "🔄" 250 160 "Convert"
+
+$L3=New-Object System.Windows.Forms.Label; $L3.Text="SỬA LỖI & QUẢN LÝ"; $L3.Location="480,20"; $L3.AutoSize=$true; $PnlTool.Controls.Add($L3)
+Add-Btn "Check Disk (Sửa Lỗi)" "🚑" 480 50 "ChkDsk"
+Add-Btn "Thông Tin Chi Tiết" "ℹ️" 480 105 "Info"
+
+$L4=New-Object System.Windows.Forms.Label; $L4.Text="VÙNG NGUY HIỂM"; $L4.Location="750,20"; $L4.AutoSize=$true; $L4.ForeColor=[System.Drawing.Color]::Red; $PnlTool.Controls.Add($L4)
+Add-Btn "Format (Định Dạng)" "🧹" 750 50 "Format" $true
+Add-Btn "Xóa Phân Vùng" "❌" 750 105 "Delete" $true
+
+# ==================== THEME LOGIC ====================
+function Switch-Theme {
+    $Global:IsDark = -not $Global:IsDark
+    $T = Get-Theme
+    
+    $Form.BackColor = $T.FormBg; $Form.ForeColor = $T.TextMain
+    $BtnMode.BackColor = $T.PanelBg; $BtnMode.ForeColor = $T.TextMain
+    $LblLogo.ForeColor = $T.Accent
+    
+    foreach ($P in @($PnlDisk, $PnlPart, $PnlTool)) { $P.Invalidate() } # Redraw Gradients
+    
+    # Update Labels
+    foreach ($L in @($LblD, $LblP, $L1, $L2, $L3)) { $L.ForeColor = $T.TextDim }
+    
+    # Update Grids
+    foreach ($G in @($GridD, $GridP)) {
+        $G.BackgroundColor = $T.GridBg; $G.GridColor = $T.Accent
+        $G.DefaultCellStyle.BackColor = $T.GridBg; $G.DefaultCellStyle.ForeColor = $T.GridText
+        $G.ColumnHeadersDefaultCellStyle.BackColor = $T.PanelBg; $G.ColumnHeadersDefaultCellStyle.ForeColor = $T.TextMain
+    }
+    
+    # Update Buttons
+    foreach ($C in $PnlTool.Controls) {
+        if ($C -is [System.Windows.Forms.Button]) {
+            $C.BackColor = $T.PanelBg; $C.ForeColor = $T.BtnText
+            $ColorBar = if($C.Tag.Danger){[System.Drawing.Color]::Crimson}else{$T.Accent}
+            $C.Controls[0].BackColor = $ColorBar
+        }
+    }
+}
+
+# ==================== DIALOG SYSTEM (GUI CON) ====================
+function Create-SubForm ($Title, $H) {
+    $T = Get-Theme
+    $F = New-Object System.Windows.Forms.Form
+    $F.Text = $Title; $F.Size = New-Object System.Drawing.Size(450, $H)
+    $F.StartPosition = "CenterParent"; $F.FormBorderStyle = "FixedToolWindow"
+    $F.BackColor = $T.FormBg; $F.ForeColor = $T.TextMain
+    return $F
+}
+
+function Show-Dialog ($Action) {
+    if ($Action -eq "Refresh") { Load-Data; return }
+    if ($Action -eq "FixBoot") { Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause"; return }
+    
+    $P = $Global:SelectedPart
+    if (!$P) { [System.Windows.Forms.MessageBox]::Show("Bạn chưa chọn phân vùng ở bảng dưới!", "Chưa chọn đối tượng"); return }
+    
+    $Did = $P.Did; $Pid = $P.Pid; $Let = $P.Let; $Lab = $P.Lab
+    
+    # --- SUB-GUI: FORMAT ---
+    if ($Action -eq "Format") {
+        $F = Create-SubForm "ĐỊNH DẠNG Ổ ĐĨA ($Let)" 280
+        
+        $L1 = New-Object System.Windows.Forms.Label; $L1.Text="Tên ổ đĩa (Label):"; $L1.Location="20,20"; $L1.AutoSize=$true; $F.Controls.Add($L1)
+        $TxtLab = New-Object System.Windows.Forms.TextBox; $TxtLab.Text=$Lab; $TxtLab.Location="20,45"; $TxtLab.Size="380,25"; $F.Controls.Add($TxtLab)
+        
+        $L2 = New-Object System.Windows.Forms.Label; $L2.Text="Hệ thống tệp (File System):"; $L2.Location="20,80"; $L2.AutoSize=$true; $F.Controls.Add($L2)
+        $CbFs = New-Object System.Windows.Forms.ComboBox; $CbFs.Location="20,105"; $CbFs.Size="380,25"; $CbFs.DropDownStyle="DropDownList"
+        $CbFs.Items.AddRange(@("NTFS", "FAT32", "EXFAT")); $CbFs.SelectedIndex=0; $F.Controls.Add($CbFs)
+        
+        $BtnOk = New-Object System.Windows.Forms.Button; $BtnOk.Text="TIẾN HÀNH FORMAT"; $BtnOk.Location="20,160"; $BtnOk.Size="380,45"; $BtnOk.BackColor=[System.Drawing.Color]::Crimson; $BtnOk.ForeColor="White"; $BtnOk.FlatStyle="Flat"
+        $BtnOk.DialogResult = "OK"; $F.Controls.Add($BtnOk)
+        
+        if ($F.ShowDialog() -eq "OK") {
+            Run-DP "sel disk $Did`nsel part $Pid`nformat fs=$($CbFs.SelectedItem) label=`"$($TxtLab.Text)`" quick"
+        }
+    }
+    
+    # --- SUB-GUI: LABEL ---
+    if ($Action -eq "Label") {
+        $F = Create-SubForm "ĐỔI TÊN Ổ ĐĨA" 180
+        $L = New-Object System.Windows.Forms.Label; $L.Text="Nhập tên mới cho ổ $Let :"; $L.Location="20,20"; $L.AutoSize=$true; $F.Controls.Add($L)
+        $Txt = New-Object System.Windows.Forms.TextBox; $Txt.Text=$Lab; $Txt.Location="20,50"; $Txt.Size="380,25"; $F.Controls.Add($Txt)
+        $Btn = New-Object System.Windows.Forms.Button; $Btn.Text="XÁC NHẬN"; $Btn.Location="250,90"; $Btn.Size="150,35"; $Btn.BackColor=[System.Drawing.Color]::Orange; $Btn.DialogResult="OK"; $F.Controls.Add($Btn)
+        
+        if ($F.ShowDialog() -eq "OK") {
+            if ($Let) { cmd /c "label $Let $($Txt.Text)"; Load-Data } else { [System.Windows.Forms.MessageBox]::Show("Ổ cần ký tự để đổi tên bằng lệnh Label.","Lỗi") }
+        }
+    }
+    
+    # --- SUB-GUI: LETTER ---
+    if ($Action -eq "Letter") {
+        $F = Create-SubForm "ĐỔI KÝ TỰ Ổ ĐĨA" 180
+        $L = New-Object System.Windows.Forms.Label; $L.Text="Chọn ký tự mới cho Partition $Pid:"; $L.Location="20,20"; $L.AutoSize=$true; $F.Controls.Add($L)
+        $Cb = New-Object System.Windows.Forms.ComboBox; $Cb.Location="20,50"; $Cb.Size="380,25"; $Cb.DropDownStyle="DropDownList"
+        # Logic tìm ký tự trống
+        $Used = [IO.DriveInfo]::GetDrives().Name | ForEach { $_.Substring(0,1) }
+        65..90 | ForEach { $C=[char]$_; if ($Used -notcontains $C) { $Cb.Items.Add($C) | Out-Null } }
+        if($Cb.Items.Count -gt 0){$Cb.SelectedIndex=0}; $F.Controls.Add($Cb)
+        
+        $Btn = New-Object System.Windows.Forms.Button; $Btn.Text="THAY ĐỔI"; $Btn.Location="250,90"; $Btn.Size="150,35"; $Btn.BackColor=[System.Drawing.Color]::Teal; $Btn.DialogResult="OK"; $F.Controls.Add($Btn)
+        
+        if ($F.ShowDialog() -eq "OK") {
+            Run-DP "sel disk $Did`nsel part $Pid`nassign letter=$($Cb.SelectedItem)"
+        }
+    }
+    
+    # --- SIMPLE CONFIRMS ---
+    if ($Action -eq "Delete") {
+        if ([System.Windows.Forms.MessageBox]::Show("BẠN CHẮC CHẮN MUỐN XÓA PHÂN VÙNG $Pid TRÊN DISK $Did?`n`nDữ liệu sẽ mất vĩnh viễn!", "CẢNH BÁO NGUY HIỂM", "YesNo", "Error") -eq "Yes") {
+            Run-DP "sel disk $Did`nsel part $Pid`ndelete partition override"
+        }
+    }
+    
+    if ($Action -eq "Active") { Run-DP "sel disk $Did`nsel part $Pid`nactive" }
+    
+    if ($Action -eq "Convert") {
+        if ([System.Windows.Forms.MessageBox]::Show("Chuyển đổi Disk $Did sang GPT/MBR?`n(Lưu ý: Disk phải trống/Clean mới convert được)", "Xác nhận", "YesNo", "Question") -eq "Yes") {
+            Run-DP "sel disk $Did`nclean`nconvert gpt" # Mặc định sang GPT, cần logic check nếu muốn MBR
+        }
+    }
+    
+    if ($Action -eq "ChkDsk") {
+        if ($Let) { Start-Process "cmd" "/k chkdsk $Let /f /x" } else { [System.Windows.Forms.MessageBox]::Show("Phân vùng này không có ký tự ổ!", "Lỗi") }
+    }
+}
+
+# ==================== CORE ENGINE (WMI + SORTING FIX) ====================
 function Load-Data {
     $GridD.Rows.Clear(); $GridP.Rows.Clear(); $Global:SelectedPart = $null
-    $LblInfo.Text = "ĐANG TẢI DỮ LIỆU..."; $Form.Cursor="WaitCursor"; $Form.Refresh()
+    $Form.Cursor = "WaitCursor"; $Form.Refresh()
     
     try {
         $Disks = @(Get-WmiObject Win32_DiskDrive)
         foreach ($D in $Disks) {
-            $Parts = @(Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($D.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition" | Sort-Object Index)
-            foreach ($P in $Parts) {
-                $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
-                $Total = [Math]::Round($P.Size / 1GB, 2)
-                $DiskInfo = "Disk $($D.Index)"
-                
-                if ($LogDisk) {
-                    $Let=$LogDisk.DeviceID; $Lab=$LogDisk.VolumeName; $FS=$LogDisk.FileSystem
-                    $Free=[Math]::Round($LogDisk.FreeSpace/1GB, 2)
-                    $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", "$Free GB", "OK")
-                    $GridP.Rows[$Row].Tag = @{Did=$D.Index; Pid=($P.Index+1); Let=$Let; Lab=$Lab}
-                } else {
-                    $Row = $GridP.Rows.Add("", "[Hidden]", $P.Type, "$Total GB", "-", "System")
-                    $GridP.Rows[$Row].Tag = @{Did=$D.Index; Pid=($P.Index+1); Let=$null}
-                }
-            }
-            $RowD = $GridD.Rows.Add($D.Index, $D.Model, "$([Math]::Round($D.Size/1GB)) GB", "MBR/GPT", $D.Status)
+            # LOAD DISK
+            $GB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
+            $RowD = $GridD.Rows.Add($D.Index, $D.Model, $GB, "MBR/GPT", $D.Status)
             $GridD.Rows[$RowD].Tag = $D
         }
     } catch {}
-    $LblInfo.Text = "SẴN SÀNG"; $Form.Cursor="Default"
-}
-
-# Events
-$GridD.Add_CellClick({
-    if($GridD.SelectedRows.Count -gt 0){
-        # Logic lọc phân vùng theo ổ đĩa nếu muốn (Hiện tại show all cho dễ)
-    }
-})
-$GridP.Add_CellClick({
-    if($GridP.SelectedRows.Count -gt 0){
-        $D = $GridP.SelectedRows[0].Tag; $Global:SelectedPart = $D
-        $Name = if($D.Let){"Ổ $($D.Let)"}else{"PARTITION $($D.Pid)"}
-        $LblInfo.Text = "ĐANG CHỌN: $Name (Trên Disk $($D.Did))"
-    }
-})
-
-# Actions
-function Run-DP($C){ $F="$env:TEMP\d.txt";[IO.File]::WriteAllText($F,$C);Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow;Remove-Item $F;Load-Data }
-function Run-Action($A){
-    if($A -eq "Refresh"){Load-Data;return}
-    $P=$Global:SelectedPart; if(!$P){ [System.Windows.Forms.MessageBox]::Show("Chưa chọn phân vùng!","Lỗi");return }
-    $Did=$P.Did; $Pid=$P.Pid; $Let=$P.Let
     
-    switch($A){
-        "Format"{if([System.Windows.Forms.MessageBox]::Show("Format $Let?","Cảnh báo","YesNo")-eq"Yes"){Run-DP "sel disk $Did`nsel part $Pid`nformat fs=ntfs quick"}}
-        "Delete"{if([System.Windows.Forms.MessageBox]::Show("Xóa Part?","Cảnh báo","YesNo")-eq"Yes"){Run-DP "sel disk $Did`nsel part $Pid`ndelete partition override"}}
-        "Active"{Run-DP "sel disk $Did`nsel part $Pid`nactive"}
-        "Letter"{$N=[Microsoft.VisualBasic.Interaction]::InputBox("Ký tự mới:","Assign","");if($N){Run-DP "sel disk $Did`nsel part $Pid`nassign letter=$N"}}
-        "Label"{$N=[Microsoft.VisualBasic.Interaction]::InputBox("Tên mới:","Rename",$P.Lab);if($N){if($Let){cmd /c "label $Let $N";Load-Data}}}
-        "ChkDsk"{if($Let){Start-Process "cmd" "/k chkdsk $Let /f /x"}}
-        "Convert"{if([System.Windows.Forms.MessageBox]::Show("Convert Disk?","Hỏi","YesNo")-eq"Yes"){Run-DP "sel disk $Did`nclean`nconvert gpt"}}
-        "FixBoot"{Start-Process "cmd" "/c bcdboot C:\Windows /s C: /f ALL & pause"}
-    }
+    if ($GridD.Rows.Count -gt 0) { $GridD.Rows[0].Selected=$true; Load-Partitions $GridD.Rows[0].Tag }
+    $Form.Cursor = "Default"
 }
 
-# Init
+function Load-Partitions ($DiskObj) {
+    $GridP.Rows.Clear(); $Global:SelectedDisk = $DiskObj
+    
+    try {
+        # --- FIX LỖI SAI INDEX PHÂN VÙNG (QUAN TRỌNG) ---
+        # WMI Index không phải lúc nào cũng khớp Diskpart ID.
+        # Giải pháp: Lấy tất cả phân vùng, sắp xếp theo Offset (Vị trí vật lý), rồi đánh số lại từ 1.
+        $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($DiskObj.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
+        $Parts = @(Get-WmiObject -Query $Query | Sort-Object StartingOffset)
+        
+        $RealID = 1 # Diskpart ID bắt đầu từ 1
+        foreach ($P in $Parts) {
+            $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
+            $Total = [Math]::Round($P.Size / 1GB, 2)
+            
+            if ($LogDisk) {
+                $Let = $LogDisk.DeviceID; $Lab = $LogDisk.VolumeName; $FS = $LogDisk.FileSystem
+                $Free = [Math]::Round($LogDisk.FreeSpace / 1GB, 2)
+                $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", "$Free GB", "OK")
+            } else {
+                $Row = $GridP.Rows.Add("", "[Hidden/System]", "RAW", "$Total GB", "-", $P.Type)
+            }
+            
+            # Tag lưu ID Diskpart chính xác (RealID)
+            $GridP.Rows[$Row].Tag = @{ Did=$DiskObj.Index; Pid=$RealID; Let=$Let; Lab=$Lab }
+            $RealID++ 
+        }
+    } catch {}
+}
+
+# --- EVENTS & RUNNER ---
+$GridD.Add_SelectionChanged({ if($GridD.SelectedRows.Count -gt 0){ Load-Partitions $GridD.SelectedRows[0].Tag } })
+$GridP.Add_SelectionChanged({ if($GridP.SelectedRows.Count -gt 0){ $Global:SelectedPart = $GridP.SelectedRows[0].Tag } })
+
+function Run-DP ($Cmd) {
+    $F = "$env:TEMP\dp.txt"; [IO.File]::WriteAllText($F, $Cmd)
+    Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
+    Remove-Item $F; Load-Data
+}
+
+# --- INIT ---
+Switch-Theme # Load màu lần đầu
 $Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval=300; $Timer.Add_Tick({$Timer.Stop(); Load-Data}); $Timer.Start()
 $Form.ShowDialog() | Out-Null
