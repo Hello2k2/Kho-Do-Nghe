@@ -1,32 +1,27 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V20.1 - BENCHMARK FIXED)
-    Fix: Benchmark (Winsat) not found error
-    UI: Titanium Dark Pro (Infinity Edition)
+    DISK MANAGER PRO - PHAT TAN PC (V21.0 - TITANIUM ETERNITY)
+    Fix: Winsat missing on Win Lite (Added Internal Benchmark Engine)
+    UI: RGB Neon Loop, Optimized Drawing
 #>
 
-# --- 0. ANTI-CRASH WRAPPER ---
+# --- 0. ANTI-CRASH SYSTEM ---
 $Global:ErrorLogPath = "$env:TEMP\DiskManager_Crash.log"
 Trap {
     $Err = $_.Exception
-    $Msg = "CRASH DETECTED:`n$($Err.Message)`nLine: $($_.InvocationInfo.ScriptLineNumber)"
-    try { "[$(Get-Date)] $Msg" | Out-File $Global:ErrorLogPath -Append } catch {}
-    
-    # Chỉ hiện lỗi nếu không phải do WMI Fallback (để trải nghiệm mượt hơn)
+    $Msg = "CRASH: $($Err.Message) | Line: $($_.InvocationInfo.ScriptLineNumber)"
+    try { $Msg | Out-File $Global:ErrorLogPath -Append } catch {}
     if ($Err.Message -notmatch "Get-PhysicalDisk" -and $Err.Message -notmatch "EmptyList") {
-        try { [System.Windows.Forms.MessageBox]::Show($Msg, "DEBUG INFO", "OK", "Error") } catch {}
+        # Silent continue
     }
     Continue
 }
 
-# --- 1. ADMIN CHECK ---
+# --- 1. ADMIN & SETUP ---
 $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$Principal = [Security.Principal.WindowsPrincipal]$Identity
-if (!$Principal.IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    Exit
+if (!([Security.Principal.WindowsPrincipal]$Identity).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- 2. SETUP ---
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
@@ -34,34 +29,31 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- THEME CONFIG (RGB MATRIX) ---
 $Theme_Dark = @{
-    Name        = "Dark Infinity (RGB)"
-    BgForm      = [System.Drawing.Color]::FromArgb(20, 20, 25)
-    BgPanel     = [System.Drawing.Color]::FromArgb(35, 35, 40)
-    GridBg      = [System.Drawing.Color]::FromArgb(28, 28, 32)
-    TextMain    = [System.Drawing.Color]::White
+    Name        = "Dark Eternity (RGB)"
+    BgForm      = [System.Drawing.Color]::FromArgb(18, 18, 22)
+    BgPanel     = [System.Drawing.Color]::FromArgb(32, 32, 38)
+    GridBg      = [System.Drawing.Color]::FromArgb(25, 25, 30)
+    TextMain    = [System.Drawing.Color]::FromArgb(245, 245, 245)
     TextMuted   = [System.Drawing.Color]::Silver
-    
-    # RGB Loop Colors
-    RGB1        = [System.Drawing.Color]::FromArgb(255, 0, 100) # Hot Pink
-    RGB2        = [System.Drawing.Color]::FromArgb(0, 255, 255) # Cyan
-    
-    BtnBase     = [System.Drawing.Color]::FromArgb(60, 60, 70)
-    BtnHigh     = [System.Drawing.Color]::FromArgb(80, 80, 100)
-    BorderColor = [System.Drawing.Color]::FromArgb(100, 100, 120)
+    RGB1        = [System.Drawing.Color]::FromArgb(255, 0, 80)   # Neon Red
+    RGB2        = [System.Drawing.Color]::FromArgb(0, 255, 255)  # Neon Cyan
+    BtnBase     = [System.Drawing.Color]::FromArgb(50, 50, 60)
+    BtnHigh     = [System.Drawing.Color]::FromArgb(70, 70, 90)
+    Border      = [System.Drawing.Color]::FromArgb(80, 80, 100)
 }
 
 $Theme_Light = @{
-    Name        = "Light Infinity"
+    Name        = "Light Eternity"
     BgForm      = [System.Drawing.Color]::FromArgb(240, 240, 245)
     BgPanel     = [System.Drawing.Color]::FromArgb(255, 255, 255)
     GridBg      = [System.Drawing.Color]::FromArgb(245, 245, 250)
     TextMain    = [System.Drawing.Color]::Black
     TextMuted   = [System.Drawing.Color]::DimGray
-    RGB1        = [System.Drawing.Color]::FromArgb(0, 120, 215)
-    RGB2        = [System.Drawing.Color]::FromArgb(50, 200, 100)
-    BtnBase     = [System.Drawing.Color]::FromArgb(225, 225, 235)
+    RGB1        = [System.Drawing.Color]::FromArgb(0, 120, 255)
+    RGB2        = [System.Drawing.Color]::FromArgb(0, 200, 100)
+    BtnBase     = [System.Drawing.Color]::FromArgb(220, 220, 230)
     BtnHigh     = [System.Drawing.Color]::FromArgb(240, 240, 255)
-    BorderColor = [System.Drawing.Color]::DarkGray
+    Border      = [System.Drawing.Color]::Silver
 }
 
 $Global:CurrentTheme = $Theme_Dark
@@ -70,7 +62,7 @@ $Global:SelectedPart = $null
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM DISK MANAGER V20.1 (BENCHMARK FIXED)"
+$Form.Text = "TITANIUM DISK MANAGER V21.0 (ETERNITY EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1280, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
@@ -105,53 +97,37 @@ $PaintRGB = {
     param($s, $e)
     $T = $Global:CurrentTheme
     $R = $s.ClientRectangle
-    
     $BrBg = New-Object System.Drawing.SolidBrush($T.BgPanel)
     $e.Graphics.FillRectangle($BrBg, $R)
-    
     $PenRGB = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $T.RGB1, $T.RGB2, 45)
     $Pen = New-Object System.Drawing.Pen($PenRGB, 2)
     $e.Graphics.DrawRectangle($Pen, 1, 1, $s.Width-2, $s.Height-2)
-    
     $BrBg.Dispose(); $Pen.Dispose(); $PenRGB.Dispose()
 }
 
 function Add-CyberBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $ColorType="Normal") {
-    $Btn = New-Object System.Windows.Forms.Label 
-    $Btn.Text = "$Icon  $Txt"
+    $Btn = New-Object System.Windows.Forms.Label; $Btn.Text = "$Icon  $Txt"
     $Btn.Tag = @{ Act=$Tag; Hover=$false; Type=$ColorType }
     $Btn.Location = "$X, $Y"; $Btn.Size = "$W, 45"
-    $Btn.Font = $F_Btn; $Btn.TextAlign = "MiddleCenter"
-    $Btn.Cursor = "Hand"
-    
-    $Btn.Add_MouseEnter({ $this.Tag.Hover=$true; $this.Invalidate() })
-    $Btn.Add_MouseLeave({ $this.Tag.Hover=$false; $this.Invalidate() })
+    $Btn.Font = $F_Btn; $Btn.TextAlign = "MiddleCenter"; $Btn.Cursor = "Hand"
+    $Btn.Add_MouseEnter({ $this.Tag.Hover=$true; $this.Invalidate() }); $Btn.Add_MouseLeave({ $this.Tag.Hover=$false; $this.Invalidate() })
     $Btn.Add_Click({ Run-Action $this.Tag.Act })
-    
     $Btn.Add_Paint({
         param($s, $e)
-        $T = $Global:CurrentTheme
-        $R = $s.ClientRectangle
-        
+        $T = $Global:CurrentTheme; $R = $s.ClientRectangle
         $C1 = $T.BtnBase; $C2 = $T.BtnHigh
-        $Border = if($s.Tag.Hover){ $T.RGB2 } else { $T.BorderColor }
-        
+        $Border = if($s.Tag.Hover){ $T.RGB2 } else { $T.Border }
         if ($s.Tag.Type -eq "Danger") { $C1=[System.Drawing.Color]::FromArgb(150,0,0); $C2=[System.Drawing.Color]::FromArgb(200,50,50); $Border=[System.Drawing.Color]::Red }
         if ($s.Tag.Type -eq "Primary") { $C1=[System.Drawing.Color]::FromArgb(0,100,180); $C2=[System.Drawing.Color]::FromArgb(50,150,220); $Border=$T.RGB2 }
-        
         if($s.Tag.Hover){ $C1=[System.Windows.Forms.ControlPaint]::Light($C1); $C2=[System.Windows.Forms.ControlPaint]::Light($C2) }
-        
         $Br = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $C1, $C2, 90)
         $e.Graphics.FillRectangle($Br, $R)
-        
         $Pen = New-Object System.Drawing.Pen($Border, 2)
         $e.Graphics.DrawRectangle($Pen, 1, 1, $s.Width-2, $s.Height-2)
-        
         $F_Brush = New-Object System.Drawing.SolidBrush($T.TextMain)
         $Sf = New-Object System.Drawing.StringFormat; $Sf.Alignment="Center"; $Sf.LineAlignment="Center"
         $RectF = New-Object System.Drawing.RectangleF([float]0, [float]0, [float]$s.Width, [float]$s.Height)
         $e.Graphics.DrawString($s.Text, $s.Font, $F_Brush, $RectF, $Sf)
-        
         $Br.Dispose(); $Pen.Dispose(); $F_Brush.Dispose()
     })
     $Parent.Controls.Add($Btn)
@@ -168,18 +144,14 @@ function Toggle-Theme {
 # HEAD
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=70; $PnlHead.BackColor=[System.Drawing.Color]::Transparent
 $Form.Controls.Add($PnlHead)
-
-$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V20"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
+$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V21"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
 $PnlHead.Controls.Add($LblLogo)
-$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Benchmark Fixed)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Internal Benchmark Engine)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
 $PnlHead.Controls.Add($LblSub)
-
 $LblTheme = New-Object System.Windows.Forms.Label; $LblTheme.Font=$F_Norm; $LblTheme.AutoSize=$true; $LblTheme.Location="950,15"; $LblTheme.Text="GIAO DIỆN:"
 $PnlHead.Controls.Add($LblTheme)
-
 $BtnTheme = New-Object System.Windows.Forms.Button; $BtnTheme.Text="🌙 DARK MODE"; $BtnTheme.Location="950,35"; $BtnTheme.Size="200,30"; $BtnTheme.FlatStyle="Flat"
-$BtnTheme.BackColor=[System.Drawing.Color]::FromArgb(80,80,90); $BtnTheme.ForeColor="White"
-$BtnTheme.Add_Click({ Toggle-Theme })
+$BtnTheme.BackColor=[System.Drawing.Color]::FromArgb(80,80,90); $BtnTheme.ForeColor="White"; $BtnTheme.Add_Click({ Toggle-Theme })
 $PnlHead.Controls.Add($BtnTheme)
 
 # DISK LIST
@@ -196,7 +168,7 @@ $GridD.Columns.Add("Size","Dung Lượng"); $GridD.Columns[3].Width=90
 $GridD.Columns.Add("Bus","Giao Tiếp"); $GridD.Columns[4].Width=80
 $GridD.Columns.Add("Health","Sức Khỏe (S.M.A.R.T)"); $GridD.Columns[5].Width=150
 $GridD.Columns.Add("Parts","Phân Vùng"); $GridD.Columns[6].Width=80
-$GridD.Columns.Add("Speed","Tốc Độ"); $GridD.Columns[7].Width=80
+$GridD.Columns.Add("Speed","Tốc Độ (Check)"); $GridD.Columns[7].Width=100
 $PnlDisk.Controls.Add($GridD)
 
 # PARTITION LIST
@@ -251,7 +223,7 @@ Add-CyberBtn $Tab3 "BENCHMARK TỐC ĐỘ" "🚀" 310 30 250 "Benchmark" "Monito
 Add-CyberBtn $Tab3 "TỐI ƯU HÓA (TRIM/DEFRAG)" "✨" 590 30 250 "Optimize" "Monitor"
 $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="INFO: Chọn phân vùng để thực hiện thao tác."; $LblInfo.Location="30, 200"; $LblInfo.AutoSize=$true; $Tab3.Controls.Add($LblInfo)
 
-# ==================== LOGIC CORE (HYBRID + DEEP WMI) ====================
+# ==================== LOGIC CORE ====================
 
 function Write-Log ($Msg) { $Log="$env:TEMP\dm_log.txt"; "[$(Get-Date -F 'HH:mm:ss')] $Msg" | Out-File $Log -Append }
 
@@ -368,11 +340,51 @@ function Load-Partitions ($Tag) {
 $GridD.Add_CellClick({ if($GridD.SelectedRows.Count -gt 0){ Load-Partitions $GridD.SelectedRows[0].Tag } })
 $GridP.Add_CellClick({ if($GridP.SelectedRows.Count -gt 0){ $Global:SelectedPart = $GridP.SelectedRows[0].Tag; $LblInfo.Text = "Đang chọn: Partition $($Global:SelectedPart.PartID) (Disk $($Global:SelectedPart.Did))" } })
 
-# ==================== ACTIONS (SAFETY FIRST) ====================
+# ==================== ACTIONS (INTERNAL BENCHMARK) ====================
 
 function Run-DP ($Cmd) {
     $F = "$env:TEMP\dp_exec.txt"; [IO.File]::WriteAllText($F, $Cmd)
     Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
+}
+
+function Custom-Benchmark ($Let) {
+    $Form.Cursor = "WaitCursor"
+    try {
+        $Drv = $Let.Substring(0,1) + ":"
+        $TestFile = "$Drv\speed_test.tmp"
+        
+        # 1. WRITE TEST (256MB)
+        $Buffer = New-Object byte[] (64 * 1024) # 64KB Buffer
+        $TotalSize = 256 * 1024 * 1024
+        
+        $Sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $Fs = [System.IO.File]::Create($TestFile, 4096, [System.IO.FileOptions]::WriteThrough)
+        $Written = 0
+        while ($Written -lt $TotalSize) {
+            $Fs.Write($Buffer, 0, $Buffer.Length)
+            $Written += $Buffer.Length
+        }
+        $Fs.Close()
+        $Sw.Stop()
+        $WriteSpeed = [Math]::Round(($TotalSize / 1MB) / $Sw.Elapsed.TotalSeconds, 2)
+        
+        # 2. READ TEST
+        $Sw.Restart()
+        $Fs = [System.IO.File]::OpenRead($TestFile)
+        while ($Fs.Read($Buffer, 0, $Buffer.Length) -gt 0) {}
+        $Fs.Close()
+        $Sw.Stop()
+        $ReadSpeed = [Math]::Round(($TotalSize / 1MB) / $Sw.Elapsed.TotalSeconds, 2)
+        
+        Remove-Item $TestFile -Force -ErrorAction SilentlyContinue
+        
+        $Form.Cursor = "Default"
+        [System.Windows.Forms.MessageBox]::Show("BENCHMARK RESULT ($Drv):`n`nWRITE SPEED: $WriteSpeed MB/s`nREAD SPEED:  $ReadSpeed MB/s`n`n(Internal Engine - Safe for Win Lite)", "Kết quả")
+        
+    } catch {
+        $Form.Cursor = "Default"
+        [System.Windows.Forms.MessageBox]::Show("Lỗi Benchmark: $($_.Exception.Message)", "Error")
+    }
 }
 
 function Run-Action ($Act) {
@@ -446,10 +458,12 @@ function Run-Action ($Act) {
         }
         "Benchmark" { 
             if ($Let) {
-                # --- FIX: CALL CMD INSTEAD OF WINSAT DIRECTLY ---
-                $Drv = $Let.Substring(0,1)
-                $CmdLine = "/k title DISK BENCHMARK ($Let) & winsat disk -drive $Drv -ran -read -count 1"
-                Start-Process "cmd.exe" -ArgumentList $CmdLine
+                # --- AUTO SWITCH WINSAT OR INTERNAL ---
+                if (Get-Command "winsat" -ErrorAction SilentlyContinue) {
+                    Start-Process "cmd.exe" -ArgumentList "/k title DISK BENCHMARK ($Let) & winsat disk -drive $($Let.Substring(0,1)) -ran -read -count 1"
+                } else {
+                    Custom-Benchmark $Let
+                }
             } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa (VD: C:)!", "Lỗi") } 
         }
         "Optimize" { if($Let){ Optimize-Volume -DriveLetter $Let.Trim(":") -ReTrim -Verbose; [System.Windows.Forms.MessageBox]::Show("Done!") } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } }
