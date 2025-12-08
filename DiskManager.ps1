@@ -47,7 +47,7 @@ $Global:SelectedPart = $null
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM DISK MANAGER V15.0 (ULTIMATE EDITION)"
+$Form.Text = "TITANIUM DISK MANAGER V16.0 (ULTIMATE EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1280, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $T.BgForm
