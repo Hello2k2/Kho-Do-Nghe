@@ -1,6 +1,6 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V19.0 - INFINITY EDITION)
-    Fix: Missing Drive Letters, WMI Fallback Logic, Button Crash
+    DISK MANAGER PRO - PHAT TAN PC (V19.1 - STABLE FIXED)
+    Fix: Drive Letter Logic, Button Crash, WMI Switch
     UI: RGB Neon Loop, Optimized Drawing
 #>
 
@@ -11,7 +11,6 @@ Trap {
     $Msg = "CRASH DETECTED:`n$($Err.Message)`nLine: $($_.InvocationInfo.ScriptLineNumber)"
     try { "[$(Get-Date)] $Msg" | Out-File $Global:ErrorLogPath -Append } catch {}
     
-    # Chỉ hiện lỗi nếu không phải do WMI Fallback (để trải nghiệm mượt hơn)
     if ($Err.Message -notmatch "Get-PhysicalDisk" -and $Err.Message -notmatch "EmptyList") {
         try { [System.Windows.Forms.MessageBox]::Show($Msg, "DEBUG INFO", "OK", "Error") } catch {}
     }
@@ -32,7 +31,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME CONFIG (RGB MATRIX) ---
+# --- THEME CONFIG ---
 $Theme_Dark = @{
     Name        = "Dark Infinity (RGB)"
     BgForm      = [System.Drawing.Color]::FromArgb(20, 20, 25)
@@ -40,11 +39,8 @@ $Theme_Dark = @{
     GridBg      = [System.Drawing.Color]::FromArgb(28, 28, 32)
     TextMain    = [System.Drawing.Color]::White
     TextMuted   = [System.Drawing.Color]::Silver
-    
-    # RGB Loop Colors
-    RGB1        = [System.Drawing.Color]::FromArgb(255, 0, 100) # Hot Pink
-    RGB2        = [System.Drawing.Color]::FromArgb(0, 255, 255) # Cyan
-    
+    RGB1        = [System.Drawing.Color]::FromArgb(255, 0, 100) 
+    RGB2        = [System.Drawing.Color]::FromArgb(0, 255, 255)
     BtnBase     = [System.Drawing.Color]::FromArgb(60, 60, 70)
     BtnHigh     = [System.Drawing.Color]::FromArgb(80, 80, 100)
     BorderColor = [System.Drawing.Color]::FromArgb(100, 100, 120)
@@ -70,13 +66,12 @@ $Global:SelectedPart = $null
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM DISK MANAGER V19.0 (INFINITY EDITION)"
+$Form.Text = "TITANIUM DISK MANAGER V19.1 (STABLE)"
 $Form.Size = New-Object System.Drawing.Size(1280, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-# Fonts
 $F_Logo = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
 $F_Head = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -105,14 +100,11 @@ $PaintRGB = {
     param($s, $e)
     $T = $Global:CurrentTheme
     $R = $s.ClientRectangle
-    
     $BrBg = New-Object System.Drawing.SolidBrush($T.BgPanel)
     $e.Graphics.FillRectangle($BrBg, $R)
-    
     $PenRGB = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $T.RGB1, $T.RGB2, 45)
     $Pen = New-Object System.Drawing.Pen($PenRGB, 2)
     $e.Graphics.DrawRectangle($Pen, 1, 1, $s.Width-2, $s.Height-2)
-    
     $BrBg.Dispose(); $Pen.Dispose(); $PenRGB.Dispose()
 }
 
@@ -132,18 +124,15 @@ function Add-CyberBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $ColorType="Norma
         param($s, $e)
         $T = $Global:CurrentTheme
         $R = $s.ClientRectangle
-        
         $C1 = $T.BtnBase; $C2 = $T.BtnHigh
         $Border = if($s.Tag.Hover){ $T.RGB2 } else { $T.BorderColor }
         
         if ($s.Tag.Type -eq "Danger") { $C1=[System.Drawing.Color]::FromArgb(150,0,0); $C2=[System.Drawing.Color]::FromArgb(200,50,50); $Border=[System.Drawing.Color]::Red }
         if ($s.Tag.Type -eq "Primary") { $C1=[System.Drawing.Color]::FromArgb(0,100,180); $C2=[System.Drawing.Color]::FromArgb(50,150,220); $Border=$T.RGB2 }
-        
         if($s.Tag.Hover){ $C1=[System.Windows.Forms.ControlPaint]::Light($C1); $C2=[System.Windows.Forms.ControlPaint]::Light($C2) }
         
         $Br = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $C1, $C2, 90)
         $e.Graphics.FillRectangle($Br, $R)
-        
         $Pen = New-Object System.Drawing.Pen($Border, 2)
         $e.Graphics.DrawRectangle($Pen, 1, 1, $s.Width-2, $s.Height-2)
         
@@ -151,7 +140,6 @@ function Add-CyberBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $ColorType="Norma
         $Sf = New-Object System.Drawing.StringFormat; $Sf.Alignment="Center"; $Sf.LineAlignment="Center"
         $RectF = New-Object System.Drawing.RectangleF([float]0, [float]0, [float]$s.Width, [float]$s.Height)
         $e.Graphics.DrawString($s.Text, $s.Font, $F_Brush, $RectF, $Sf)
-        
         $Br.Dispose(); $Pen.Dispose(); $F_Brush.Dispose()
     })
     $Parent.Controls.Add($Btn)
@@ -171,7 +159,7 @@ $Form.Controls.Add($PnlHead)
 
 $LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V19"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
 $PnlHead.Controls.Add($LblLogo)
-$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Infinity Edition)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Stable Edition)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
 $PnlHead.Controls.Add($LblSub)
 
 $LblTheme = New-Object System.Windows.Forms.Label; $LblTheme.Font=$F_Norm; $LblTheme.AutoSize=$true; $LblTheme.Location="950,15"; $LblTheme.Text="GIAO DIỆN:"
@@ -264,6 +252,7 @@ function Load-Data {
     
     $Engine = "Modern (Get-PhysicalDisk)"
     
+    # 1. TRY MODERN API
     try {
         $PhyDisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Sort-Object DeviceId)
         
@@ -283,7 +272,7 @@ function Load-Data {
         }
         Write-Log "Modern API OK"
     } catch {
-        # WMI FALLBACK
+        # 2. WMI FALLBACK
         $Engine = "Legacy (WMI Fallback)"
         Write-Log "Switching to WMI..."
         try {
@@ -312,8 +301,8 @@ function Load-Partitions ($Tag) {
             
             # --- FIX: LOGIC LẤY LETTER CHẮC CHẮN HƠN ---
             $Let = ""
-            if ($P.DriveLetter -and $P.DriveLetter -ne 0) { $Let = "$($P.DriveLetter):" }
-            elseif ($Vol.DriveLetter -and $Vol.DriveLetter -ne 0) { $Let = "$($Vol.DriveLetter):" }
+            if ($P.DriveLetter -ne 0 -and $P.DriveLetter -ne $null) { $Let = "$([char]$P.DriveLetter):" }
+            elseif ($Vol.DriveLetter -ne 0 -and $Vol.DriveLetter -ne $null) { $Let = "$([char]$Vol.DriveLetter):" }
             
             $Lab = if($Vol){$Vol.FileSystemLabel}else{"[Hidden]"}
             $FS  = if($Vol){$Vol.FileSystem}else{$P.Type}
@@ -333,7 +322,6 @@ function Load-Partitions ($Tag) {
     } catch {
         # WMI Fallback
         try {
-            # Fix Query Syntax: Escape backslashes
             $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='\\.\PHYSICALDRIVE$Did'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
             $Parts = @(Get-WmiObject -Query $Query | Sort-Object StartingOffset)
             $RealID = 1
@@ -353,7 +341,7 @@ $GridP.Add_CellClick({ if($GridP.SelectedRows.Count -gt 0){ $Global:SelectedPart
 # ==================== ACTIONS ====================
 
 function Run-DP ($Cmd) {
-    $F = "$env:TEMP\dp_exec.txt"; [IO.File]::WriteAllText($F, $Cmd)
+    $F = "$env:TEMP\dp_debug.txt"; [IO.File]::WriteAllText($F, $Cmd)
     Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
 }
 
@@ -366,7 +354,7 @@ function Run-Action ($Act) {
     # --- DISK LEVEL ---
     if ($Act -eq "ConvertGPT") {
         if (!$D) { return }
-        if ([System.Windows.Forms.MessageBox]::Show("CONVERT DISK $($D.ID) SANG GPT?`nSẼ XÓA SẠCH DỮ LIỆU!", "WARNING", "YesNo", "Error") -eq "Yes") {
+        if ([System.Windows.Forms.MessageBox]::Show("CONVERT DISK $($D.ID) SANG GPT?`nDỮ LIỆU SẼ MẤT HẾT!", "WARNING", "YesNo", "Error") -eq "Yes") {
             Run-DP "sel disk $($D.ID)`nclean`nconvert gpt"; Load-Data
         }
         return
@@ -398,24 +386,24 @@ function Run-Action ($Act) {
             if ($Lab) { Run-DP "sel disk $Did`nsel part $PartID`nformat fs=ntfs label=`"$Lab`" quick" }
         }
         "Wipe" {
-            if ([System.Windows.Forms.MessageBox]::Show("WIPE DATA (XÓA TRẮNG)?", "DANGER", "YesNo", "Error") -eq "Yes") {
+            if ([System.Windows.Forms.MessageBox]::Show("WIPE DATA (XÓA TRẮNG)? KHONG THE KHOI PHUC!", "DANGER", "YesNo", "Error") -eq "Yes") {
                 if ($Let) { 
                     $Form.Cursor="WaitCursor"; Format-Volume -DriveLetter $Let.Trim(":") -FileSystem NTFS -Full -Force | Out-Null; $Form.Cursor="Default"
                     [System.Windows.Forms.MessageBox]::Show("Done!", "Info")
-                } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa (Letter).", "Info") }
+                } else { [System.Windows.Forms.MessageBox]::Show("Can ky tu o dia de Wipe.", "Info") }
             }
         }
         "Delete" {
-            if ([System.Windows.Forms.MessageBox]::Show("Xóa phân vùng $PartID?", "Confirm", "YesNo", "Warning") -eq "Yes") {
+            if ([System.Windows.Forms.MessageBox]::Show("Xoa phan vung $PartID?", "Confirm", "YesNo", "Warning") -eq "Yes") {
                 Run-DP "sel disk $Did`nsel part $PartID`ndelete partition override"; Load-Data
             }
         }
         "Label" {
-            $N=[Microsoft.VisualBasic.Interaction]::InputBox("Tên mới:", "Rename", $P.Lab)
+            $N=[Microsoft.VisualBasic.Interaction]::InputBox("Ten moi:", "Rename", $P.Lab)
             if ($N) { if($Let){ Set-Volume -DriveLetter $Let.Trim(":") -NewFileSystemLabel $N; Load-Data } }
         }
         "Letter" {
-            $L=[Microsoft.VisualBasic.Interaction]::InputBox("Ký tự mới (A-Z):", "Change Letter", "")
+            $L=[Microsoft.VisualBasic.Interaction]::InputBox("Ky tu moi (A-Z):", "Change Letter", "")
             if ($L) { Run-DP "sel disk $Did`nsel part $PartID`nassign letter=$L"; Load-Data }
         }
         "Active" { Run-DP "sel disk $Did`nsel part $PartID`nactive" }
