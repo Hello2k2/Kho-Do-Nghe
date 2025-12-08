@@ -1,63 +1,59 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V19.1 - STABLE FIXED)
-    Fix: Drive Letter Logic, Button Crash, WMI Switch
-    UI: RGB Neon Loop, Optimized Drawing
+    DISK MANAGER PRO - PHAT TAN PC (V20.0 - TITANIUM GOD MODE)
+    Fix: Deep WMI Fallback (Auto-fill missing info), Drive Letter Deep Scan
+    UI: Optimized RGB, Safety Checks for Action Buttons
 #>
 
-# --- 0. ANTI-CRASH WRAPPER ---
-$Global:ErrorLogPath = "$env:USERPROFILE\Desktop\DiskManager_Error.log"
+# --- 0. ANTI-CRASH SYSTEM ---
+$Global:ErrorLogPath = "$env:TEMP\DiskManager_Crash.log"
 Trap {
     $Err = $_.Exception
-    $Msg = "CRASH DETECTED:`n$($Err.Message)`nLine: $($_.InvocationInfo.ScriptLineNumber)"
-    try { "[$(Get-Date)] $Msg" | Out-File $Global:ErrorLogPath -Append } catch {}
-    
+    $Msg = "CRASH: $($Err.Message) | Line: $($_.InvocationInfo.ScriptLineNumber)"
+    try { $Msg | Out-File $Global:ErrorLogPath -Append } catch {}
     if ($Err.Message -notmatch "Get-PhysicalDisk" -and $Err.Message -notmatch "EmptyList") {
-        try { [System.Windows.Forms.MessageBox]::Show($Msg, "DEBUG INFO", "OK", "Error") } catch {}
+        # Silent continue for minor errors to keep UI alive
     }
     Continue
 }
 
-# --- 1. ADMIN CHECK ---
+# --- 1. ADMIN & SETUP ---
 $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$Principal = [Security.Principal.WindowsPrincipal]$Identity
-if (!$Principal.IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    Exit
+if (!([Security.Principal.WindowsPrincipal]$Identity).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- 2. SETUP ---
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME CONFIG ---
+# --- THEME CONFIG (RGB MATRIX) ---
 $Theme_Dark = @{
-    Name        = "Dark Infinity (RGB)"
-    BgForm      = [System.Drawing.Color]::FromArgb(20, 20, 25)
-    BgPanel     = [System.Drawing.Color]::FromArgb(35, 35, 40)
-    GridBg      = [System.Drawing.Color]::FromArgb(28, 28, 32)
-    TextMain    = [System.Drawing.Color]::White
+    Name        = "Dark God Mode (RGB)"
+    BgForm      = [System.Drawing.Color]::FromArgb(18, 18, 22)
+    BgPanel     = [System.Drawing.Color]::FromArgb(32, 32, 38)
+    GridBg      = [System.Drawing.Color]::FromArgb(25, 25, 30)
+    TextMain    = [System.Drawing.Color]::FromArgb(245, 245, 245)
     TextMuted   = [System.Drawing.Color]::Silver
-    RGB1        = [System.Drawing.Color]::FromArgb(255, 0, 100) 
-    RGB2        = [System.Drawing.Color]::FromArgb(0, 255, 255)
-    BtnBase     = [System.Drawing.Color]::FromArgb(60, 60, 70)
-    BtnHigh     = [System.Drawing.Color]::FromArgb(80, 80, 100)
-    BorderColor = [System.Drawing.Color]::FromArgb(100, 100, 120)
+    RGB1        = [System.Drawing.Color]::FromArgb(255, 0, 80)   # Neon Red
+    RGB2        = [System.Drawing.Color]::FromArgb(0, 255, 255)  # Neon Cyan
+    BtnBase     = [System.Drawing.Color]::FromArgb(50, 50, 60)
+    BtnHigh     = [System.Drawing.Color]::FromArgb(70, 70, 90)
+    Border      = [System.Drawing.Color]::FromArgb(80, 80, 100)
 }
 
 $Theme_Light = @{
-    Name        = "Light Infinity"
+    Name        = "Light God Mode"
     BgForm      = [System.Drawing.Color]::FromArgb(240, 240, 245)
     BgPanel     = [System.Drawing.Color]::FromArgb(255, 255, 255)
     GridBg      = [System.Drawing.Color]::FromArgb(245, 245, 250)
     TextMain    = [System.Drawing.Color]::Black
     TextMuted   = [System.Drawing.Color]::DimGray
-    RGB1        = [System.Drawing.Color]::FromArgb(0, 120, 215)
-    RGB2        = [System.Drawing.Color]::FromArgb(50, 200, 100)
-    BtnBase     = [System.Drawing.Color]::FromArgb(225, 225, 235)
+    RGB1        = [System.Drawing.Color]::FromArgb(0, 120, 255)
+    RGB2        = [System.Drawing.Color]::FromArgb(0, 200, 100)
+    BtnBase     = [System.Drawing.Color]::FromArgb(220, 220, 230)
     BtnHigh     = [System.Drawing.Color]::FromArgb(240, 240, 255)
-    BorderColor = [System.Drawing.Color]::DarkGray
+    Border      = [System.Drawing.Color]::Silver
 }
 
 $Global:CurrentTheme = $Theme_Dark
@@ -66,12 +62,13 @@ $Global:SelectedPart = $null
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM DISK MANAGER V19.1 (STABLE)"
+$Form.Text = "TITANIUM DISK MANAGER V20.0 (GOD MODE)"
 $Form.Size = New-Object System.Drawing.Size(1280, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
+# Fonts
 $F_Logo = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
 $F_Head = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -109,33 +106,24 @@ $PaintRGB = {
 }
 
 function Add-CyberBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $ColorType="Normal") {
-    $Btn = New-Object System.Windows.Forms.Label 
-    $Btn.Text = "$Icon  $Txt"
+    $Btn = New-Object System.Windows.Forms.Label; $Btn.Text = "$Icon  $Txt"
     $Btn.Tag = @{ Act=$Tag; Hover=$false; Type=$ColorType }
     $Btn.Location = "$X, $Y"; $Btn.Size = "$W, 45"
-    $Btn.Font = $F_Btn; $Btn.TextAlign = "MiddleCenter"
-    $Btn.Cursor = "Hand"
-    
-    $Btn.Add_MouseEnter({ $this.Tag.Hover=$true; $this.Invalidate() })
-    $Btn.Add_MouseLeave({ $this.Tag.Hover=$false; $this.Invalidate() })
+    $Btn.Font = $F_Btn; $Btn.TextAlign = "MiddleCenter"; $Btn.Cursor = "Hand"
+    $Btn.Add_MouseEnter({ $this.Tag.Hover=$true; $this.Invalidate() }); $Btn.Add_MouseLeave({ $this.Tag.Hover=$false; $this.Invalidate() })
     $Btn.Add_Click({ Run-Action $this.Tag.Act })
-    
     $Btn.Add_Paint({
         param($s, $e)
-        $T = $Global:CurrentTheme
-        $R = $s.ClientRectangle
+        $T = $Global:CurrentTheme; $R = $s.ClientRectangle
         $C1 = $T.BtnBase; $C2 = $T.BtnHigh
-        $Border = if($s.Tag.Hover){ $T.RGB2 } else { $T.BorderColor }
-        
+        $Border = if($s.Tag.Hover){ $T.RGB2 } else { $T.Border }
         if ($s.Tag.Type -eq "Danger") { $C1=[System.Drawing.Color]::FromArgb(150,0,0); $C2=[System.Drawing.Color]::FromArgb(200,50,50); $Border=[System.Drawing.Color]::Red }
         if ($s.Tag.Type -eq "Primary") { $C1=[System.Drawing.Color]::FromArgb(0,100,180); $C2=[System.Drawing.Color]::FromArgb(50,150,220); $Border=$T.RGB2 }
         if($s.Tag.Hover){ $C1=[System.Windows.Forms.ControlPaint]::Light($C1); $C2=[System.Windows.Forms.ControlPaint]::Light($C2) }
-        
         $Br = New-Object System.Drawing.Drawing2D.LinearGradientBrush($R, $C1, $C2, 90)
         $e.Graphics.FillRectangle($Br, $R)
         $Pen = New-Object System.Drawing.Pen($Border, 2)
         $e.Graphics.DrawRectangle($Pen, 1, 1, $s.Width-2, $s.Height-2)
-        
         $F_Brush = New-Object System.Drawing.SolidBrush($T.TextMain)
         $Sf = New-Object System.Drawing.StringFormat; $Sf.Alignment="Center"; $Sf.LineAlignment="Center"
         $RectF = New-Object System.Drawing.RectangleF([float]0, [float]0, [float]$s.Width, [float]$s.Height)
@@ -156,18 +144,14 @@ function Toggle-Theme {
 # HEAD
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=70; $PnlHead.BackColor=[System.Drawing.Color]::Transparent
 $Form.Controls.Add($PnlHead)
-
-$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V19"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
+$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V20"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
 $PnlHead.Controls.Add($LblLogo)
-$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Stable Edition)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (God Mode)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
 $PnlHead.Controls.Add($LblSub)
-
 $LblTheme = New-Object System.Windows.Forms.Label; $LblTheme.Font=$F_Norm; $LblTheme.AutoSize=$true; $LblTheme.Location="950,15"; $LblTheme.Text="GIAO DIỆN:"
 $PnlHead.Controls.Add($LblTheme)
-
 $BtnTheme = New-Object System.Windows.Forms.Button; $BtnTheme.Text="🌙 DARK MODE"; $BtnTheme.Location="950,35"; $BtnTheme.Size="200,30"; $BtnTheme.FlatStyle="Flat"
-$BtnTheme.BackColor=[System.Drawing.Color]::FromArgb(80,80,90); $BtnTheme.ForeColor="White"
-$BtnTheme.Add_Click({ Toggle-Theme })
+$BtnTheme.BackColor=[System.Drawing.Color]::FromArgb(80,80,90); $BtnTheme.ForeColor="White"; $BtnTheme.Add_Click({ Toggle-Theme })
 $PnlHead.Controls.Add($BtnTheme)
 
 # DISK LIST
@@ -178,13 +162,13 @@ $Lbl1 = New-Object System.Windows.Forms.Label; $Lbl1.Text="1. DANH SÁCH Ổ C�
 $GridD = New-Object System.Windows.Forms.DataGridView; $GridD.Location="15,40"; $GridD.Size="1195,145"; $GridD.BorderStyle="None"
 $GridD.AllowUserToAddRows=$false; $GridD.RowHeadersVisible=$false; $GridD.SelectionMode="FullRowSelect"; $GridD.MultiSelect=$false; $GridD.ReadOnly=$true; $GridD.AutoSizeColumnsMode="Fill"
 $GridD.Columns.Add("ID","Disk #"); $GridD.Columns[0].Width=50
-$GridD.Columns.Add("Mod","Model Name"); $GridD.Columns[1].FillWeight=150
+$GridD.Columns.Add("Mod","Tên Model"); $GridD.Columns[1].FillWeight=150
 $GridD.Columns.Add("Type","Loại"); $GridD.Columns[2].Width=80
 $GridD.Columns.Add("Size","Dung Lượng"); $GridD.Columns[3].Width=90
 $GridD.Columns.Add("Bus","Giao Tiếp"); $GridD.Columns[4].Width=80
-$GridD.Columns.Add("Health","Sức Khỏe / S.M.A.R.T"); $GridD.Columns[5].Width=150
+$GridD.Columns.Add("Health","Sức Khỏe (S.M.A.R.T)"); $GridD.Columns[5].Width=150
 $GridD.Columns.Add("Parts","Phân Vùng"); $GridD.Columns[6].Width=80
-$GridD.Columns.Add("Speed","Tốc Độ"); $GridD.Columns[7].Width=80
+$GridD.Columns.Add("Speed","Tốc Độ (Check)"); $GridD.Columns[7].Width=100
 $PnlDisk.Controls.Add($GridD)
 
 # PARTITION LIST
@@ -194,21 +178,20 @@ $L2 = New-Object System.Windows.Forms.Label; $L2.Text="2. CHI TIẾT PHÂN VÙNG
 
 $GridP = New-Object System.Windows.Forms.DataGridView; $GridP.Location="15,40"; $GridP.Size="1195,145"; $GridP.BorderStyle="None"
 $GridP.AllowUserToAddRows=$false; $GridP.RowHeadersVisible=$false; $GridP.SelectionMode="FullRowSelect"; $GridP.MultiSelect=$false; $GridP.ReadOnly=$true; $GridP.AutoSizeColumnsMode="Fill"
-$GridP.Columns.Add("Let","Ký Tự"); $GridP.Columns[0].Width=50
+$GridP.Columns.Add("Let","Ký Tự"); $GridP.Columns[0].Width=60
 $GridP.Columns.Add("Lab","Nhãn (Label)"); $GridP.Columns[1].FillWeight=100
 $GridP.Columns.Add("FS","Hệ Thống"); $GridP.Columns[2].Width=70
-$GridP.Columns.Add("Tot","Tổng"); $GridP.Columns[3].Width=80
+$GridP.Columns.Add("Tot","Tổng (GB)"); $GridP.Columns[3].Width=80
 $GridP.Columns.Add("Used","Đã Dùng"); $GridP.Columns[4].Width=80
 $GridP.Columns.Add("Free","Còn Trống"); $GridP.Columns[5].Width=80
 $GridP.Columns.Add("PUse","%"); $GridP.Columns[6].Width=60
-$GridP.Columns.Add("Type","Loại"); $GridP.Columns[7].Width=100
+$GridP.Columns.Add("Type","Kiểu"); $GridP.Columns[7].Width=100
 $GridP.Columns.Add("Stat","Trạng Thái"); $GridP.Columns[8].Width=80
 $PnlPart.Controls.Add($GridP)
 
 # ACTIONS
 $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="20,500"; $TabControl.Size="1225,300"; $TabControl.Font=$F_Head
 $Form.Controls.Add($TabControl)
-
 function Add-Page ($Title) { $p=New-Object System.Windows.Forms.TabPage; $p.Text="  $Title  "; $TabControl.Controls.Add($p); return $p }
 
 # TAB 1
@@ -217,7 +200,6 @@ Add-CyberBtn $Tab1 "LÀM MỚI (REFRESH)" "♻️" 30 30 220 "Refresh" "Primary"
 Add-CyberBtn $Tab1 "ĐỔI TÊN (LABEL)" "🏷️" 280 30 220 "Label"
 Add-CyberBtn $Tab1 "ĐỔI KÝ TỰ (LETTER)" "🔠" 530 30 220 "Letter"
 Add-CyberBtn $Tab1 "CHECK DISK (CHKDSK)" "🚑" 780 30 220 "ChkDsk"
-
 Add-CyberBtn $Tab1 "FORMAT PHÂN VÙNG" "🧹" 30 100 220 "Format" "Danger"
 Add-CyberBtn $Tab1 "XÓA PHÂN VÙNG" "❌" 280 100 220 "Delete" "Danger"
 Add-CyberBtn $Tab1 "WIPE DATA (XÓA SẠCH)" "💀" 530 100 220 "Wipe" "Danger"
@@ -229,7 +211,6 @@ Add-CyberBtn $Tab2 "FIX BOOT (AUTO BCD)" "🛠️" 30 30 250 "FixBoot" "Rescue"
 Add-CyberBtn $Tab2 "HIỆN Ổ ẨN / EFI (MOUNT)" "🔓" 310 30 250 "MountEFI" "Rescue"
 Add-CyberBtn $Tab2 "GỠ WRITE PROTECT" "🖊️" 590 30 250 "RemoveRO" "Rescue"
 Add-CyberBtn $Tab2 "CHUYỂN GPT (CLEAN)" "🔄" 870 30 250 "ConvertGPT" "Danger"
-
 Add-CyberBtn $Tab2 "TEST BỀ MẶT (BAD SECTOR)" "🔍" 30 100 250 "Surface" "Monitor"
 Add-CyberBtn $Tab2 "TÁI TẠO MBR" "🧱" 310 100 250 "RebuildMBR" "Rescue"
 
@@ -238,10 +219,9 @@ $Tab3 = Add-Page "📊 GIÁM SÁT"
 Add-CyberBtn $Tab3 "CHI TIẾT S.M.A.R.T" "📋" 30 30 250 "SmartDetail" "Monitor"
 Add-CyberBtn $Tab3 "BENCHMARK TỐC ĐỘ" "🚀" 310 30 250 "Benchmark" "Monitor"
 Add-CyberBtn $Tab3 "TỐI ƯU HÓA (TRIM/DEFRAG)" "✨" 590 30 250 "Optimize" "Monitor"
-
 $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="INFO: Chọn phân vùng để thực hiện thao tác."; $LblInfo.Location="30, 200"; $LblInfo.AutoSize=$true; $Tab3.Controls.Add($LblInfo)
 
-# ==================== CORE LOGIC (FIXED) ====================
+# ==================== LOGIC CORE (HYBRID + DEEP WMI) ====================
 
 function Write-Log ($Msg) { $Log="$env:TEMP\dm_log.txt"; "[$(Get-Date -F 'HH:mm:ss')] $Msg" | Out-File $Log -Append }
 
@@ -250,13 +230,11 @@ function Load-Data {
     $Form.Cursor = "WaitCursor"; $Form.Refresh()
     Write-Log "Load-Data Start"
     
-    $Engine = "Modern (Get-PhysicalDisk)"
+    $UseWMI = $false
     
-    # 1. TRY MODERN API
+    # 1. TRY MODERN API FIRST
     try {
-        $PhyDisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Sort-Object DeviceId)
-        
-        # --- FIX: Ép sang WMI nếu danh sách đĩa = 0 ---
+        $PhyDisks = @(Get-PhysicalDisk -ErrorAction Stop | Sort-Object DeviceId)
         if ($PhyDisks.Count -eq 0) { throw "EmptyList" }
         
         foreach ($D in $PhyDisks) {
@@ -264,28 +242,38 @@ function Load-Data {
             $Type = if ($D.PartitionStyle -eq "Uninitialized") { "RAW" } else { $D.PartitionStyle }
             $PartCount = (Get-Partition -DiskNumber $D.DeviceId -ErrorAction SilentlyContinue).Count
             $Health = $D.HealthStatus.ToString()
-            $Speed = if ($D.MediaType -eq "HDD") { "HDD (Slow)" } elseif ($D.MediaType -eq "SSD") { "SSD (Fast)" } else { "Unknown" }
+            $Speed = if ($D.MediaType -eq "HDD") { "HDD" } elseif ($D.MediaType -eq "SSD") { "SSD" } else { "Unknown" }
             
             $Row = $GridD.Rows.Add($D.DeviceId, $D.FriendlyName, $Type, $GB, $D.BusType, $Health, $PartCount, $Speed)
             $GridD.Rows[$Row].Tag = @{ ID=$D.DeviceId; Mode="Modern" }
             if ($Health -ne "Healthy") { $GridD.Rows[$Row].DefaultCellStyle.ForeColor = [System.Drawing.Color]::Red }
         }
-        Write-Log "Modern API OK"
+        $Lbl1.Text = "1. DANH SÁCH Ổ CỨNG (Engine: Modern)"
     } catch {
-        # 2. WMI FALLBACK
-        $Engine = "Legacy (WMI Fallback)"
-        Write-Log "Switching to WMI..."
+        $UseWMI = $true
+    }
+    
+    # 2. WMI FALLBACK (DEEP FILL)
+    if ($UseWMI) {
+        Write-Log "Switching to WMI Deep Scan..."
+        $Lbl1.Text = "1. DANH SÁCH Ổ CỨNG (Engine: WMI Legacy)"
         try {
             $Disks = Get-WmiObject Win32_DiskDrive
             foreach ($D in $Disks) {
                 $GB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
-                $Row = $GridD.Rows.Add($D.Index, $D.Model, "Unknown", $GB, $D.InterfaceType, "Unknown (WMI)", $D.Partitions, "N/A")
+                # Infer GPT/MBR from Partitions (Approximate)
+                $Type = if ($D.Partitions -gt 4) { "GPT (Est)" } else { "MBR/GPT" } 
+                # Map Status to Health
+                $Health = if ($D.Status -eq "OK") { "Good (WMI)" } else { "Bad: $($D.Status)" }
+                # Speed guess based on Model (Simple check)
+                $Speed = if ($D.Model -match "SSD") { "SSD?" } else { "HDD?" }
+                
+                $Row = $GridD.Rows.Add($D.Index, $D.Model, $Type, $GB, $D.InterfaceType, $Health, $D.Partitions, $Speed)
                 $GridD.Rows[$Row].Tag = @{ ID=$D.Index; Mode="WMI" }
             }
         } catch { Write-Log "WMI Failed." }
     }
     
-    $Lbl1.Text = "1. DANH SÁCH Ổ CỨNG VẬT LÝ (Engine: $Engine)"
     if ($GridD.Rows.Count -gt 0) { $GridD.Rows[0].Selected = $true; Load-Partitions $GridD.Rows[0].Tag }
     $Form.Cursor = "Default"
 }
@@ -294,18 +282,20 @@ function Load-Partitions ($Tag) {
     Write-Log "Load-Partitions for Disk $($Tag.ID)"
     $GridP.Rows.Clear(); $Global:SelectedDisk = $Tag; $Did = $Tag.ID
     
+    $UseWMI = $false
+    # 1. MODERN PARTITION SCAN
     try {
         $Parts = Get-Partition -DiskNumber $Did -ErrorAction Stop | Sort-Object PartitionNumber
         foreach ($P in $Parts) {
             $Vol = $P | Get-Volume -ErrorAction SilentlyContinue
             
-            # --- FIX: LOGIC LẤY LETTER CHẮC CHẮN HƠN ---
+            # --- SUPER FIX: DRIVE LETTER ---
             $Let = ""
-            if ($P.DriveLetter -ne 0 -and $P.DriveLetter -ne $null) { $Let = "$([char]$P.DriveLetter):" }
-            elseif ($Vol.DriveLetter -ne 0 -and $Vol.DriveLetter -ne $null) { $Let = "$([char]$Vol.DriveLetter):" }
+            if ($P.DriveLetter -ne 0 -and $P.DriveLetter) { $Let = "$($P.DriveLetter):" }
+            elseif ($Vol.DriveLetter -ne 0 -and $Vol.DriveLetter) { $Let = "$($Vol.DriveLetter):" }
             
-            $Lab = if($Vol){$Vol.FileSystemLabel}else{"[Hidden]"}
-            $FS  = if($Vol){$Vol.FileSystem}else{$P.Type}
+            $Lab = if($Vol.FileSystemLabel){$Vol.FileSystemLabel}else{"[Hidden]"}
+            $FS  = if($Vol.FileSystem){$Vol.FileSystem}else{$P.Type}
             $Total = [Math]::Round($P.Size / 1GB, 2)
             
             $Used="-"; $Free="-"; $PUse="-"
@@ -319,16 +309,29 @@ function Load-Partitions ($Tag) {
             $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", "$Used GB", "$Free GB", $PUse, $P.GptType, "OK")
             $GridP.Rows[$Row].Tag = @{ Did=$Did; PartID=$P.PartitionNumber; Let=$Let; Lab=$Lab }
         }
-    } catch {
-        # WMI Fallback
+    } catch { $UseWMI = $true }
+    
+    # 2. WMI PARTITION FALLBACK (DEEP LETTER SCAN)
+    if ($UseWMI) {
         try {
             $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='\\.\PHYSICALDRIVE$Did'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
             $Parts = @(Get-WmiObject -Query $Query | Sort-Object StartingOffset)
             $RealID = 1
             foreach ($P in $Parts) {
+                $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
                 $Total = [Math]::Round($P.Size / 1GB, 2)
-                $Row = $GridP.Rows.Add("", "[WMI Part]", "RAW", "$Total GB", "-", "-", "-", $P.Type, "OK")
-                $GridP.Rows[$Row].Tag = @{ Did=$Did; PartID=$RealID; Let=$null; Lab="[WMI Part]" }
+                
+                $Let=""; $Lab="[Hidden]"; $FS="RAW"; $Used="-"; $Free="-"
+                if ($LogDisk) {
+                    $Let = $LogDisk.DeviceID # e.g. "C:"
+                    $Lab = $LogDisk.VolumeName
+                    $FS  = $LogDisk.FileSystem
+                    $Used = [Math]::Round(($LogDisk.Size - $LogDisk.FreeSpace) / 1GB, 2)
+                    $Free = [Math]::Round($LogDisk.FreeSpace / 1GB, 2)
+                }
+                
+                $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", $Used, $Free, "-", $P.Type, "WMI OK")
+                $GridP.Rows[$Row].Tag = @{ Did=$Did; PartID=$RealID; Let=$Let; Lab=$Lab }
                 $RealID++
             }
         } catch {}
@@ -338,10 +341,10 @@ function Load-Partitions ($Tag) {
 $GridD.Add_CellClick({ if($GridD.SelectedRows.Count -gt 0){ Load-Partitions $GridD.SelectedRows[0].Tag } })
 $GridP.Add_CellClick({ if($GridP.SelectedRows.Count -gt 0){ $Global:SelectedPart = $GridP.SelectedRows[0].Tag; $LblInfo.Text = "Đang chọn: Partition $($Global:SelectedPart.PartID) (Disk $($Global:SelectedPart.Did))" } })
 
-# ==================== ACTIONS ====================
+# ==================== ACTIONS (SAFETY FIRST) ====================
 
 function Run-DP ($Cmd) {
-    $F = "$env:TEMP\dp_debug.txt"; [IO.File]::WriteAllText($F, $Cmd)
+    $F = "$env:TEMP\dp_exec.txt"; [IO.File]::WriteAllText($F, $Cmd)
     Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
 }
 
@@ -354,7 +357,7 @@ function Run-Action ($Act) {
     # --- DISK LEVEL ---
     if ($Act -eq "ConvertGPT") {
         if (!$D) { return }
-        if ([System.Windows.Forms.MessageBox]::Show("CONVERT DISK $($D.ID) SANG GPT?`nDỮ LIỆU SẼ MẤT HẾT!", "WARNING", "YesNo", "Error") -eq "Yes") {
+        if ([System.Windows.Forms.MessageBox]::Show("CONVERT DISK $($D.ID) SANG GPT?`nSẼ XÓA SẠCH DỮ LIỆU!", "WARNING", "YesNo", "Error") -eq "Yes") {
             Run-DP "sel disk $($D.ID)`nclean`nconvert gpt"; Load-Data
         }
         return
@@ -378,44 +381,44 @@ function Run-Action ($Act) {
 
     # --- PARTITION LEVEL ---
     if (!$P) { [System.Windows.Forms.MessageBox]::Show("Chọn phân vùng trước!", "Lỗi"); return }
-    $Did = $P.Did; $PartID = $P.PartID; $Let = $P.Let
+    $Did = $P.Did; $TargetPartID = $P.PartID; $Let = $P.Let
 
     switch ($Act) {
         "Format" {
             $Lab = [Microsoft.VisualBasic.Interaction]::InputBox("Nhãn mới:", "Format", "NewVol")
-            if ($Lab) { Run-DP "sel disk $Did`nsel part $PartID`nformat fs=ntfs label=`"$Lab`" quick" }
+            if ($Lab) { Run-DP "sel disk $Did`nsel part $TargetPartID`nformat fs=ntfs label=`"$Lab`" quick" }
         }
         "Wipe" {
-            if ([System.Windows.Forms.MessageBox]::Show("WIPE DATA (XÓA TRẮNG)? KHONG THE KHOI PHUC!", "DANGER", "YesNo", "Error") -eq "Yes") {
+            if ([System.Windows.Forms.MessageBox]::Show("WIPE DATA (XÓA TRẮNG)?", "DANGER", "YesNo", "Error") -eq "Yes") {
                 if ($Let) { 
                     $Form.Cursor="WaitCursor"; Format-Volume -DriveLetter $Let.Trim(":") -FileSystem NTFS -Full -Force | Out-Null; $Form.Cursor="Default"
                     [System.Windows.Forms.MessageBox]::Show("Done!", "Info")
-                } else { [System.Windows.Forms.MessageBox]::Show("Can ky tu o dia de Wipe.", "Info") }
+                } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa (Letter).", "Info") }
             }
         }
         "Delete" {
-            if ([System.Windows.Forms.MessageBox]::Show("Xoa phan vung $PartID?", "Confirm", "YesNo", "Warning") -eq "Yes") {
-                Run-DP "sel disk $Did`nsel part $PartID`ndelete partition override"; Load-Data
+            if ([System.Windows.Forms.MessageBox]::Show("Xóa phân vùng $PartID?", "Confirm", "YesNo", "Warning") -eq "Yes") {
+                Run-DP "sel disk $Did`nsel part $TargetPartID`ndelete partition override"; Load-Data
             }
         }
         "Label" {
-            $N=[Microsoft.VisualBasic.Interaction]::InputBox("Ten moi:", "Rename", $P.Lab)
+            $N=[Microsoft.VisualBasic.Interaction]::InputBox("Tên mới:", "Rename", $P.Lab)
             if ($N) { if($Let){ Set-Volume -DriveLetter $Let.Trim(":") -NewFileSystemLabel $N; Load-Data } }
         }
         "Letter" {
-            $L=[Microsoft.VisualBasic.Interaction]::InputBox("Ky tu moi (A-Z):", "Change Letter", "")
-            if ($L) { Run-DP "sel disk $Did`nsel part $PartID`nassign letter=$L"; Load-Data }
+            $L=[Microsoft.VisualBasic.Interaction]::InputBox("Ký tự mới (A-Z):", "Change Letter", "")
+            if ($L) { Run-DP "sel disk $Did`nsel part $TargetPartID`nassign letter=$L"; Load-Data }
         }
-        "Active" { Run-DP "sel disk $Did`nsel part $PartID`nactive" }
-        "ChkDsk" { if($Let){ Start-Process "cmd" "/k chkdsk $Let /f /x" } }
-        "Surface" { if($Let){ Start-Process "cmd" "/k chkdsk $Let /r" } }
-        "FixBoot" { if($Let){ Start-Process "cmd" "/k bcdboot $Let\Windows /s $Let /f ALL" } }
+        "Active" { Run-DP "sel disk $Did`nsel part $TargetPartID`nactive" }
+        "ChkDsk" { if($Let){ Start-Process "cmd" "/k chkdsk $Let /f /x" } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } }
+        "Surface" { if($Let){ Start-Process "cmd" "/k chkdsk $Let /r" } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } }
+        "FixBoot" { if($Let){ Start-Process "cmd" "/k bcdboot $Let\Windows /s $Let /f ALL" } else { [System.Windows.Forms.MessageBox]::Show("Chọn phân vùng Windows!", "Info") } }
         "MountEFI" {
             $Efi = Get-Partition -DiskNumber $Did | Where {$_.GptType -eq "{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}" -or $_.Type -eq "System"}
             if ($Efi) { Set-Partition -DiskNumber $Did -PartitionNumber $Efi.PartitionNumber -NewDriveLetter "Z"; Load-Data }
         }
-        "Benchmark" { if($Let){ Start-Process "winsat" "disk -drive $($Let.Trim(':')) -ran -read -count 1" } }
-        "Optimize" { if($Let){ Optimize-Volume -DriveLetter $Let.Trim(":") -ReTrim -Verbose; [System.Windows.Forms.MessageBox]::Show("Done!") } }
+        "Benchmark" { if($Let){ Start-Process "winsat" "disk -drive $($Let.Trim(':')) -ran -read -count 1" } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } }
+        "Optimize" { if($Let){ Optimize-Volume -DriveLetter $Let.Trim(":") -ReTrim -Verbose; [System.Windows.Forms.MessageBox]::Show("Done!") } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } }
     }
 }
 
