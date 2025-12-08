@@ -72,7 +72,7 @@ $Global:SelectedPart = $null
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM DISK MANAGER V18.1 (PLATINUM EDITION)"
+$Form.Text = "TITANIUM DISK MANAGER V18.2 (PLATINUM EDITION)"
 $Form.Size = New-Object System.Drawing.Size(1280, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
