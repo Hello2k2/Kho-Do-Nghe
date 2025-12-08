@@ -1,7 +1,7 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V21.0 - TITANIUM ETERNITY)
-    Fix: Winsat missing on Win Lite (Added Internal Benchmark Engine)
-    UI: RGB Neon Loop, Optimized Drawing
+    DISK MANAGER PRO - PHAT TAN PC (V22.0 - TITANIUM LEGACY HERO)
+    Fix: Optimize-Volume Crash (Replaced with Defrag.exe), WMI SMART View
+    UI: RGB Neon Loop, Optimized for Windows Lite/PE
 #>
 
 # --- 0. ANTI-CRASH SYSTEM ---
@@ -29,7 +29,7 @@ $ErrorActionPreference = "SilentlyContinue"
 
 # --- THEME CONFIG (RGB MATRIX) ---
 $Theme_Dark = @{
-    Name        = "Dark Eternity (RGB)"
+    Name        = "Dark Legacy (RGB)"
     BgForm      = [System.Drawing.Color]::FromArgb(18, 18, 22)
     BgPanel     = [System.Drawing.Color]::FromArgb(32, 32, 38)
     GridBg      = [System.Drawing.Color]::FromArgb(25, 25, 30)
@@ -43,7 +43,7 @@ $Theme_Dark = @{
 }
 
 $Theme_Light = @{
-    Name        = "Light Eternity"
+    Name        = "Light Legacy"
     BgForm      = [System.Drawing.Color]::FromArgb(240, 240, 245)
     BgPanel     = [System.Drawing.Color]::FromArgb(255, 255, 255)
     GridBg      = [System.Drawing.Color]::FromArgb(245, 245, 250)
@@ -62,7 +62,7 @@ $Global:SelectedPart = $null
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM DISK MANAGER V21.0 (ETERNITY EDITION)"
+$Form.Text = "TITANIUM DISK MANAGER V22.0 (LEGACY HERO)"
 $Form.Size = New-Object System.Drawing.Size(1280, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"
@@ -144,9 +144,9 @@ function Toggle-Theme {
 # HEAD
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Dock="Top"; $PnlHead.Height=70; $PnlHead.BackColor=[System.Drawing.Color]::Transparent
 $Form.Controls.Add($PnlHead)
-$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V21"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
+$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="TITANIUM DISK MANAGER V22"; $LblLogo.Font=$F_Logo; $LblLogo.AutoSize=$true; $LblLogo.Location="20,10"
 $PnlHead.Controls.Add($LblLogo)
-$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Internal Benchmark Engine)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Ultimate Rescue Tool (Legacy Hero Edition)"; $LblSub.Font=$F_Norm; $LblSub.AutoSize=$true; $LblSub.Location="420,25"
 $PnlHead.Controls.Add($LblSub)
 $LblTheme = New-Object System.Windows.Forms.Label; $LblTheme.Font=$F_Norm; $LblTheme.AutoSize=$true; $LblTheme.Location="950,15"; $LblTheme.Text="GIAO DIỆN:"
 $PnlHead.Controls.Add($LblTheme)
@@ -168,7 +168,7 @@ $GridD.Columns.Add("Size","Dung Lượng"); $GridD.Columns[3].Width=90
 $GridD.Columns.Add("Bus","Giao Tiếp"); $GridD.Columns[4].Width=80
 $GridD.Columns.Add("Health","Sức Khỏe (S.M.A.R.T)"); $GridD.Columns[5].Width=150
 $GridD.Columns.Add("Parts","Phân Vùng"); $GridD.Columns[6].Width=80
-$GridD.Columns.Add("Speed","Tốc Độ (Check)"); $GridD.Columns[7].Width=100
+$GridD.Columns.Add("Speed","Tốc Độ"); $GridD.Columns[7].Width=80
 $PnlDisk.Controls.Add($GridD)
 
 # PARTITION LIST
@@ -223,7 +223,7 @@ Add-CyberBtn $Tab3 "BENCHMARK TỐC ĐỘ" "🚀" 310 30 250 "Benchmark" "Monito
 Add-CyberBtn $Tab3 "TỐI ƯU HÓA (TRIM/DEFRAG)" "✨" 590 30 250 "Optimize" "Monitor"
 $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="INFO: Chọn phân vùng để thực hiện thao tác."; $LblInfo.Location="30, 200"; $LblInfo.AutoSize=$true; $Tab3.Controls.Add($LblInfo)
 
-# ==================== LOGIC CORE ====================
+# ==================== LOGIC CORE (HYBRID + DEEP WMI) ====================
 
 function Write-Log ($Msg) { $Log="$env:TEMP\dm_log.txt"; "[$(Get-Date -F 'HH:mm:ss')] $Msg" | Out-File $Log -Append }
 
@@ -247,7 +247,7 @@ function Load-Data {
             $Speed = if ($D.MediaType -eq "HDD") { "HDD" } elseif ($D.MediaType -eq "SSD") { "SSD" } else { "Unknown" }
             
             $Row = $GridD.Rows.Add($D.DeviceId, $D.FriendlyName, $Type, $GB, $D.BusType, $Health, $PartCount, $Speed)
-            $GridD.Rows[$Row].Tag = @{ ID=$D.DeviceId; Mode="Modern" }
+            $GridD.Rows[$Row].Tag = @{ ID=$D.DeviceId; Mode="Modern"; Obj=$D }
             if ($Health -ne "Healthy") { $GridD.Rows[$Row].DefaultCellStyle.ForeColor = [System.Drawing.Color]::Red }
         }
         $Lbl1.Text = "1. DANH SÁCH Ổ CỨNG (Engine: Modern)"
@@ -411,10 +411,15 @@ function Run-Action ($Act) {
 
     if ($Act -eq "SmartDetail") {
         if (!$D) { return }
-        try {
-            $Info = Get-PhysicalDisk -DeviceId $D.ID | Select *
-            $Info | Out-GridView -Title "S.M.A.R.T Details - Disk $($D.ID)"
-        } catch { [System.Windows.Forms.MessageBox]::Show("Không đọc được SMART.", "Info") }
+        if ($D.Mode -eq "WMI") { 
+            # FIX: Show basic info for WMI mode
+            $D.Obj | Out-GridView -Title "WMI Disk Details - Disk $($D.ID)"
+        } else {
+            try {
+                $Info = Get-PhysicalDisk -DeviceId $D.ID | Select *
+                $Info | Out-GridView -Title "S.M.A.R.T Details - Disk $($D.ID)"
+            } catch { [System.Windows.Forms.MessageBox]::Show("Không đọc được SMART.", "Info") }
+        }
         return
     }
 
@@ -466,7 +471,13 @@ function Run-Action ($Act) {
                 }
             } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa (VD: C:)!", "Lỗi") } 
         }
-        "Optimize" { if($Let){ Optimize-Volume -DriveLetter $Let.Trim(":") -ReTrim -Verbose; [System.Windows.Forms.MessageBox]::Show("Done!") } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } }
+        "Optimize" { 
+            if ($Let) {
+                # --- FIX: USE DEFRAG.EXE INSTEAD OF POWERSHELL ---
+                $Drv = $Let.Substring(0,1) + ":"
+                Start-Process "cmd.exe" -ArgumentList "/k title OPTIMIZE $Drv & defrag $Drv /O /U /V"
+            } else { [System.Windows.Forms.MessageBox]::Show("Cần ký tự ổ đĩa!", "Info") } 
+        }
     }
 }
 
