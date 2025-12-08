@@ -1,7 +1,6 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V14.0 ULTIMATE CYBERPUNK)
-    Fix: Selection Bug (Lỗi chọn phân vùng)
-    Update: More Columns (Thêm nhiều thông tin chi tiết)
+    DISK MANAGER PRO - PHAT TAN PC (V14.1 ULTIMATE STABLE)
+    Fix: System.Drawing.Rectangle cast error (Fixed DrawString)
     Style: Gradient Neon + Custom Dialogs
 #>
 
@@ -44,7 +43,7 @@ $Global:SelectedPart = $null
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DISK MANAGER PRO V14.0 - ULTIMATE EDITION"
+$Form.Text = "DISK MANAGER PRO V14.1 - ULTIMATE STABLE"
 $Form.Size = New-Object System.Drawing.Size(1250, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $T.BgForm
@@ -95,8 +94,11 @@ function Add-CyberBtn ($Parent, $Txt, $Icon, $X, $Y, $W, $Tag, $IsDanger=$false)
         $e.Graphics.DrawRectangle($Pen, 0, 0, $s.Width-1, $s.Height-1)
         
         $Sf = New-Object System.Drawing.StringFormat; $Sf.Alignment="Center"; $Sf.LineAlignment="Center"
-        $RectF = [System.Drawing.RectangleF]::new($R.X, $R.Y, $R.Width, $R.Height)
+        
+        # --- FIX LỖI CAST ---
+        $RectF = [System.Drawing.RectangleF]::new([float]$R.X, [float]$R.Y, [float]$R.Width, [float]$R.Height)
         $e.Graphics.DrawString($s.Text, $s.Font, [System.Drawing.Brushes]::White, $RectF, $Sf)
+        
         $Br.Dispose(); $Pen.Dispose()
     })
     $Parent.Controls.Add($Btn)
@@ -300,12 +302,12 @@ function Run-Action ($Act) {
             }
         }
         "Active" { Run-DP "sel disk $Did`nsel part $Pid`nactive" }
+        "ChkDsk" { if($Let){ Start-Process "cmd" "/k chkdsk $Let /f /x" } }
         "Convert" {
             if ([System.Windows.Forms.MessageBox]::Show("Convert Disk sang GPT? (Cần Clean)", "Hỏi", "YesNo") -eq "Yes") {
                 Run-DP "sel disk $Did`nclean`nconvert gpt"
             }
         }
-        "ChkDsk" { if($Let){ Start-Process "cmd" "/k chkdsk $Let /f /x" } }
     }
 }
 
