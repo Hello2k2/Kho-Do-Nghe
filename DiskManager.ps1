@@ -1,6 +1,7 @@
 <#
     DISK MANAGER ULTIMATE - PHAT TAN PC (V15.0)
-    New Features: Rescue Tools, SMART Health, Benchmark, Dark UI Pro
+    Engine: Hybrid (Storage Module + WMI Fallback)
+    UI: Titanium Dark Pro + Tabbed Interface
 #>
 
 # --- 0. ANTI-CLOSE WRAPPER ---
@@ -33,7 +34,6 @@ $T = @{
     Red         = [System.Drawing.Color]::FromArgb(255, 60, 80)
     Green       = [System.Drawing.Color]::FromArgb(50, 220, 120)
     Orange      = [System.Drawing.Color]::FromArgb(255, 165, 0)
-    Purple      = [System.Drawing.Color]::FromArgb(180, 80, 255)
     
     # Button Gradients
     BtnNorm1    = [System.Drawing.Color]::FromArgb(45, 45, 55)
@@ -139,7 +139,7 @@ $GridD.Columns.Add("Mod","Model Name"); $GridD.Columns[1].FillWeight=150
 $GridD.Columns.Add("Type","Type"); $GridD.Columns[2].Width=80
 $GridD.Columns.Add("Size","Size"); $GridD.Columns[3].Width=80
 $GridD.Columns.Add("Bus","Interface"); $GridD.Columns[4].Width=80
-$GridD.Columns.Add("Health","Health (S.M.A.R.T)"); $GridD.Columns[5].Width=150
+$GridD.Columns.Add("Health","Status / S.M.A.R.T"); $GridD.Columns[5].Width=150
 $PnlDisk.Controls.Add($GridD)
 
 # 2. PARTITION LIST
@@ -196,15 +196,18 @@ Add-CyberBtn $TabMon "BENCHMARK TỐC ĐỘ (WINSAT)" "🚀" 300 30 250 "Benchma
 
 $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="INFO: Chọn Phân vùng để thao tác."; $LblInfo.Location="30, 200"; $LblInfo.AutoSize=$true; $LblInfo.ForeColor=$T.Cyan; $TabMon.Controls.Add($LblInfo)
 
-# ==================== LOGIC CORE ====================
+# ==================== LOGIC CORE (HYBRID ENGINE) ====================
 
 function Load-Data {
     $GridD.Rows.Clear(); $GridP.Rows.Clear(); $Global:SelectedPart = $null; $Global:SelectedDisk = $null
     $Form.Cursor = "WaitCursor"; $Form.Refresh()
     
+    $Engine = "Modern (Get-PhysicalDisk)"
+    
+    # 1. TRY MODERN STORAGE API (Lấy được S.M.A.R.T)
     try {
-        # Get Physical Disks (Combine WMI & Get-PhysicalDisk for SMART)
-        $PhyDisks = Get-PhysicalDisk | Sort-Object DeviceId
+        $PhyDisks = Get-PhysicalDisk -ErrorAction Stop | Sort-Object DeviceId
+        if (!$PhyDisks) { throw "Empty" }
         
         foreach ($D in $PhyDisks) {
             $GB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
@@ -215,24 +218,39 @@ function Load-Data {
             if ($Health -eq "Healthy") { $HealthStr = "Good (Healthy)" } else { $HealthStr = "WARNING: $Health" }
             
             $Row = $GridD.Rows.Add($D.DeviceId, $D.FriendlyName, $Type, $GB, $D.BusType, $HealthStr)
-            $GridD.Rows[$Row].Tag = $D
+            $GridD.Rows[$Row].Tag = @{ ID=$D.DeviceId; Mode="Modern"; Obj=$D }
             
-            # Colorize Bad Health
             if ($Health -ne "Healthy") { $GridD.Rows[$Row].DefaultCellStyle.ForeColor = "Red" }
         }
-    } catch {}
+    } catch {
+        # 2. FALLBACK TO WMI (Nếu lỗi hoặc máy cũ)
+        $Engine = "Legacy (WMI Fallback)"
+        try {
+            $WmiDisks = Get-WmiObject Win32_DiskDrive
+            foreach ($D in $WmiDisks) {
+                $GB = [Math]::Round($D.Size / 1GB, 1).ToString() + " GB"
+                $PCount = $D.Partitions; $Type = if ($PCount -gt 4) { "GPT (Auto)" } else { "MBR/GPT" }
+                
+                $Row = $GridD.Rows.Add($D.Index, $D.Model, $Type, $GB, $D.InterfaceType, "Unknown (WMI)")
+                $GridD.Rows[$Row].Tag = @{ ID=$D.Index; Mode="WMI"; Obj=$D }
+            }
+        } catch { [System.Windows.Forms.MessageBox]::Show("CRITICAL ERROR: Không tìm thấy ổ cứng nào!", "Lỗi") }
+    }
     
+    $PnlDisk.Controls[0].Text = "1. DANH SÁCH Ổ CỨNG (Engine: $Engine)"
     if ($GridD.Rows.Count -gt 0) { $GridD.Rows[0].Selected = $true; Load-Partitions $GridD.Rows[0].Tag }
     $Form.Cursor = "Default"
 }
 
-function Load-Partitions ($DiskObj) {
-    $GridP.Rows.Clear(); $Global:SelectedDisk = $DiskObj
+function Load-Partitions ($Tag) {
+    $GridP.Rows.Clear(); $Global:SelectedDisk = $Tag
     $Global:SelectedPart = $null
-    $Did = $DiskObj.DeviceId
+    $Did = $Tag.ID
     
+    # Logic nạp Partition cũng phải Hybrid để tương thích
     try {
-        $Parts = Get-Partition -DiskNumber $Did | Sort-Object PartitionNumber
+        # Ưu tiên Get-Partition vì nó dễ dùng hơn
+        $Parts = Get-Partition -DiskNumber $Did -ErrorAction Stop | Sort-Object PartitionNumber
         foreach ($P in $Parts) {
             $Vol = $P | Get-Volume -ErrorAction SilentlyContinue
             
@@ -249,11 +267,29 @@ function Load-Partitions ($DiskObj) {
             }
             
             $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", $Used, $PUse, $P.GptType, $Stat)
-            
-            # Tag: Save critical info for actions
             $GridP.Rows[$Row].Tag = @{ Did=$Did; PartID=$P.PartitionNumber; Let=$Let; Lab=$Lab; Obj=$P }
         }
-    } catch {}
+    } catch {
+        # Fallback WMI Partition
+        try {
+            $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='\\.\PHYSICALDRIVE$Did'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
+            $Parts = @(Get-WmiObject -Query $Query | Sort-Object StartingOffset)
+            $RealID = 1
+            foreach ($P in $Parts) {
+                $LogDisk = Get-WmiObject -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($P.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
+                $Total = [Math]::Round($P.Size / 1GB, 2)
+                
+                if ($LogDisk) {
+                    $Let=$LogDisk.DeviceID; $Lab=$LogDisk.VolumeName; $FS=$LogDisk.FileSystem
+                    $Row = $GridP.Rows.Add($Let, $Lab, $FS, "$Total GB", "-", "-", $P.Type, "OK")
+                } else {
+                    $Row = $GridP.Rows.Add("", "[Hidden]", "RAW", "$Total GB", "-", "-", $P.Type, "Sys")
+                }
+                $GridP.Rows[$Row].Tag = @{ Did=$Did; PartID=$RealID; Let=$Let; Lab=$Lab }
+                $RealID++
+            }
+        } catch {}
+    }
 }
 
 # EVENTS
@@ -275,32 +311,33 @@ function Run-Action ($Act) {
     $D = $Global:SelectedDisk
     $P = $Global:SelectedPart
     
-    # Disk Actions
+    # --- DISK LEVEL ACTIONS ---
     if ($Act -eq "ConvertGPT") {
         if (!$D) { return }
-        if ([System.Windows.Forms.MessageBox]::Show("Convert Disk $($D.DeviceId) sang GPT?`nDU LIỆU SẼ MẤT HẾT (CLEAN)!", "Cảnh báo", "YesNo", "Error") -eq "Yes") {
-            Run-DP "sel disk $($D.DeviceId)`nclean`nconvert gpt"
+        if ([System.Windows.Forms.MessageBox]::Show("Convert Disk $($D.ID) sang GPT?`nDU LIỆU SẼ MẤT HẾT (CLEAN)!", "Cảnh báo", "YesNo", "Error") -eq "Yes") {
+            Run-DP "sel disk $($D.ID)`nclean`nconvert gpt"
         }
         return
     }
     
     if ($Act -eq "RemoveRO") {
         if (!$D) { return }
-        Run-DP "sel disk $($D.DeviceId)`nattributes disk clear readonly`nonline disk"
-        [System.Windows.Forms.MessageBox]::Show("Đã gỡ Read-Only cho Disk $($D.DeviceId)", "Success")
+        Run-DP "sel disk $($D.ID)`nattributes disk clear readonly`nonline disk"
+        [System.Windows.Forms.MessageBox]::Show("Đã gỡ Read-Only cho Disk $($D.ID)", "Success")
         return
     }
 
     if ($Act -eq "SmartDetail") {
         if (!$D) { return }
+        if ($D.Mode -eq "WMI") { [System.Windows.Forms.MessageBox]::Show("Chế độ WMI không hỗ trợ xem chi tiết S.M.A.R.T.", "Thông báo"); return }
         try {
-            $Info = Get-PhysicalDisk -DeviceId $D.DeviceId | Select *
-            $Info | Out-GridView -Title "S.M.A.R.T Details for Disk $($D.DeviceId)"
+            $Info = Get-PhysicalDisk -DeviceId $D.ID | Select *
+            $Info | Out-GridView -Title "S.M.A.R.T Details for Disk $($D.ID)"
         } catch { [System.Windows.Forms.MessageBox]::Show("Không đọc được chi tiết.", "Lỗi") }
         return
     }
 
-    # Partition Actions
+    # --- PARTITION LEVEL ACTIONS ---
     if (!$P) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn 1 phân vùng ở danh sách dưới!", "Chưa chọn"); return }
     $Did = $P.Did; $Pid = $P.PartID; $Let = $P.Let
 
