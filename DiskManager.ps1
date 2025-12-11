@@ -1,7 +1,7 @@
 <#
-    DISK MANAGER PRO - PHAT TAN PC (V28.0 - TITANIUM ULTIMATE)
-    Features: Clone, VHD, Hex View, Bad Sector Map, Space Analyzer, WMI Hybrid
-    Updates: WMI Unallocated Space Calculation (Fixed), Auto-Crash Recovery
+    DISK MANAGER PRO - PHAT TAN PC (V29.1 - TITANIUM ULTIMATE FIX)
+    Features: Advanced Create Partition UI, Clone, VHD, Hex View, Bad Sector Map, Space Analyzer
+    Fix: $Input Variable Crash, Unallocated Logic, Drive Letter Selector
 #>
 
 # --- 0. CAU HINH ANTI-CRASH & LOGGING ---
@@ -12,6 +12,12 @@ $Global:ErrorLog = "$env:TEMP\DiskManager_Error.log"
 function Log-Error ($Msg) {
     $Line = "[$(Get-Date -F 'HH:mm:ss')] ERROR: $Msg"
     try { $Line | Out-File $Global:ErrorLog -Append } catch {}
+}
+
+# Trap loi toan cuc
+Trap {
+    Log-Error $($_.Exception.Message)
+    Continue
 }
 
 # --- 1. FORCE ADMIN ---
@@ -67,7 +73,7 @@ try {
 
     # --- GUI INIT ---
     $Form = New-Object System.Windows.Forms.Form
-    $Form.Text = "DISK MANAGER PRO V28.0 - TITANIUM ULTIMATE"
+    $Form.Text = "DISK MANAGER PRO V29.1 - TITANIUM ULTIMATE"
     $Form.Size = New-Object System.Drawing.Size(1280, 900)
     $Form.StartPosition = "CenterScreen"
     $Form.FormBorderStyle = "FixedSingle"
@@ -414,14 +420,216 @@ try {
         } 
     })
 
-    function Run-DP ($Cmd) {
+# --- FIX: GIAO DIỆN TẠO PHÂN VÙNG (VIẾT LẠI TƯỜNG MINH) ---
+    function Show-CreateDialog {
+        $F = New-Object System.Windows.Forms.Form
+        $F.Text = "TAO PHAN VUNG MOI"
+        $F.Size = New-Object System.Drawing.Size(350, 320)
+        $F.StartPosition = "CenterScreen"
+        $F.FormBorderStyle = "FixedToolWindow"
+        $F.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
+        $F.ForeColor = "White"
+
+        # 1. Label Input
+        $L1 = New-Object System.Windows.Forms.Label; $L1.Text="Nhan (Label):"; $L1.Location="20,30"; $L1.AutoSize=$true; $F.Controls.Add($L1)
+        $TxtLabel = New-Object System.Windows.Forms.TextBox; $TxtLabel.Location="140,27"; $TxtLabel.Size="160,25"; $F.Controls.Add($TxtLabel)
+
+        # 2. File System
+        $L2 = New-Object System.Windows.Forms.Label; $L2.Text="He thong (FS):"; $L2.Location="20,70"; $L2.AutoSize=$true; $F.Controls.Add($L2)
+        $CbFS = New-Object System.Windows.Forms.ComboBox; $CbFS.Location="140,67"; $CbFS.Size="160,25"; $CbFS.DropDownStyle="DropDownList"
+        $CbFS.Items.AddRange(@("NTFS", "FAT32", "exFAT")); $CbFS.SelectedIndex=0
+        $F.Controls.Add($CbFS)
+        
+        # 3. Drive Letter (Loc ky tu da dung)
+        $L3 = New-Object System.Windows.Forms.Label; $L3.Text="Ky tu (Letter):"; $L3.Location="20,110"; $L3.AutoSize=$true; $F.Controls.Add($L3)
+        $CbLet = New-Object System.Windows.Forms.ComboBox; $CbLet.Location="140,107"; $CbLet.Size="160,25"; $CbLet.DropDownStyle="DropDownList"
+        
         try {
-            $F = "$env:TEMP\dp_exec.txt"; [IO.File]::WriteAllText($F, $Cmd)
-            Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
-            Write-Log "Diskpart OK."
-        } catch { [System.Windows.Forms.MessageBox]::Show("Loi Diskpart!", "Error") }
+            # Lay danh sach ky tu da dung
+            $Used = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name
+            65..90 | ForEach-Object { 
+                $L = [char]$_ 
+                if ($Used -notcontains $L) { $CbLet.Items.Add($L) | Out-Null } 
+            }
+            if ($CbLet.Items.Count -gt 0) { $CbLet.SelectedIndex = 0 }
+        } catch {}
+        $F.Controls.Add($CbLet)
+
+        # 4. Size
+        $L4 = New-Object System.Windows.Forms.Label; $L4.Text="Dung luong (MB):"; $L4.Location="20,150"; $L4.AutoSize=$true; $F.Controls.Add($L4)
+        $TxtSize = New-Object System.Windows.Forms.TextBox; $TxtSize.Location="140,147"; $TxtSize.Size="160,25"; $F.Controls.Add($TxtSize)
+        $L5 = New-Object System.Windows.Forms.Label; $L5.Text="(De trong = Max)"; $L5.Location="140,175"; $L5.AutoSize=$true; $L5.ForeColor="Gray"; $L5.Font="Segoe UI, 8"; $F.Controls.Add($L5)
+
+        # Button OK
+        $BtnOK = New-Object System.Windows.Forms.Button
+        $BtnOK.Text = "TAO NGAY"; $BtnOK.Location = "80, 220"; $BtnOK.Size = "180, 40"
+        $BtnOK.BackColor = "Green"; $BtnOK.ForeColor = "White"; $BtnOK.DialogResult = "OK"
+        $F.Controls.Add($BtnOK); $F.AcceptButton = $BtnOK
+
+        if ($F.ShowDialog() -eq "OK") {
+            # Tra ve Hashtable ket qua
+            return @{ 
+                Label  = $TxtLabel.Text
+                FS     = $CbFS.SelectedItem
+                Letter = $CbLet.SelectedItem
+                Size   = $TxtSize.Text 
+            }
+        }
+        return $null
+    }
+# --- GIAO DIỆN TIẾN TRÌNH KÉP ---
+    function Show-DualProgress {
+        param($Title)
+        $F = New-Object System.Windows.Forms.Form
+        $F.Text = $Title
+        $F.Size = New-Object System.Drawing.Size(500, 250)
+        $F.StartPosition = "CenterScreen"
+        $F.FormBorderStyle = "FixedToolWindow"
+        $F.ControlBox = $false # Khong cho tat ngang
+        $F.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+        $F.ForeColor = "White"
+
+        $LblTask = New-Object System.Windows.Forms.Label; $LblTask.Location="20,20"; $LblTask.Size="440,20"; $LblTask.Text="Current Task:"; $F.Controls.Add($LblTask)
+        $BarTask = New-Object System.Windows.Forms.ProgressBar; $BarTask.Location="20,45"; $BarTask.Size="440,30"; $F.Controls.Add($BarTask)
+
+        $LblTotal = New-Object System.Windows.Forms.Label; $LblTotal.Location="20,90"; $LblTotal.Size="440,20"; $LblTotal.Text="Total Progress:"; $F.Controls.Add($LblTotal)
+        $BarTotal = New-Object System.Windows.Forms.ProgressBar; $BarTotal.Location="20,115"; $BarTotal.Size="440,30"; $F.Controls.Add($BarTotal)
+        
+        $F.Show()
+        $F.Refresh()
+        return @{ Form=$F; LblTask=$LblTask; BarTask=$BarTask; BarTotal=$BarTotal }
     }
 
+    # --- WIZARD GỘP Ổ (MERGE) ---
+    function Show-MergeWizard {
+        if (!$Global:SelectedDisk) { [System.Windows.Forms.MessageBox]::Show("Chon o cung truoc!"); return }
+        $Did = $Global:SelectedDisk.ID
+        
+        # 1. LAY DANH SACH PARTITION
+        try {
+            $Parts = Get-Partition -DiskNumber $Did | Where {$_.Type -ne "Reserved"} | Sort-Object PartitionNumber
+        } catch { [System.Windows.Forms.MessageBox]::Show("Loi doc thong tin phan vung!", "Error"); return }
+
+        # 2. GUI WIZARD
+        $Wiz = New-Object System.Windows.Forms.Form; $Wiz.Text="MERGE PARTITION WIZARD"; $Wiz.Size="600,450"; $Wiz.StartPosition="CenterScreen"
+        $Wiz.BackColor=[System.Drawing.Color]::FromArgb(40,40,40); $Wiz.ForeColor="White"
+
+        $PnlContent = New-Object System.Windows.Forms.Panel; $PnlContent.Location="20,60"; $PnlContent.Size="540,280"; $Wiz.Controls.Add($PnlContent)
+        $LblStep = New-Object System.Windows.Forms.Label; $LblStep.Location="20,20"; $LblStep.AutoSize=$true; $LblStep.Font="Segoe UI, 12, Bold"; $LblStep.ForeColor="Cyan"; $Wiz.Controls.Add($LblStep)
+        
+        # Nav Buttons
+        $BtnNext = New-Object System.Windows.Forms.Button; $BtnNext.Text="NEXT >"; $BtnNext.Location="460,360"; $BtnNext.Size="100,35"; $BtnNext.BackColor="Green"; $BtnNext.ForeColor="White"; $Wiz.Controls.Add($BtnNext)
+        $BtnBack = New-Object System.Windows.Forms.Button; $BtnBack.Text="< BACK"; $BtnBack.Location="350,360"; $BtnBack.Size="100,35"; $BtnBack.BackColor="Gray"; $BtnBack.ForeColor="White"; $BtnBack.Enabled=$false; $Wiz.Controls.Add($BtnBack)
+
+        # STATE VARIABLES
+        $State = @{ Step=1; Target=$null; Sources=@() }
+        
+        # UI ELEMENTS
+        $GridTarget = New-Object System.Windows.Forms.DataGridView; $GridTarget.Dock="Fill"; $GridTarget.AllowUserToAddRows=$false; $GridTarget.SelectionMode="FullRowSelect"; $GridTarget.MultiSelect=$false; $GridTarget.ReadOnly=$true
+        $GridTarget.Columns.Add("ID","ID"); $GridTarget.Columns.Add("Info","Partition Info")
+        
+        $GridSource = New-Object System.Windows.Forms.DataGridView; $GridSource.Dock="Fill"; $GridSource.AllowUserToAddRows=$false; $GridSource.SelectionMode="FullRowSelect"; $GridSource.MultiSelect=$true; $GridSource.ReadOnly=$true
+        $GridSource.Columns.Add("ID","ID"); $GridSource.Columns.Add("Info","Partition Info")
+        
+        $TxtSum = New-Object System.Windows.Forms.TextBox; $TxtSum.Dock="Fill"; $TxtSum.Multiline=$true; $TxtSum.ReadOnly=$true; $TxtSum.Font="Consolas, 11"; $TxtSum.BackColor="Black"; $TxtSum.ForeColor="Yellow"
+
+        # --- RENDER STEP FUNCTION ---
+        $RenderStep = {
+            $PnlContent.Controls.Clear()
+            switch ($State.Step) {
+                1 { 
+                    $LblStep.Text = "BUOC 1: CHON PHAN VUNG CHINH (SE DUOC MO RONG)"
+                    $BtnBack.Enabled=$false; $BtnNext.Text="NEXT >"
+                    $GridTarget.Rows.Clear()
+                    foreach ($p in $Parts) { $GridTarget.Rows.Add($p.PartitionNumber, "Part $($p.PartitionNumber) - Size: $([Math]::Round($p.Size/1GB,1)) GB - Letter: $(if($p.DriveLetter){$p.DriveLetter}else{'N/A'})") | Out-Null }
+                    $PnlContent.Controls.Add($GridTarget)
+                }
+                2 {
+                    $LblStep.Text = "BUOC 2: CHON CAC PHAN VUNG CAN GOP (SE BI XOA!)"
+                    $BtnBack.Enabled=$true; $BtnNext.Text="NEXT >"
+                    $GridSource.Rows.Clear()
+                    $TargID = $GridTarget.SelectedRows[0].Cells[0].Value
+                    $State.Target = $TargID
+                    foreach ($p in $Parts) {
+                        if ($p.PartitionNumber -ne $TargID) {
+                             $GridSource.Rows.Add($p.PartitionNumber, "Part $($p.PartitionNumber) - Size: $([Math]::Round($p.Size/1GB,1)) GB") | Out-Null 
+                        }
+                    }
+                    $PnlContent.Controls.Add($GridSource)
+                }
+                3 {
+                    $LblStep.Text = "BUOC 3: XAC NHAN (FINISH DE BAT DAU)"
+                    $BtnNext.Text="FINISH (GOP NGAY)"
+                    $State.Sources = @(); foreach($r in $GridSource.SelectedRows){ $State.Sources += $r.Cells[0].Value }
+                    
+                    $Msg = "TONG QUAT CAU HINH:`r`n"
+                    $Msg += "---------------------------------------------`r`n"
+                    $Msg += "1. Phan vung dich (GIU LAI): Partition $($State.Target)`r`n"
+                    $Msg += "2. Phan vung nguon (SE BI XOA): $($State.Sources -join ', ')`r`n"
+                    $Msg += "---------------------------------------------`r`n"
+                    $Msg += "CANH BAO: DU LIEU TREN CAC PHAN VUNG NGUON SE MAT VINH VIEN!`n"
+                    $Msg += "Tool se xoa Nguon -> Gop vao Dich."
+                    $TxtSum.Text = $Msg
+                    $PnlContent.Controls.Add($TxtSum)
+                }
+            }
+        }
+
+        # --- EVENTS ---
+        &$RenderStep # Init
+        
+        $BtnBack.Add_Click({ $State.Step--; &$RenderStep })
+        
+        $BtnNext.Add_Click({
+            if ($State.Step -eq 1) {
+                if ($GridTarget.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 phan vung dich!"); return }
+                $State.Step++; &$RenderStep; return
+            }
+            if ($State.Step -eq 2) {
+                if ($GridSource.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon it nhat 1 phan vung nguon de gop!"); return }
+                $State.Step++; &$RenderStep; return
+            }
+            if ($State.Step -eq 3) {
+                if ([System.Windows.Forms.MessageBox]::Show("HANH DONG NAY KHONG THE HOAN TAC!`nDU LIEU O NGUON SE MAT.`n`nBAN MUON TIEP TUC?", "FINAL WARNING", "YesNo", "Warning") -eq "Yes") {
+                    $Wiz.Close()
+                    
+                    # --- EXECUTION PHASE ---
+                    $UI = Show-DualProgress "Dang tien hanh Gop O..."
+                    $TotalOps = $State.Sources.Count + 1 # Delete sources + 1 Extend
+                    $CurrentOp = 0
+                    
+                    # 1. DELETE SOURCES
+                    foreach ($SrcID in $State.Sources) {
+                        $CurrentOp++
+                        $Pct = [Math]::Round(($CurrentOp / $TotalOps) * 100)
+                        $UI.BarTotal.Value = $Pct
+                        $UI.LblTask.Text = "Dang xoa Partition $SrcID (De lay cho trong)..."
+                        $UI.BarTask.Value = 50; [System.Windows.Forms.Application]::DoEvents()
+                        
+                        Run-DP "sel disk $Did`nsel part $SrcID`ndelete partition override"
+                        
+                        $UI.BarTask.Value = 100; Start-Sleep -Milliseconds 500
+                    }
+
+                    # 2. EXTEND TARGET
+                    $CurrentOp++
+                    $UI.BarTotal.Value = 100
+                    $UI.LblTask.Text = "Dang mo rong (Extend) Partition $($State.Target)..."
+                    $UI.BarTask.Value = 50; [System.Windows.Forms.Application]::DoEvents()
+                    
+                    Run-DP "sel disk $Did`nsel part $($State.Target)`nextend"
+                    
+                    $UI.BarTask.Value = 100; Start-Sleep -Seconds 1
+                    $UI.Form.Close()
+                    
+                    [System.Windows.Forms.MessageBox]::Show("DA GOP XONG!", "Success")
+                    Load-Data # Refresh Main UI
+                }
+            }
+        })
+
+        $Wiz.ShowDialog()
+    }
     # --- ACTIONS ---
     function Action-Clone {
         if (!$Global:SelectedPart) { [System.Windows.Forms.MessageBox]::Show("Chon phan vung nguon!"); return }
@@ -508,7 +716,7 @@ try {
             Remove-Item $TestFile -Force -ErrorAction SilentlyContinue
             
             $Form.Cursor = "Default"
-            [System.Windows.Forms.MessageBox]::Show("BENCHMARK RESULT ($Drv):`n`nWRITE SPEED: $WriteSpeed MB/s`nREAD SPEED:  $ReadSpeed MB/s`n`n(Internal Engine - Safe for Win Lite)", "Ket qua")
+            [System.Windows.Forms.MessageBox]::Show("BENCHMARK RESULT ($Drv):`n`nWRITE SPEED: $WriteSpeed MB/s`nREAD SPEED:  $ReadSpeed MB/s`n`n(Internal Engine - Safe for Win Lite)", "Ket qua")
 
         } catch {
             $Form.Cursor = "Default"
@@ -516,7 +724,17 @@ try {
         }
     }
 
-    function Run-Action ($Act) {
+function Run-Action ($Act) {
+        # --- KHAI BÁO RUN-DP NGAY TRONG NÀY ĐỂ TRÁNH LỖI SCOPE ---
+        function Run-DP ($Cmd) {
+            try {
+                $F = "$env:TEMP\dp_exec.txt"; [IO.File]::WriteAllText($F, $Cmd)
+                Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow
+                Write-Log "Diskpart OK."
+            } catch { [System.Windows.Forms.MessageBox]::Show("Loi Diskpart!", "Error") }
+        }
+        # ---------------------------------------------------------
+
         if ($Act -eq "Refresh") { Load-Data; return }
         if ($Act -eq "ClonePart") { Action-Clone; return }
         if ($Act -match "VHD") { Action-VHD $Act.Replace("VHD",""); return }
@@ -535,14 +753,29 @@ try {
         if (!$P) { [System.Windows.Forms.MessageBox]::Show("Chon phan vung!", "Loi"); return }
         $Did = $P.Did
         
-        # If Unallocated selected -> Allow Create
+        # LOGIC CHO VÙNG TRỐNG (UNALLOCATED)
         if ($P.Type -eq "Unallocated") {
             if ($Act -eq "CreatePart") {
-                $S = [Microsoft.VisualBasic.Interaction]::InputBox("Size MB (De trong = Max):", "Create", "")
-                $Cmd = "sel disk $Did`ncreate part primary"
-                if ($S) { $Cmd += " size=$S" }
-                $Cmd += "`nformat fs=ntfs quick`nassign"
-                Run-DP $Cmd; Load-Data
+                # Gọi hộp thoại tạo mới
+                $UserCfg = Show-CreateDialog
+                if ($UserCfg) {
+                    $Cmd = "sel disk $Did`ncreate part primary"
+                    # Kiểm tra size
+                    if ($UserCfg.Size -and $UserCfg.Size -match "^\d+$") { $Cmd += " size=$($UserCfg.Size)" }
+                    
+                    # Xử lý Label và FS
+                    $MyFS = if ($UserCfg.FS) { $UserCfg.FS } else { "NTFS" }
+                    $MyLbl = if ($UserCfg.Label) { $UserCfg.Label } else { "NewVolume" }
+                    
+                    $Cmd += "`nformat fs=$MyFS label=`"$MyLbl`" quick"
+                    
+                    # Gán ký tự
+                    if ($UserCfg.Letter) { $Cmd += "`nassign letter=$($UserCfg.Letter)" }
+                    
+                    Run-DP $Cmd
+                    Start-Sleep -Milliseconds 500
+                    Load-Data
+                }
             } else {
                 [System.Windows.Forms.MessageBox]::Show("Vung trong (Unallocated) chi co the tao moi (Create Partition)!", "Thong bao")
             }
@@ -557,17 +790,14 @@ try {
             "CreatePart" { [System.Windows.Forms.MessageBox]::Show("Hay chon vung trong (Unallocated) de tao o moi!", "Huong dan") }
             "Wipe" { if ($Let) { Format-Volume -DriveLetter $Let.Trim(":") -FileSystem NTFS -Full -Force | Out-Null; [System.Windows.Forms.MessageBox]::Show("Done!") } }
             "Split" { $S = [Microsoft.VisualBasic.Interaction]::InputBox("Size MB cat ra:", "Split", "10240"); if ($S) { Run-DP "sel disk $Did`nsel part $PartId`nshrink desired=$S`ncreate part primary`nformat fs=ntfs quick`nassign"; Load-Data } }
-            "Merge" { if([System.Windows.Forms.MessageBox]::Show("Gop o se xoa o ben phai. Tiep tuc?", "Warn", "YesNo") -eq "Yes") { $N=$PartId+1; Run-DP "sel disk $Did`nsel part $N`ndelete partition override`nsel part $PartId`nextend"; Load-Data } }
+            "Merge" { Show-MergeWizard }
             
-            # --- FIX LABEL UPDATE ---
             "Label" { 
                 $N = [Microsoft.VisualBasic.Interaction]::InputBox("Ten moi:", "Rename", $P.Lab)
-                if ($N -ne $null) { 
-                    # Try Hybrid
+                if ($N) { 
                     try { Set-Volume -DriveLetter $Let.Trim(":") -NewFileSystemLabel $N -ErrorAction Stop } 
-                    catch { $Cmd="label $Let $N"; Start-Process "cmd" "/c $Cmd" -WindowStyle Hidden -Wait }
-                    Start-Sleep -Milliseconds 500 # Wait for OS refresh
-                    Load-Data 
+                    catch { $C="label $Let $N"; Start-Process "cmd" "/c $C" -WindowStyle Hidden -Wait }
+                    Start-Sleep -Milliseconds 500; Load-Data 
                 } 
             }
 
@@ -577,7 +807,6 @@ try {
             "FixBoot" { if($Let){ Start-Process "cmd" "/k bcdboot $Let\Windows /s $Let /f ALL"; [System.Windows.Forms.MessageBox]::Show("FixBoot OK!", "Info") } }
             "RebuildMBR" { Run-DP "sel disk $Did`nbootsect /nt60 SYS /mbr"; [System.Windows.Forms.MessageBox]::Show("MBR OK!", "Info") }
             
-            # --- FIXED BENCHMARK ---
             "Benchmark" { 
                 if ($Let) { 
                     if (Get-Command "winsat" -ErrorAction SilentlyContinue) {
@@ -590,7 +819,6 @@ try {
             "Optimize" { if($Let){ $Dr=$Let.Substring(0,1)+":"; Start-Process "cmd" "/k defrag $Dr /O /U /V" } }
         }
     }
-
     # --- STARTUP ---
     Apply-Theme
     $Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval=500; $Timer.Add_Tick({$Timer.Stop(); Load-Data}); $Timer.Start()
