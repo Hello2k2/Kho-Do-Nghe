@@ -1,190 +1,350 @@
+<#
+    BITLOCKER MANAGER V9.4 - FINAL STABLE (NO LOOP)
+    Features: Stable Loader + Raw Forensic + Key Hunter
+#>
+
 # --- 1. FORCE ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
+    try { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit }
+    catch { Write-Host "VUI LONG CHAY VOI QUYEN ADMIN!" -F Red; Pause; Exit }
 }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
+# --- 2. C# RAW DISK READER ---
+try {
+    if (-not ([System.Management.Automation.PSTypeName]'DiskReader').Type) {
+        $Code = @"
+        using System;
+        using System.IO;
+        using System.Runtime.InteropServices;
+        using Microsoft.Win32.SafeHandles;
+        public class DiskReader {
+            [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+            public static extern SafeFileHandle CreateFile(string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+            public static byte[] ReadSector(string drive, long sector, int count) {
+                SafeFileHandle handle = CreateFile(drive, 0x80000000, 1|2, IntPtr.Zero, 3, 0, IntPtr.Zero);
+                if (handle.IsInvalid) return new byte[0];
+                FileStream fs = new FileStream(handle, FileAccess.Read);
+                if (sector > 0) fs.Seek(sector * 512, SeekOrigin.Begin);
+                byte[] buffer = new byte[512 * count];
+                int bytesRead = fs.Read(buffer, 0, buffer.Length);
+                fs.Close(); handle.Close();
+                if (bytesRead > 0 && bytesRead < buffer.Length) {
+                    byte[] actualBuffer = new byte[bytesRead];
+                    Array.Copy(buffer, actualBuffer, bytesRead);
+                    return actualBuffer;
+                }
+                if (bytesRead == 0) return null;
+                return buffer;
+            }
+        }
+"@
+        Add-Type -TypeDefinition $Code -Language CSharp
+    }
+} catch {}
+
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "BITLOCKER MANAGER V2.3 - FULL COMPATIBILITY"
-$Form.Size = New-Object System.Drawing.Size(900, 600)
+$Form.Text = "BITLOCKER MANAGER V9.4 (STABLE NO LOOP)"
+$Form.Size = New-Object System.Drawing.Size(1100, 800)
 $Form.StartPosition = "CenterScreen"
-$Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+$Form.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 30)
 $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-# Header
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "QUAN LY KHOA O CUNG (DUAL ENGINE)"; $LblT.Font = "Impact, 18"; $LblT.ForeColor="Gold"; $LblT.AutoSize=$true; $LblT.Location="20,15"; $Form.Controls.Add($LblT)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "BITLOCKER MASTER CONTROL"; $LblT.Font = "Impact, 22"; $LblT.ForeColor = "Gold"; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
+$LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text = "Ready"; $LblStatus.ForeColor = "Lime"; $LblStatus.Location = "450,25"; $LblStatus.AutoSize = $true; $Form.Controls.Add($LblStatus)
 
-# --- DANH SÁCH Ổ ĐĨA ---
-$GbList = New-Object System.Windows.Forms.GroupBox; $GbList.Text = "Danh Sach O Dia"; $GbList.Location="20,70"; $GbList.Size="845,200"; $GbList.ForeColor="Cyan"; $Form.Controls.Add($GbList)
+# --- TAB CONTROL ---
+$Tab = New-Object System.Windows.Forms.TabControl; $Tab.Location = "20, 70"; $Tab.Size = "1040, 670"; $Tab.Font = "Segoe UI, 10"
+$Form.Controls.Add($Tab)
 
-$Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location="15,25"; $Grid.Size="815,160"; $Grid.BackgroundColor="Black"; $Grid.ForeColor="Black"; $Grid.AllowUserToAddRows=$false; $Grid.RowHeadersVisible=$false; $Grid.SelectionMode="FullRowSelect"; $Grid.MultiSelect=$false; $Grid.AutoSizeColumnsMode="Fill"
-$Grid.Columns.Add("Mount", "O Dia"); $Grid.Columns.Add("Status", "Trang Thai"); $Grid.Columns.Add("Lock", "Khoa (Lock)"); $Grid.Columns.Add("Encrypt", "Tien Do"); $Grid.Columns.Add("Key", "Che Do (Mode)")
-$Grid.Columns[0].FillWeight=30; $Grid.Columns[3].FillWeight=40
-$GbList.Controls.Add($Grid)
+function Add-Page ($Title) { 
+    $P = New-Object System.Windows.Forms.TabPage; $P.Text = "  $Title  "
+    $P.BackColor = [System.Drawing.Color]::FromArgb(45,45,50); $Tab.Controls.Add($P); return $P 
+}
 
-# --- KHU VỰC MỞ KHÓA (UNLOCK) ---
-$GbUnlock = New-Object System.Windows.Forms.GroupBox; $GbUnlock.Text = "MO KHOA O CUNG (UNLOCK)"; $GbUnlock.Location="20,290"; $GbUnlock.Size="845,100"; $GbUnlock.ForeColor="Lime"; $Form.Controls.Add($GbUnlock)
+# >>> TAB 1: DASHBOARD
+$Page1 = Add-Page "QUẢN LÝ & MỞ KHÓA"
+$Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,15"; $Grid.Size = "1005, 280"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.MultiSelect = $false; $Grid.AutoSizeColumnsMode = "Fill"
+$Grid.Columns.Add("Mount", "Ổ"); $Grid.Columns[0].Width = 40
+$Grid.Columns.Add("Status", "Trạng Thái"); $Grid.Columns[1].Width = 80
+$Grid.Columns.Add("Lock", "Tình Trạng"); $Grid.Columns[2].Width = 80
+$Grid.Columns.Add("Key", "Recovery Key"); $Grid.Columns[3].FillWeight = 200; $Grid.Columns[3].DefaultCellStyle.ForeColor = "Blue"
+$Grid.Columns.Add("ID", "Protector ID"); $Grid.Columns[4].Width = 250
+$Page1.Controls.Add($Grid)
 
-$LblKey = New-Object System.Windows.Forms.Label; $LblKey.Text = "Nhap Recovery Key (48 so):"; $LblKey.Location="20,40"; $LblKey.AutoSize=$true; $GbUnlock.Controls.Add($LblKey)
-$TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="190,37"; $TxtKey.Size="450,30"; $TxtKey.Font="Consolas, 11"; $GbUnlock.Controls.Add($TxtKey)
+$GbUnlock = New-Object System.Windows.Forms.GroupBox; $GbUnlock.Text = "MỞ KHÓA / PHÂN TÍCH"; $GbUnlock.Location = "15,310"; $GbUnlock.Size = "1005, 80"; $GbUnlock.ForeColor = "Cyan"; $Page1.Controls.Add($GbUnlock)
+$TxtManual = New-Object System.Windows.Forms.TextBox; $TxtManual.Location = "20,30"; $TxtManual.Size = "600,30"; $TxtManual.Font = "Consolas, 11"; $GbUnlock.Controls.Add($TxtManual)
+$BtnUnlock = New-Object System.Windows.Forms.Button; $BtnUnlock.Text = "UNLOCK"; $BtnUnlock.Location = "640,28"; $BtnUnlock.Size = "150,32"; $BtnUnlock.BackColor = "Green"; $BtnUnlock.ForeColor = "White"; $GbUnlock.Controls.Add($BtnUnlock)
+$BtnMeta = New-Object System.Windows.Forms.Button; $BtnMeta.Text = "METADATA"; $BtnMeta.Location = "800,28"; $BtnMeta.Size = "190,32"; $BtnMeta.BackColor = "DarkMagenta"; $BtnMeta.ForeColor = "White"; $GbUnlock.Controls.Add($BtnMeta)
 
-$BtnUnlock = New-Object System.Windows.Forms.Button; $BtnUnlock.Text="GIAI MA (UNLOCK)"; $BtnUnlock.Location="660,35"; $BtnUnlock.Size="170,35"; $BtnUnlock.BackColor="Green"; $BtnUnlock.ForeColor="White"; $BtnUnlock.Font="Segoe UI, 9, Bold"
-$GbUnlock.Controls.Add($BtnUnlock)
+# Manegement Buttons
+$BtnBackup = New-Object System.Windows.Forms.Button; $BtnBackup.Text = "LƯU KEY"; $BtnBackup.Location = "15,410"; $BtnBackup.Size = "240,40"; $BtnBackup.BackColor = "Teal"; $Page1.Controls.Add($BtnBackup)
+$BtnOff = New-Object System.Windows.Forms.Button; $BtnOff.Text = "TẮT BITLOCKER"; $BtnOff.Location = "270,410"; $BtnOff.Size = "240,40"; $BtnOff.BackColor = "Firebrick"; $Page1.Controls.Add($BtnOff)
+$BtnSus = New-Object System.Windows.Forms.Button; $BtnSus.Text = "SUSPEND"; $BtnSus.Location = "525,410"; $BtnSus.Size = "240,40"; $BtnSus.BackColor = "Gray"; $Page1.Controls.Add($BtnSus)
+$BtnRef = New-Object System.Windows.Forms.Button; $BtnRef.Text = "REFRESH"; $BtnRef.Location = "780,410"; $BtnRef.Size = "240,40"; $BtnRef.BackColor = "Blue"; $Page1.Controls.Add($BtnRef)
+$BtnFixPerm = New-Object System.Windows.Forms.Button; $BtnFixPerm.Text = "FIX LỖI ACCESS DENIED (SỬA QUYỀN NTFS)"; $BtnFixPerm.Location = "15,460"; $BtnFixPerm.Size = "1005,40"; $BtnFixPerm.BackColor = "Purple"; $Page1.Controls.Add($BtnFixPerm)
 
-# --- KHU VỰC QUẢN LÝ (CONTROL) ---
-$GbCtrl = New-Object System.Windows.Forms.GroupBox; $GbCtrl.Text = "QUAN LY & SAO LUU"; $GbCtrl.Location="20,410"; $GbCtrl.Size="845,130"; $GbCtrl.ForeColor="Orange"; $Form.Controls.Add($GbCtrl)
 
-function Add-Btn ($P, $T, $X, $Y, $C, $Cmd) { $b=New-Object System.Windows.Forms.Button; $b.Text=$T; $b.Location="$X,$Y"; $b.Size="190,40"; $b.BackColor=$C; $b.ForeColor="White"; $b.FlatStyle="Flat"; $b.Add_Click($Cmd); $P.Controls.Add($b) }
+# >>> TAB 2: RESCUE
+$Page2 = Add-Page "QUÉT TÌM KEY (FILE/RAM)"
+$BtnScanFile = New-Object System.Windows.Forms.Button; $BtnScanFile.Text = "QUÉT FILE TEXT CHỨA KEY"; $BtnScanFile.Location = "30,30"; $BtnScanFile.Size = "450,50"; $BtnScanFile.BackColor = "DarkOrange"; $Page2.Controls.Add($BtnScanFile)
+$BtnScanHiber = New-Object System.Windows.Forms.Button; $BtnScanHiber.Text = "QUÉT RAM (HIBERFIL.SYS)"; $BtnScanHiber.Location = "500,30"; $BtnScanHiber.Size = "450,50"; $BtnScanHiber.BackColor = "Firebrick"; $Page2.Controls.Add($BtnScanHiber)
+$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "30,100"; $TxtLog.Size = "920,450"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ScrollBars = "Vertical"; $Page2.Controls.Add($TxtLog)
 
-Add-Btn $GbCtrl "TAT BITLOCKER (DECRYPT)" 20 30 "Firebrick" { Action-BitLocker "Disable" }
-Add-Btn $GbCtrl "TAM DUNG (SUSPEND)" 230 30 "DimGray" { Action-BitLocker "Suspend" }
-Add-Btn $GbCtrl "BAT LAI (RESUME)" 440 30 "SeaGreen" { Action-BitLocker "Resume" }
-Add-Btn $GbCtrl "REFRESH LIST" 650 30 "Blue" { Load-Drives }
+# >>> TAB 3: ONLINE
+$Page3 = Add-Page "ONLINE RECOVERY"
+$BtnAD = New-Object System.Windows.Forms.Button; $BtnAD.Text = "CHECK ACTIVE DIRECTORY"; $BtnAD.Location = "50,50"; $BtnAD.Size = "800,60"; $BtnAD.BackColor = "RoyalBlue"; $Page3.Controls.Add($BtnAD)
+$BtnWeb = New-Object System.Windows.Forms.Button; $BtnWeb.Text = "MICROSOFT CLOUD KEY"; $BtnWeb.Location = "50,130"; $BtnWeb.Size = "800,60"; $BtnWeb.BackColor = "DeepSkyBlue"; $Page3.Controls.Add($BtnWeb)
 
-Add-Btn $GbCtrl "SAO LUU KEY RA FILE" 20 80 "Teal" { Backup-Key }
-Add-Btn $GbCtrl "MO CONTROL PANEL" 650 80 "Gray" { Start-Process "control" -ArgumentList "/name Microsoft.BitLockerDriveEncryption" }
+# >>> TAB 4: BRUTE FORCE
+$Page4 = Add-Page "BRUTE FORCE"
+$LblBF = New-Object System.Windows.Forms.Label; $LblBF.Text = "Danh sách Password (1 dòng/pass):"; $LblBF.Location = "30,20"; $LblBF.AutoSize = $true; $LblBF.ForeColor = "Yellow"; $Page4.Controls.Add($LblBF)
+$TxtPassList = New-Object System.Windows.Forms.TextBox; $TxtPassList.Multiline = $true; $TxtPassList.Location = "30,50"; $TxtPassList.Size = "400,450"; $Page4.Controls.Add($TxtPassList)
+$BtnBF = New-Object System.Windows.Forms.Button; $BtnBF.Text = "AUTO TRY >>"; $BtnBF.Location = "450,50"; $BtnBF.Size = "400,60"; $BtnBF.BackColor = "DarkRed"; $Page4.Controls.Add($BtnBF)
+$LblBFStat = New-Object System.Windows.Forms.Label; $LblBFStat.Text = "Idle"; $LblBFStat.Location = "450,130"; $LblBFStat.AutoSize = $true; $Page4.Controls.Add($LblBFStat)
 
-# --- LOGIC (DUAL SCAN ENGINE) ---
+# >>> TAB 5: RAW SECTOR SCAN
+$Page5 = Add-Page "QUÉT RAW DISK (FORENSIC)"
+$LblRaw = New-Object System.Windows.Forms.Label; $LblRaw.Text = "CẢNH BÁO: Quét trực tiếp Sector vật lý. Rất chậm (1TB ~ 3-4 tiếng)."; $LblRaw.Location = "30,20"; $LblRaw.AutoSize = $true; $LblRaw.ForeColor = "Red"; $Page5.Controls.Add($LblRaw)
 
+$CboDisk = New-Object System.Windows.Forms.ComboBox; $CboDisk.Location = "30,60"; $CboDisk.Size = "300,30"; $Page5.Controls.Add($CboDisk)
+try { Get-WmiObject Win32_DiskDrive | ForEach-Object { $CboDisk.Items.Add("$($_.DeviceID) - $($_.Model) ($([Math]::Round($_.Size/1GB)) GB)") } | Out-Null } catch {}
+if ($CboDisk.Items.Count -gt 0) { $CboDisk.SelectedIndex = 0 }
+$BtnRawScan = New-Object System.Windows.Forms.Button; $BtnRawScan.Text = "BẮT ĐẦU QUÉT FULL DISK"; $BtnRawScan.Location = "350,58"; $BtnRawScan.Size = "300,30"; $BtnRawScan.BackColor = "Crimson"; $BtnRawScan.ForeColor = "White"; $Page5.Controls.Add($BtnRawScan)
+$TxtRawLog = New-Object System.Windows.Forms.TextBox; $TxtRawLog.Multiline = $true; $TxtRawLog.Location = "30,110"; $TxtRawLog.Size = "900,450"; $TxtRawLog.BackColor = "Black"; $TxtRawLog.ForeColor = "Orange"; $TxtRawLog.ScrollBars = "Vertical"; $Page5.Controls.Add($TxtRawLog)
+
+# --- FUNCTIONS ---
+function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
+function RawLog ($M) { $TxtRawLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtRawLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
+
+function Show-Report ($Title, $Content) {
+    $FRep = New-Object System.Windows.Forms.Form; $FRep.Text = $Title; $FRep.Size = New-Object System.Drawing.Size(800, 600); $FRep.StartPosition = "CenterParent"
+    $TxtRep = New-Object System.Windows.Forms.TextBox; $TxtRep.Multiline = $true; $TxtRep.Dock = "Fill"; $TxtRep.ScrollBars = "Vertical"; $TxtRep.Font = "Consolas, 10"; $TxtRep.Text = $Content; $FRep.Controls.Add($TxtRep)
+    $FRep.ShowDialog()
+}
+
+# --- LOAD DRIVES (STABLE - NO LOOP) ---
 function Load-Drives {
+    $LblStatus.Text = "Loading..."
     $Grid.Rows.Clear()
-    $TxtKey.Text = ""
+    $Form.Cursor = "WaitCursor"
+    [System.Windows.Forms.Application]::DoEvents() # Giup UI khong bi do
     
-    # --- CÁCH 1: POWERSHELL CMDLET (MODERN) ---
+    # 1. Thu dung PowerShell Cmdlet
+    $Done = $false
     try {
         $Vols = Get-BitLockerVolume -ErrorAction Stop
-        if ($Vols.Count -gt 0) {
-            foreach ($V in $Vols) {
-                $LockStat = $V.VolumeStatus
-                $IsLocked = if($V.ProtectionStatus -eq "On") { "LOCKED (Khoa)" } else { "UNLOCKED (Mo)" }
-                if ($V.VolumeStatus -eq "FullyDecrypted") { $IsLocked = "OFF (Khong dung)" }
-                $Percent = "$($V.EncryptionPercentage)%"
-                $Mode = "PowerShell Mode"
-                $Grid.Rows.Add($V.MountPoint, $V.VolumeStatus, $IsLocked, $Percent, $Mode) | Out-Null
+        foreach ($V in $Vols) {
+            $Stat = if($V.ProtectionStatus -eq "On"){"LOCKED"}else{"Unlocked"}
+            $ID = "Unknown"; $RecKey = "Hidden (Locked)"
+            foreach($Kp in $V.KeyProtector){ 
+                if($Kp.KeyProtectorType -eq "RecoveryPassword"){
+                    $ID = $Kp.KeyProtectorId
+                    if ($V.VolumeStatus -ne "Locked") { $RecKey = $Kp.RecoveryPassword }
+                } 
             }
-            return
+            $Grid.Rows.Add($V.MountPoint, $V.VolumeStatus, $Stat, $RecKey, $ID) | Out-Null
         }
+        $Done = $true
     } catch {}
 
-    # --- CÁCH 2: WMI (LEGACY / FAILOVER) ---
-    if ($Grid.Rows.Count -eq 0) {
+    # 2. Fallback WMI (Chi chay khi Cmdlet loi)
+    if (-not $Done) {
         try {
-            $WmiVols = Get-WmiObject -Namespace "root\CIMV2\Security\MicrosoftVolumeEncryption" -Class Win32_EncryptableVolume
-            foreach ($W in $WmiVols) {
-                $DrvLetter = $W.DriveLetter
-                $StatMap = @{0="FullyDecrypted"; 1="FullyEncrypted"; 2="Encrypting"; 3="Decrypting"; 4="Paused"}
-                $VolStat = if ($StatMap[$W.ConversionStatus]) { $StatMap[$W.ConversionStatus] } else { "Unknown" }
-                
-                $IsLocked = if ($W.ProtectionStatus -eq 1) { "LOCKED (Khoa)" } else { 
-                    if ($W.ConversionStatus -eq 0) { "OFF (Khong dung)" } else { "UNLOCKED (Mo)" }
-                }
-                
-                $Percent = if ($W.ConversionStatus -eq 1) { "100%" } else { "0%" }
-                $Grid.Rows.Add($DrvLetter, $VolStat, $IsLocked, $Percent, "WMI Mode") | Out-Null
-            }
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show("KHONG TIM THAY O DIA NAO!`nCa 2 phuong phap (Cmdlet & WMI) deu that bai.", "Error")
-        }
-    }
-}
-
-$BtnUnlock.Add_Click({
-    $Key = $TxtKey.Text.Trim()
-    if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 o dia truoc!", "Loi"); return }
-    $Drv = $Grid.SelectedRows[0].Cells[0].Value
-    if (!$Key) { [System.Windows.Forms.MessageBox]::Show("Chua nhap Key!", "Loi"); return }
-    
-    try {
-        $Form.Cursor = "WaitCursor"
-        # Thu 1: Cmdlet
-        Unlock-BitLocker -MountPoint $Drv -RecoveryPassword $Key -ErrorAction Stop
-        [System.Windows.Forms.MessageBox]::Show("DA MO KHOA THANH CONG! ($Drv)", "Success")
-        Load-Drives
-    } catch {
-        # Thu 2: CMD
-        $Proc = Start-Process "manage-bde" -ArgumentList "-unlock $Drv -rp $Key" -NoNewWindow -PassThru -Wait
-        if ($Proc.ExitCode -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("DA MO KHOA (CMD MODE)! ($Drv)", "Success"); Load-Drives
-        } else {
-            [System.Windows.Forms.MessageBox]::Show("MO KHOA THAT BAI!`nKiem tra lai Key.", "Error")
-        }
-    }
-    $Form.Cursor = "Default"
-})
-
-function Action-BitLocker ($Action) {
-    if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 o dia truoc!", "Loi"); return }
-    $Drv = $Grid.SelectedRows[0].Cells[0].Value
-    
-    # Fallback CMD cho chac an
-    if ($Action -eq "Disable") { 
-        if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon GIAI MA (Decrypt) o $Drv?", "Warning", "YesNo") -eq "Yes") {
-            Start-Process "manage-bde" "-off $Drv" -NoNewWindow -Wait
-            [System.Windows.Forms.MessageBox]::Show("Da gui lenh Giai Ma (CMD).", "Info")
-        }
-    }
-    if ($Action -eq "Suspend") { Start-Process "manage-bde" "-protectors -disable $Drv" -NoNewWindow -Wait; [System.Windows.Forms.MessageBox]::Show("Da Suspend.", "Info") }
-    if ($Action -eq "Resume") { Start-Process "manage-bde" "-protectors -enable $Drv" -NoNewWindow -Wait; [System.Windows.Forms.MessageBox]::Show("Da Resume.", "Info") }
-    Load-Drives
-}
-
-# --- FIX LỖI BACKUP KEY (HỖ TRỢ CẢ WMI) ---
-function Backup-Key {
-    if ($Grid.SelectedRows.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chon 1 o dia truoc!", "Loi"); return }
-    $Row = $Grid.SelectedRows[0]; $Drv = $Row.Cells[0].Value
-    
-    $Pass = ""
-    $ID = "Unknown"
-    
-    # --- THỬ LẤY KEY BẰNG POWERSHELL ---
-    try {
-        $Vol = Get-BitLockerVolume -MountPoint $Drv -ErrorAction Stop
-        $KeyObj = $Vol.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
-        if ($KeyObj) { $Pass = $KeyObj.RecoveryPassword; $ID = $KeyObj.KeyProtectorId }
-    } catch {
-        # --- NẾU LỖI -> THỬ LẤY KEY BẰNG WMI (FIX CHO MÁY ẢO) ---
-        try {
-            $WmiVol = Get-WmiObject -Namespace "root\CIMV2\Security\MicrosoftVolumeEncryption" -Class Win32_EncryptableVolume -Filter "DriveLetter='$Drv'"
-            # Type 3 = Numerical Password (48 so)
-            $Res = $WmiVol.GetKeyProtectors(3) 
-            if ($Res.ReturnValue -eq 0 -and $Res.VolumeKeyProtectorID.Count -gt 0) {
-                $ID = $Res.VolumeKeyProtectorID[0]
-                $KeyRes = $WmiVol.GetKeyProtectorNumericalPassword($ID)
-                if ($KeyRes.ReturnValue -eq 0) { $Pass = $KeyRes.NumericalPassword }
-            } else {
-                # Neu chua co Key -> Tao moi bang WMI
-                if ([System.Windows.Forms.MessageBox]::Show("O dia nay chua co Recovery Key (48 so). Tao moi?", "Tao Key", "YesNo") -eq "Yes") {
-                    $WmiVol.ProtectKeyWithNumericalPassword() | Out-Null
-                    # Lay lai sau khi tao
-                    $Res2 = $WmiVol.GetKeyProtectors(3)
-                    if ($Res2.VolumeKeyProtectorID.Count -gt 0) {
-                        $ID = $Res2.VolumeKeyProtectorID[0]
-                        $KeyRes2 = $WmiVol.GetKeyProtectorNumericalPassword($ID)
-                        $Pass = $KeyRes2.NumericalPassword
-                    }
-                }
+            $Wmi = Get-WmiObject -Namespace "root\CIMV2\Security\MicrosoftVolumeEncryption" -Class Win32_EncryptableVolume
+            foreach ($W in $Wmi) {
+                $Stat = if($W.ProtectionStatus -eq 1){"LOCKED"}else{"Unlocked"}
+                $IDs = $W.GetKeyProtectors(3).VolumeKeyProtectorID
+                $ShowID = if($IDs){$IDs[0]}else{"N/A"}
+                $RecKey = "Hidden (Locked)"
+                if ($W.ProtectionStatus -eq 0) { try { $RecKey = $W.GetKeyProtectorNumericalPassword($ShowID).NumericalPassword } catch {} }
+                $Grid.Rows.Add($W.DriveLetter, "Unknown", $Stat, $RecKey, $ShowID) | Out-Null
             }
         } catch {}
     }
     
-    # LUU FILE
-    if ($Pass) {
-        $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName = "BitLocker_Key_$($Drv.Replace(':','')).txt"
-        if ($Save.ShowDialog() -eq "OK") {
-            [IO.File]::WriteAllText($Save.FileName, "--- BITLOCKER KEY ---`r`nDRIVE: $Drv`r`nID: $ID`r`nKEY: $Pass`r`nDATE: $(Get-Date)")
-            [System.Windows.Forms.MessageBox]::Show("Da luu!", "Success"); Invoke-Item $Save.FileName
-        }
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Khong lay duoc Key! (Co the o dia chua duoc Ma Hoa hoac chua co Key 48 so)", "Error")
-    }
+    $LblStatus.Text = "Ready"; $Form.Cursor = "Default"
 }
 
-# Init
-$Form.Add_Shown({ Load-Drives })
+$BtnRef.Add_Click({ Load-Drives })
+
+$BtnUnlock.Add_Click({
+    if (!$Grid.SelectedRows.Count) { return }
+    $Drv = $Grid.SelectedRows[0].Cells[0].Value; $In = $TxtManual.Text.Trim()
+    if (!$In) { return }
+    $Form.Cursor = "WaitCursor"
+    try {
+        $P1 = Start-Process "manage-bde" "-unlock $Drv -pw $In" -NoNewWindow -PassThru -Wait
+        if ($P1.ExitCode -eq 0) { Load-Drives; [System.Windows.Forms.MessageBox]::Show("Success (Pass)!", "OK") }
+        else {
+            $P2 = Start-Process "manage-bde" "-unlock $Drv -rp $In" -NoNewWindow -PassThru -Wait
+            if ($P2.ExitCode -eq 0) { Load-Drives; [System.Windows.Forms.MessageBox]::Show("Success (Recovery Key)!", "OK") }
+            else { [System.Windows.Forms.MessageBox]::Show("Fail!", "Error") }
+        }
+    } catch {}
+    $Form.Cursor = "Default"
+})
+
+$BtnMeta.Add_Click({
+    if (!$Grid.SelectedRows.Count) { return }
+    $Drv = $Grid.SelectedRows[0].Cells[0].Value
+    $Status = cmd /c "manage-bde -status $Drv"
+    $Protectors = cmd /c "manage-bde -protectors -get $Drv"
+    Show-Report "METADATA" "$($Status -join "`r`n")`r`n----------------`r`n$($Protectors -join "`r`n")"
+})
+
+$BtnBackup.Add_Click({
+    try {
+        if (!$Grid.SelectedRows.Count) { return }
+        $Row = $Grid.SelectedRows[0]; $Drv = $Row.Cells[0].Value; $Key = $Row.Cells[3].Value
+        if ($Key -match "\d{6}-") {
+             $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName="Key_$($Drv.Trim(':')).txt"
+             if ($Save.ShowDialog() -eq "OK") { [IO.File]::WriteAllText($Save.FileName, "$Key"); [System.Windows.Forms.MessageBox]::Show("Saved!", "OK") }
+        } else { [System.Windows.Forms.MessageBox]::Show("No Key visible.", "Info") }
+    } catch {}
+})
+
+$BtnOff.Add_Click({ try{ if (!$Grid.SelectedRows.Count) { return }; $Drv = $Grid.SelectedRows[0].Cells[0].Value; Start-Process "manage-bde" "-off $Drv" -WindowStyle Hidden; Load-Drives } catch {} })
+$BtnSus.Add_Click({ try{ if (!$Grid.SelectedRows.Count) { return }; $Drv = $Grid.SelectedRows[0].Cells[0].Value; Start-Process "manage-bde" "-protectors -disable $Drv" -WindowStyle Hidden; Load-Drives } catch {} })
+
+$BtnFixPerm.Add_Click({
+    try {
+        if (!$Grid.SelectedRows.Count) { return }; $Drv = $Grid.SelectedRows[0].Cells[0].Value
+        $Form.Cursor="WaitCursor"; Start-Process "icacls" "$Drv\ /grant Everyone:F /T /C /Q" -Wait; Start-Process "takeown" "/f $Drv\ /r /d y" -Wait; $Form.Cursor="Default"; [System.Windows.Forms.MessageBox]::Show("Done!","OK")
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Error") }
+})
+
+# --- RAW SECTOR SCANNER (ANTI-CRASH) ---
+$BtnRawScan.Add_Click({
+    try {
+        if ($CboDisk.SelectedIndex -lt 0) { return }
+        $DiskInfo = $CboDisk.SelectedItem.ToString().Split(" ")[0]
+        
+        if (-not ([System.Management.Automation.PSTypeName]'DiskReader').Type) {
+            [System.Windows.Forms.MessageBox]::Show("ERROR: C# DiskReader Class could not be loaded.`nRestart script as Admin.", "Critical Error")
+            return
+        }
+
+        $TxtRawLog.Text = "STARTING FULL RAW SCAN ON $DiskInfo...`r`n"
+        $TxtRawLog.AppendText("Target: Entire Disk (ASCII + Unicode Scan)`r`n")
+        $BtnRawScan.Enabled = $false; $Form.Cursor = "WaitCursor"
+        
+        $CurrentSector = 0
+        $ChunkSectors = 40960 # Doc 20MB
+        $Found = $false
+        
+        $DiskSizeObj = Get-WmiObject Win32_DiskDrive | Where {$_.DeviceID -eq $DiskInfo}
+        $TotalSectors = if($DiskSizeObj){ $DiskSizeObj.TotalSectors } else { 20000000 }
+
+        while ($CurrentSector -lt $TotalSectors) {
+            if ($CurrentSector % ($ChunkSectors * 10) -eq 0) {
+                $Pct = [Math]::Round(($CurrentSector / $TotalSectors) * 100, 1)
+                $LblT.Text = "SCAN: $Pct%"; [System.Windows.Forms.Application]::DoEvents()
+            }
+            
+            $SectorsToRead = $ChunkSectors
+            if (($CurrentSector + $ChunkSectors) -gt $TotalSectors) {
+                $SectorsToRead = $TotalSectors - $CurrentSector
+            }
+            if ($SectorsToRead -le 0) { break }
+
+            try {
+                $Buffer = [DiskReader]::ReadSector($DiskInfo, $CurrentSector, [int]$SectorsToRead)
+            } catch {
+                RawLog "Err at $CurrentSector"
+                $Buffer = $null
+            }
+            
+            if ($null -eq $Buffer -or $Buffer.Length -eq 0) { break }
+
+            # 1. Check ASCII
+            $TextAscii = [System.Text.Encoding]::Default.GetString($Buffer)
+            if ($TextAscii -match "\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}") {
+                $Key = $Matches[0]
+                RawLog "!!! FOUND (ASCII): $Key"
+                $Found = $true
+                if ([System.Windows.Forms.MessageBox]::Show("TÌM THẤY KEY: $Key`n`nBạn có muốn dừng quét để thử Key này không?", "JACKPOT", "YesNo") -eq "Yes") {
+                    $TxtManual.Text = $Key; $Tab.SelectedIndex = 0; $BtnRawScan.Enabled = $true; $Form.Cursor = "Default"; return
+                }
+            }
+
+            # 2. Check Unicode
+            $TextUni = [System.Text.Encoding]::Unicode.GetString($Buffer)
+            if ($TextUni -match "\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}") {
+                $Key = $Matches[0]
+                RawLog "!!! FOUND (UNICODE): $Key"
+                $Found = $true
+                if ([System.Windows.Forms.MessageBox]::Show("TÌM THẤY KEY: $Key`n`nBạn có muốn dừng quét để thử Key này không?", "JACKPOT", "YesNo") -eq "Yes") {
+                    $TxtManual.Text = $Key; $Tab.SelectedIndex = 0; $BtnRawScan.Enabled = $true; $Form.Cursor = "Default"; return
+                }
+            }
+
+            $CurrentSector += $SectorsToRead
+        }
+        if (!$Found) { RawLog "Scan Completed. No Key." }
+        $BtnRawScan.Enabled = $true; $Form.Cursor = "Default"
+    } catch { [System.Windows.Forms.MessageBox]::Show("Error", "FATAL"); $BtnRawScan.Enabled = $true; $Form.Cursor = "Default" }
+})
+
+# --- SCANNERS & BF ---
+$BtnScanFile.Add_Click({
+    try {
+        $TxtLog.Text="Scanning Files..."; $Form.Cursor="WaitCursor"
+        $Drives = Get-PSDrive -PSProvider FileSystem
+        foreach ($D in $Drives) {
+            if ((Get-BitLockerVolume -MountPoint $D.Root -ErrorAction SilentlyContinue).VolumeStatus -eq "Locked") { continue }
+            Log "Scan $($D.Root)..."; try {
+                $Files = Get-ChildItem $D.Root -Include "*.txt","*.html","*.bek" -Recurse -ErrorAction SilentlyContinue | Where {$_.Length -lt 2MB}
+                foreach ($F in $Files) {
+                    if ((Get-Content $F.FullName -Raw) -match "\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}") {
+                        $K=$Matches[0]; Log "FOUND: $K ($($F.Name))"; if ([System.Windows.Forms.MessageBox]::Show("Found: $K`nTry?","Found","YesNo")-eq"Yes"){$TxtManual.Text=$K;$Tab.SelectedIndex=0;return}
+                    }
+                    [System.Windows.Forms.Application]::DoEvents()
+                }
+            } catch {}
+        }
+        Log "Done."; $Form.Cursor="Default"
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Error") }
+})
+$BtnScanHiber.Add_Click({
+    try {
+        $TxtLog.Text="Scanning RAM Dump..."; $Form.Cursor="WaitCursor"
+        $Drives = Get-PSDrive -PSProvider FileSystem
+        foreach ($D in $Drives) {
+            $P="$($D.Root)hiberfil.sys"; if (Test-Path $P) {
+                Log "Scan $P..."; try {
+                    $S=[System.IO.File]::Open($P,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)
+                    $R=New-Object System.IO.StreamReader($S); $B=New-Object char[] 10485760
+                    while (!$R.EndOfStream) {
+                        $C=$R.Read($B,0,10485760); $Chunk=New-Object string($B,0,$C)
+                        if ($Chunk -match "\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}-\d{6}") {
+                            $K=$Matches[0]; Log "JACKPOT: $K"; $TxtManual.Text=$K; [System.Windows.Forms.MessageBox]::Show("JACKPOT! Key in RAM: $K","Success"); $Tab.SelectedIndex=0; $R.Close(); return
+                        }
+                        [System.Windows.Forms.Application]::DoEvents()
+                    }
+                    $R.Close()
+                } catch { Log "Error reading file." }
+            }
+        }
+        Log "Done."; $Form.Cursor="Default"
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Error") }
+})
+$BtnAD.Add_Click({ try{if(Get-Command Get-ADObject -ErrorAction SilentlyContinue){[System.Windows.Forms.MessageBox]::Show("Querying AD...","Info")}else{[System.Windows.Forms.MessageBox]::Show("Need RSAT Tools.","Error")}}catch{} })
+$BtnWeb.Add_Click({ Start-Process "https://account.microsoft.com/devices/recoverykey" })
+$BtnBF.Add_Click({
+    if (!$Grid.SelectedRows.Count) { return }; $Drv=$Grid.SelectedRows[0].Cells[0].Value
+    $Lines=$TxtPassList.Text -split "`r`n"; $i=0
+    foreach ($P in $Lines) { if(![string]::IsNullOrWhiteSpace($P)){ $i++; $LblBFStat.Text="Try ($i): $P"; [System.Windows.Forms.Application]::DoEvents(); $Pr=Start-Process "manage-bde" "-unlock $Drv -pw $P" -NoNewWindow -PassThru -Wait; if($Pr.ExitCode -eq 0){$LblBFStat.Text="OK";[System.Windows.Forms.MessageBox]::Show("Pass: $P","Success");Load-Drives;return} } }
+    [System.Windows.Forms.MessageBox]::Show("Fail all.","Info")
+})
+
+# INITIAL LOAD (1 TIME)
+Load-Drives
+
 $Form.ShowDialog() | Out-Null
