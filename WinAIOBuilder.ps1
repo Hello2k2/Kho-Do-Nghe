@@ -1,8 +1,9 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 6.2 (Syntax Fix)
-    - Fix: Lỗi Robocopy 0x7B do dấu gạch chéo ngược (\") gây sai đường dẫn.
-    - Update: Chuyển sang dùng Argument Array (An toàn tuyệt đối).
+    Version: 6.3 (The Nuclear Fix)
+    - Fix: Lỗi "Chuyện kinh dị" (File WIM bị Read-Only khiến không thể Export thêm Win khác).
+    - Update: Cơ chế "Nuclear Wipe" xóa sạch file WIM lọt lưới trước khi Build.
+    - Update: Gỡ bỏ thuộc tính Read-Only cho toàn bộ thư mục đích.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -36,7 +37,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V6.2 (ROBOCOPY FIX)"
+$Form.Text = "WINDOWS AIO BUILDER V6.3 (NUCLEAR FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -189,7 +190,7 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "Default"
 }
 
-# --- BUILD CORE (FIXED v6.2) ---
+# --- BUILD CORE (NUCLEAR FIX v6.3) ---
 function Build-Core ($CopyBoot) {
     $RawDir = $TxtOut.Text; if (!$RawDir) { return }
     $Dir = $RawDir -replace '/', '\' 
@@ -206,7 +207,7 @@ function Build-Core ($CopyBoot) {
 
     $BtnBuild.Enabled=$false
     
-    # [LOGIC] 4. COPY BOOT - MIRROR MODE (FIXED ARGS)
+    # [LOGIC] 4. COPY BOOT - MIRROR MODE (NUCLEAR CLEANUP)
     if ($CopyBoot) {
         Log "Dang chon Boot Base (Kernel)..."
         $BestIsoRow = $Tasks[0]; $MaxVer = [Version]"0.0.0.0"
@@ -225,15 +226,10 @@ function Build-Core ($CopyBoot) {
             Log "Dismount & 7-Zip Mode (Full Structure)..."
             Dismount-DiskImage -ImagePath $FirstSource -ErrorAction SilentlyContinue | Out-Null
             $7z = Get-7Zip
-            # [FIX] 7-Zip Arg cũng tách ra cho chắc
             $ZArgs = @("x", "$FirstSource", "-o$Dir", "-x!sources\install.wim", "-x!sources\install.esd", "-y")
             Start-Process $7z -ArgumentList $ZArgs -NoNewWindow -Wait
         } else {
             Log "Tim thay o dia: $Drv (Robocopy Mirror Mode)..."
-            
-            # [FIX QUAN TRỌNG V6.2]
-            # Truyền mảng (Array) thay vì String để tránh lỗi E:\" bị hiểu nhầm
-            # TrimEnd('\') để cắt dấu \ thừa ở cuối đường dẫn
             $RoboArgs = @(
                 $Drv.TrimEnd('\'), 
                 $Dir.TrimEnd('\'), 
@@ -242,6 +238,19 @@ function Build-Core ($CopyBoot) {
                 "/MT:16", "/NFL", "/NDL"
             )
             Start-Process "robocopy.exe" -ArgumentList $RoboArgs -NoNewWindow -Wait
+        }
+
+        # [NUCLEAR FIX] Gỡ Read-Only và Xóa sạch file WIM lọt lưới
+        Log "Dang don dep va kiem tra quyen ghi (Nuclear Wipe)..."
+        Start-Process "attrib" -ArgumentList "-r `"$Dir\*.*`" /s /d" -NoNewWindow -Wait
+        
+        if (Test-Path "$SourceDir\install.wim") { 
+            Log "PHAT HIEN INSTALL.WIM THUA. DANG XOA..."
+            Remove-Item "$SourceDir\install.wim" -Force -ErrorAction SilentlyContinue 
+        }
+        if (Test-Path "$SourceDir\install.esd") { 
+            Log "PHAT HIEN INSTALL.ESD THUA. DANG XOA..."
+            Remove-Item "$SourceDir\install.esd" -Force -ErrorAction SilentlyContinue 
         }
     }
 
