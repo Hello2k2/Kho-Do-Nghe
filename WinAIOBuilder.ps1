@@ -1,8 +1,8 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 6.1 (Mirror Structure Fix)
-    - Fix: Sai cấu trúc thư mục (thiếu Boot, EFI, Support).
-    - Logic Mới: Copy toàn bộ cấu trúc ISO gốc, chỉ loại trừ install.wim/esd gốc.
+    Version: 6.2 (Syntax Fix)
+    - Fix: Lỗi Robocopy 0x7B do dấu gạch chéo ngược (\") gây sai đường dẫn.
+    - Update: Chuyển sang dùng Argument Array (An toàn tuyệt đối).
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -36,7 +36,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V6.1 (MIRROR COPY)"
+$Form.Text = "WINDOWS AIO BUILDER V6.2 (ROBOCOPY FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -189,7 +189,7 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "Default"
 }
 
-# --- BUILD CORE (FIXED) ---
+# --- BUILD CORE (FIXED v6.2) ---
 function Build-Core ($CopyBoot) {
     $RawDir = $TxtOut.Text; if (!$RawDir) { return }
     $Dir = $RawDir -replace '/', '\' 
@@ -206,7 +206,7 @@ function Build-Core ($CopyBoot) {
 
     $BtnBuild.Enabled=$false
     
-    # [LOGIC] 4. COPY BOOT - MIRROR MODE (COPY TẤT CẢ TRỪ WIM GỐC)
+    # [LOGIC] 4. COPY BOOT - MIRROR MODE (FIXED ARGS)
     if ($CopyBoot) {
         Log "Dang chon Boot Base (Kernel)..."
         $BestIsoRow = $Tasks[0]; $MaxVer = [Version]"0.0.0.0"
@@ -225,16 +225,23 @@ function Build-Core ($CopyBoot) {
             Log "Dismount & 7-Zip Mode (Full Structure)..."
             Dismount-DiskImage -ImagePath $FirstSource -ErrorAction SilentlyContinue | Out-Null
             $7z = Get-7Zip
-            # [FIX] Trích xuất tất cả nhưng loại trừ install.wim gốc
-            # -x!sources\install.wim : Lệnh cấm giải nén file này
-            $Arg7z = "x `"$FirstSource`" -o`"$Dir`" -x!sources\install.wim -x!sources\install.esd -y"
-            Start-Process $7z -ArgumentList $Arg7z -NoNewWindow -Wait
+            # [FIX] 7-Zip Arg cũng tách ra cho chắc
+            $ZArgs = @("x", "$FirstSource", "-o$Dir", "-x!sources\install.wim", "-x!sources\install.esd", "-y")
+            Start-Process $7z -ArgumentList $ZArgs -NoNewWindow -Wait
         } else {
             Log "Tim thay o dia: $Drv (Robocopy Mirror Mode)..."
-            # [FIX] Copy toàn bộ ổ đĩa, chỉ trừ install.wim/esd
-            # /E : Copy đệ quy cả thư mục rỗng (Lấy hết boot, efi, support...)
-            # /XF : Loại trừ file (Bỏ install.wim để tí nữa mình tạo cái mới)
-            Start-Process "robocopy.exe" -ArgumentList "`"$Drv`" `"$Dir`" /E /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
+            
+            # [FIX QUAN TRỌNG V6.2]
+            # Truyền mảng (Array) thay vì String để tránh lỗi E:\" bị hiểu nhầm
+            # TrimEnd('\') để cắt dấu \ thừa ở cuối đường dẫn
+            $RoboArgs = @(
+                $Drv.TrimEnd('\'), 
+                $Dir.TrimEnd('\'), 
+                "/E", 
+                "/XF", "install.wim", "install.esd", 
+                "/MT:16", "/NFL", "/NDL"
+            )
+            Start-Process "robocopy.exe" -ArgumentList $RoboArgs -NoNewWindow -Wait
         }
     }
 
