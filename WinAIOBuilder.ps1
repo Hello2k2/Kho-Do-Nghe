@@ -1,8 +1,8 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 6.0 (Smart Drive Memory)
-    - Fix: Ưu tiên tìm lại ổ đĩa đã Mount (Memory Cache) thay vì dùng 7-Zip.
-    - Logic: Nếu file bị Lock -> Chắc chắn đang Mount -> Tìm ổ đĩa đó -> Copy (Robocopy).
+    Version: 6.1 (Mirror Structure Fix)
+    - Fix: Sai cấu trúc thư mục (thiếu Boot, EFI, Support).
+    - Logic Mới: Copy toàn bộ cấu trúc ISO gốc, chỉ loại trừ install.wim/esd gốc.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -19,7 +19,6 @@ Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
 # --- GLOBAL VARIABLES ---
-# Lưu Cache: Đường dẫn ISO -> Ký tự ổ đĩa (Ví dụ: C:\Win10.iso -> F:)
 $Global:IsoCache = @{} 
 $Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
 
@@ -37,7 +36,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V6.0 (SMART DRIVE MEMORY)"
+$Form.Text = "WINDOWS AIO BUILDER V6.1 (MIRROR COPY)"
 $Form.Size = New-Object System.Drawing.Size(950, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -122,25 +121,15 @@ function Get-Oscdimg {
         if ($OFD.ShowDialog() -eq "OK") { return $OFD.FileName }
     }
     
-    # ... (Download logic rút gọn để tiết kiệm chỗ, có thể giữ nguyên như cũ)
     return $null
 }
 
-# --- HÀM TÌM Ổ ĐĨA THÔNG MINH (CỐT LÕI V6.0) ---
 function Get-IsoDrive ($IsoPath) {
-    # 1. Ưu tiên tra cứu "Trí nhớ" (Cache)
     if ($Global:IsoCache.ContainsKey($IsoPath)) {
         $CachedDrv = $Global:IsoCache[$IsoPath]
-        # Kiểm tra lại xem ổ đó còn sống không và có đúng là chứa boot.wim/install.wim không
-        if ((Test-Path "$CachedDrv\sources\install.wim") -or (Test-Path "$CachedDrv\sources\install.esd") -or (Test-Path "$CachedDrv\bootmgr")) {
-            return $CachedDrv
-        } else {
-            # Nếu Cache sai (ổ bị eject rồi), xóa cache
-            $Global:IsoCache.Remove($IsoPath)
-        }
+        if ((Test-Path "$CachedDrv\sources\install.wim") -or (Test-Path "$CachedDrv\sources\install.esd") -or (Test-Path "$CachedDrv\bootmgr")) { return $CachedDrv }
+        else { $Global:IsoCache.Remove($IsoPath) }
     }
-
-    # 2. Tra cứu bằng DiskImage (Windows API)
     try {
         $Img = Get-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue
         if ($Img -and $Img.Attached) { 
@@ -148,22 +137,13 @@ function Get-IsoDrive ($IsoPath) {
             if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
         }
     } catch {}
-
-    # 3. Tra cứu "Vét cạn" (Quét toàn bộ ổ CD/DVD trong máy)
-    # Đây là bước quan trọng khi file bị Lock mà API thất bại
     try {
-        $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 } # Type 5 = CD-ROM
+        $Disks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 }
         foreach ($D in $Disks) {
-            # Nếu ổ này đã được map cho ISO khác thì bỏ qua
             if ($Global:IsoCache.Values -contains $D.DeviceID) { continue }
-            
-            # Kiểm tra xem có file Wim không (Dấu hiệu nhận biết)
-            if ((Test-Path "$($D.DeviceID)\sources\install.wim") -or (Test-Path "$($D.DeviceID)\sources\install.esd")) { 
-                return $D.DeviceID 
-            }
+            if ((Test-Path "$($D.DeviceID)\sources\install.wim") -or (Test-Path "$($D.DeviceID)\sources\install.esd")) { return $D.DeviceID }
         }
     } catch {}
-
     return $null
 }
 
@@ -181,42 +161,27 @@ function Scan-Wim ($WimPath, $SourceName) {
 
 function Process-Iso ($IsoPath) {
     $Form.Cursor = "WaitCursor"; Log "Dang xu ly ISO: $IsoPath..."
-    
-    # Thử tìm ổ đĩa (Có thể đã mount từ trước)
     $Drv = Get-IsoDrive $IsoPath 
-    
     if (!$Drv) {
         try {
             Log "Dang Mount ISO..."
             Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-            
-            # Chờ ổ đĩa hiện lên
-            for($i=0;$i -lt 15;$i++){ 
-                $Drv = Get-IsoDrive $IsoPath
-                if($Drv){ break }
-                Start-Sleep -Milliseconds 500 
-            }
-        } catch { Log "Mount that bai (Se dung 7-Zip sau)" }
-    } else {
-        Log "ISO da duoc mount san tai: $Drv"
-    }
+            for($i=0;$i -lt 15;$i++){ $Drv = Get-IsoDrive $IsoPath; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
+        } catch { Log "Mount that bai" }
+    } else { Log "ISO da duoc mount san tai: $Drv" }
 
-    # [FIX] LƯU VÀO CACHE NGAY LẬP TỨC
     if ($Drv) {
         $Global:IsoCache[$IsoPath] = $Drv
         $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
         if ($WimFiles) { Scan-Wim $WimFiles[0].FullName $IsoPath; $Form.Cursor="Default"; return }
     }
-
-    # Nếu vẫn không có ổ đĩa, mới dùng 7-Zip (Đường cùng)
-    Log "Khong tim thay o dia Mount. Dung 7-Zip..."
-    # Trước khi dùng 7-Zip, Dismount để chắc chắn không bị Lock
+    
+    Log "Dismount va dung 7-Zip..."
     Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Out-Null
-
     $7z = Get-7Zip
     if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode(); $ExtractDir = "$Global:TempWimDir\$Hash"; New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
-        Log "Trich xuat bang 7-Zip (Please wait)..."
+        Log "Trich xuat bang 7-Zip (Wait)..."
         $P = Start-Process $7z -ArgumentList "e `"$IsoPath`" sources/install.wim sources/install.esd -o`"$ExtractDir`" -y" -NoNewWindow -PassThru -Wait
         $ExtWim = Get-ChildItem -Path $ExtractDir -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
         if ($ExtWim) { Scan-Wim $ExtWim[0].FullName $IsoPath } else { Log "KHONG TIM THAY FILE WIM!" }
@@ -224,7 +189,7 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "Default"
 }
 
-# --- BUILD CORE ---
+# --- BUILD CORE (FIXED) ---
 function Build-Core ($CopyBoot) {
     $RawDir = $TxtOut.Text; if (!$RawDir) { return }
     $Dir = $RawDir -replace '/', '\' 
@@ -241,41 +206,35 @@ function Build-Core ($CopyBoot) {
 
     $BtnBuild.Enabled=$false
     
+    # [LOGIC] 4. COPY BOOT - MIRROR MODE (COPY TẤT CẢ TRỪ WIM GỐC)
     if ($CopyBoot) {
-        Log "Dang so sanh Version de tim Boot Loader xin nhat..."
-        $BestIsoRow = $Tasks[0]
-        $MaxVer = [Version]"0.0.0.0"
-
+        Log "Dang chon Boot Base (Kernel)..."
+        $BestIsoRow = $Tasks[0]; $MaxVer = [Version]"0.0.0.0"
         foreach ($Row in $Tasks) {
-            try {
-                $VerStr = $Row.Cells[7].Value 
-                $CurrentVer = [Version]$VerStr
-                if ($CurrentVer -gt $MaxVer) { $MaxVer = $CurrentVer; $BestIsoRow = $Row }
-            } catch { continue }
+            try { $VerStr = $Row.Cells[7].Value; $CurrentVer = [Version]$VerStr; if ($CurrentVer -gt $MaxVer) { $MaxVer = $CurrentVer; $BestIsoRow = $Row } } catch { continue }
         }
         
-        Log "-> CHON BOOT BASE: $($BestIsoRow.Cells[3].Value) (Kernel: $MaxVer)"
-
+        Log "-> CHON BASE: $($BestIsoRow.Cells[3].Value) (Kernel: $MaxVer)"
         $FirstSource = $BestIsoRow.Cells[1].Value
         $FirstWim = $BestIsoRow.Cells[6].Value 
         
-        # [FIX] Cố gắng tìm lại ổ đĩa bằng mọi giá trước khi bỏ cuộc
         Log "Dang tim lai o dia da Mount..."
         $Drv = Get-IsoDrive $FirstSource
 
         if (!$Drv) {
-            # Nếu Get-IsoDrive vẫn null, nhưng file bị lock -> Chứng tỏ nó vẫn nằm đâu đó.
-            # Nhưng nếu code chạy đúng thì hàm Get-IsoDrive V6.0 đã quét hết các ổ CD rồi.
-            # Nên nếu vào đây nghĩa là thật sự không tìm thấy.
-            Log "Khong tim thay o dia ao. Bat buoc Dismount va dung 7-Zip..."
+            Log "Dismount & 7-Zip Mode (Full Structure)..."
             Dismount-DiskImage -ImagePath $FirstSource -ErrorAction SilentlyContinue | Out-Null
-            
             $7z = Get-7Zip
-            Start-Process $7z -ArgumentList "x `"$FirstSource`" boot efi setup.exe autorun.inf bootmgr bootmgr.efi sources/boot.wim sources/setup.exe -o`"$Dir`" -y" -NoNewWindow -Wait
+            # [FIX] Trích xuất tất cả nhưng loại trừ install.wim gốc
+            # -x!sources\install.wim : Lệnh cấm giải nén file này
+            $Arg7z = "x `"$FirstSource`" -o`"$Dir`" -x!sources\install.wim -x!sources\install.esd -y"
+            Start-Process $7z -ArgumentList $Arg7z -NoNewWindow -Wait
         } else {
-            Log "Tim thay Boot Base tai o dia: $Drv (Robocopy Mode)"
-            Start-Process "robocopy.exe" -ArgumentList "`"$Drv`" `"$Dir`" /E /XD `"$Drv\sources`" `"$Drv\System Volume Information`" /MT:16 /NFL /NDL" -NoNewWindow -Wait
-            Start-Process "robocopy.exe" -ArgumentList "`"$Drv\sources`" `"$SourceDir`" boot.wim setup.exe /MT:16 /NFL /NDL" -NoNewWindow -Wait
+            Log "Tim thay o dia: $Drv (Robocopy Mirror Mode)..."
+            # [FIX] Copy toàn bộ ổ đĩa, chỉ trừ install.wim/esd
+            # /E : Copy đệ quy cả thư mục rỗng (Lấy hết boot, efi, support...)
+            # /XF : Loại trừ file (Bỏ install.wim để tí nữa mình tạo cái mới)
+            Start-Process "robocopy.exe" -ArgumentList "`"$Drv`" `"$Dir`" /E /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
         }
     }
 
@@ -361,21 +320,16 @@ $BtnMakeIso.Add_Click({
 
 $BtnHddBoot.Add_Click({
     $OutDir = $TxtOut.Text; if (!($Grid.Rows.Count)) { return }
-    
     $MaxVer = [Version]"0.0.0.0"; $BestRow = $Grid.Rows[0]
-    foreach ($Row in $Grid.Rows) {
-        try { if ([Version]$Row.Cells[7].Value -gt $MaxVer) { $MaxVer = [Version]$Row.Cells[7].Value; $BestRow = $Row } } catch {}
-    }
+    foreach ($Row in $Grid.Rows) { try { if ([Version]$Row.Cells[7].Value -gt $MaxVer) { $MaxVer = [Version]$Row.Cells[7].Value; $BestRow = $Row } } catch {} }
     
     $FirstIso = $BestRow.Cells[1].Value
     $FirstWim = $BestRow.Cells[6].Value 
     Log "HDD BOOT: Su dung Boot Core cua $($BestRow.Cells[3].Value)..."
     
-    # [FIX] Tìm ổ đĩa bằng mọi giá
     $Drv = Get-IsoDrive $FirstIso
-    
     if (!$Drv) {
-         Log "HDD Boot: Khong tim thay o dia. Dismount & 7-Zip..."
+         Log "HDD Boot: Dismount & 7-Zip..."
          Dismount-DiskImage -ImagePath $FirstIso -ErrorAction SilentlyContinue | Out-Null
          $7z = Get-7Zip; Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait 
     } else { 
@@ -396,7 +350,7 @@ $BtnHddBoot.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("HDD Boot Menu Created!", "Success")
 })
 
-$Form.Add_FormClosing({ try { foreach ($Iso in $Global:MountedISOs.Keys) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue } catch {} })
+$Form.Add_FormClosing({ try { foreach ($Iso in $Global:IsoCache.Values) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue } catch {} })
 $Form.ShowDialog() | Out-Null
 
 } catch { [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error") }
