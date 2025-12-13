@@ -206,6 +206,7 @@ function Process-Iso ($IsoPath) {
 }
 
 # --- BUILD CORE (AIO TAB) ---
+# --- BUILD CORE (AIO TAB) - V7.3 SMART PRIORITY ---
 function Build-Core ($CopyBoot) {
     $RawDir = $TxtOut.Text; if (!$RawDir) { return }
     $Dir = $RawDir -replace '/', '\' 
@@ -223,13 +224,38 @@ function Build-Core ($CopyBoot) {
     $BtnBuild.Enabled=$false
     
     if ($CopyBoot) {
-        Log "Dang chon Boot Base (Kernel)..."
-        $BestIsoRow = $Tasks[0]; $MaxVer = [Version]"0.0.0.0"
+        Log "Dang phan tich de chon Boot Base xin nhat..."
+        
+        $BestIsoRow = $Tasks[0]
+        $HighestScore = -1
+        
         foreach ($Row in $Tasks) {
-            try { $VerStr = $Row.Cells[7].Value; $CurrentVer = [Version]$VerStr; if ($CurrentVer -gt $MaxVer) { $MaxVer = $CurrentVer; $BestIsoRow = $Row } } catch { continue }
+            # --- THUẬT TOÁN TÍNH ĐIỂM (PRIORITY SCORE) ---
+            $Score = 0
+            $Name = $Row.Cells[3].Value.ToString().ToLower() # Cột Name (Phiên bản)
+            $VerStr = $Row.Cells[7].Value.ToString()         # Cột Kernel Version
+            
+            # 1. Điểm theo Tên (Quan trọng nhất)
+            if ($Name -match "windows 11") { $Score += 10000 }
+            elseif ($Name -match "windows 10") { $Score += 5000 }
+            elseif ($Name -match "windows 8") { $Score += 1000 }
+            
+            # 2. Điểm theo Kernel (Phụ trợ)
+            try {
+                $VerObj = [Version]$VerStr
+                $Score += $VerObj.Major * 100 + $VerObj.Minor
+            } catch {}
+
+            Log " -> Check: $Name (Ver: $VerStr) = $Score diem"
+
+            if ($Score -gt $HighestScore) {
+                $HighestScore = $Score
+                $BestIsoRow = $Row
+            }
         }
         
-        Log "-> CHON BASE: $($BestIsoRow.Cells[3].Value) (Kernel: $MaxVer)"
+        Log "=> CHOT DON: $($BestIsoRow.Cells[3].Value) (Score: $HighestScore) lam Boot Base."
+        
         $FirstSource = $BestIsoRow.Cells[1].Value
         $Drv = Get-IsoDrive $FirstSource
 
@@ -245,8 +271,7 @@ function Build-Core ($CopyBoot) {
             Start-Process "robocopy.exe" -ArgumentList $RoboArgs -NoNewWindow -Wait
         }
 
-        # [NUCLEAR FIX]
-        Log "Dang don dep va kiem tra quyen ghi (Nuclear Wipe)..."
+        Log "Nuclear Wipe..."
         Start-Process "attrib" -ArgumentList "-r `"$Dir\*.*`" /s /d" -NoNewWindow -Wait
         if (Test-Path "$SourceDir\install.wim") { Remove-Item "$SourceDir\install.wim" -Force -ErrorAction SilentlyContinue }
         if (Test-Path "$SourceDir\install.esd") { Remove-Item "$SourceDir\install.esd" -Force -ErrorAction SilentlyContinue }
@@ -285,7 +310,6 @@ wpeutil reboot
     Invoke-Item $Dir
     $BtnBuild.Enabled=$true
 }
-
 # --- MAKE ISO FROM FOLDER (WITH DISK GUARD) ---
 function Make-Iso-Action ($SourceFolder) {
     if (!$SourceFolder -or !(Test-Path $SourceFolder)) { [System.Windows.Forms.MessageBox]::Show("Thu muc khong ton tai!", "Loi"); return }
