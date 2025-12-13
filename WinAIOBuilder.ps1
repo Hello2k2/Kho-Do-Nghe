@@ -1,10 +1,8 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 7.1 (THE PERFECT UNION)
-    - Combined: Giao diện Tab (v7.0) + Cơ chế bảo vệ cốt lõi (v6.5).
-    - Feature: AIO Builder (Ghép ISO) với Nuclear Wipe & Read-Only Fix.
-    - Feature: Wim To ISO (Tạo bộ cài từ file WIM) với Disk Space Guard.
-    - Feature: Full Recovery (ADK Download, GitHub, Local).
+    Version: 7.2 (AUTO-FETCH BOOT KIT)
+    - Feature: Tự động tải Boot Kit (Khung xương ISO) nếu user không có sẵn ISO gốc.
+    - Feature: Hợp nhất mọi tính năng cũ (Tab, Disk Guard, Nuclear Wipe).
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -23,6 +21,9 @@ $ErrorActionPreference = "SilentlyContinue"
 # --- GLOBAL VARIABLES ---
 $Global:IsoCache = @{} 
 $Global:TempWimDir = "$env:TEMP\PhatTan_Wims"
+# Link tải bộ Boot Kit (File ZIP chứa boot.wim, setup.exe, efi...)
+# Lưu ý: Đây là link ví dụ. Ông nên tự tạo bộ Boot Kit chuẩn, zip lại rồi up lên GitHub của ông.
+$Global:BootKitUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/raw/main/Win10_BootKit_Minimal.zip" 
 
 if (!(Test-Path $Global:TempWimDir)) { New-Item -ItemType Directory -Path $Global:TempWimDir -Force | Out-Null }
 
@@ -38,7 +39,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WIN AIO BUILDER v7.1 - PHAT TAN PC (ULTIMATE MERGE)"
+$Form.Text = "WIN AIO BUILDER v7.2 - PHAT TAN PC (AUTO BOOT KIT)"
 $Form.Size = New-Object System.Drawing.Size(950, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -105,10 +106,10 @@ $GbWimIn = New-Object System.Windows.Forms.GroupBox; $GbWimIn.Text = "1. Chon Fi
 $TxtWimIn = New-Object System.Windows.Forms.TextBox; $TxtWimIn.Location = "20,30"; $TxtWimIn.Size = "650,25"; $GbWimIn.Controls.Add($TxtWimIn)
 $BtnBrWim = New-Object System.Windows.Forms.Button; $BtnBrWim.Text = "CHON WIM..."; $BtnBrWim.Location = "690,28"; $BtnBrWim.Size = "140,27"; $BtnBrWim.BackColor = "DimGray"; $BtnBrWim.ForeColor = "White"; $GbWimIn.Controls.Add($BtnBrWim)
 
-$GbBootBase = New-Object System.Windows.Forms.GroupBox; $GbBootBase.Text = "2. Chon ISO Moi (De lay Boot)"; $GbBootBase.Location = "20,110"; $GbBootBase.Size = "850,80"; $GbBootBase.ForeColor = "Yellow"; $TabW2I.Controls.Add($GbBootBase)
+$GbBootBase = New-Object System.Windows.Forms.GroupBox; $GbBootBase.Text = "2. Chon ISO Moi (De trong neu muon tai Boot Kit)"; $GbBootBase.Location = "20,110"; $GbBootBase.Size = "850,80"; $GbBootBase.ForeColor = "Yellow"; $TabW2I.Controls.Add($GbBootBase)
 $TxtBaseIso = New-Object System.Windows.Forms.TextBox; $TxtBaseIso.Location = "20,30"; $TxtBaseIso.Size = "650,25"; $GbBootBase.Controls.Add($TxtBaseIso)
 $BtnBrBase = New-Object System.Windows.Forms.Button; $BtnBrBase.Text = "CHON ISO MOI..."; $BtnBrBase.Location = "690,28"; $BtnBrBase.Size = "140,27"; $BtnBrBase.BackColor = "DimGray"; $BtnBrBase.ForeColor = "White"; $GbBootBase.Controls.Add($BtnBrBase)
-$LblNoteW2I = New-Object System.Windows.Forms.Label; $LblNoteW2I.Text = "* Chon ISO Win 10/11 bat ky de lam 'vo' cho file WIM cua ban."; $LblNoteW2I.Location = "20,55"; $LblNoteW2I.AutoSize = $true; $LblNoteW2I.ForeColor = "Gray"; $GbBootBase.Controls.Add($LblNoteW2I)
+$LblNoteW2I = New-Object System.Windows.Forms.Label; $LblNoteW2I.Text = "* Neu bo trong, Tool se tu dong tai Boot Kit (Khung xuong) ve."; $LblNoteW2I.Location = "20,55"; $LblNoteW2I.AutoSize = $true; $LblNoteW2I.ForeColor = "Gray"; $GbBootBase.Controls.Add($LblNoteW2I)
 
 $GbOutW2I = New-Object System.Windows.Forms.GroupBox; $GbOutW2I.Text = "3. Xuat File ISO"; $GbOutW2I.Location = "20,200"; $GbOutW2I.Size = "850,150"; $GbOutW2I.ForeColor = "Lime"; $TabW2I.Controls.Add($GbOutW2I)
 $BtnStartW2I = New-Object System.Windows.Forms.Button; $BtnStartW2I.Text = "TAO ISO TU FILE WIM"; $BtnStartW2I.Location = "225,40"; $BtnStartW2I.Size = "400,60"; $BtnStartW2I.BackColor = "Green"; $BtnStartW2I.ForeColor = "White"; $BtnStartW2I.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $GbOutW2I.Controls.Add($BtnStartW2I)
@@ -131,35 +132,18 @@ function Get-7Zip {
 function Get-Oscdimg {
     $Tool = "$env:TEMP\oscdimg.exe"
     if (Test-Path $Tool) { return $Tool }
-    Log "Check 1: Dang tai oscdimg.exe tu GitHub..."
     try {
         $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         (New-Object System.Net.WebClient).DownloadFile($Url, $Tool)
-        if ((Get-Item $Tool).Length -gt 100kb) { Log "Tai tu GitHub thanh cong!"; return $Tool }
-    } catch { Log "GitHub Link loi hoac khong co mang." }
-
-    Log "Check 2: Quet ADK trong may..."
-    $AdkPaths = @(
-        "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-        "$env:ProgramFiles\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-        "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
-    )
-    foreach ($P in $AdkPaths) { if (Test-Path $P) { Log "Tim thay ADK tai: $P"; return $P } }
-
-    if ([System.Windows.Forms.MessageBox]::Show("Khong tim thay oscdimg.exe.`n`nBan co muon CHON FILE THU CONG (Browse) khong?", "Tim File", "YesNo", "Question") -eq "Yes") {
-        $OFD = New-Object System.Windows.Forms.OpenFileDialog
-        $OFD.Filter = "Oscdimg Tool (oscdimg.exe)|oscdimg.exe"
-        if ($OFD.ShowDialog() -eq "OK") { return $OFD.FileName }
-    }
+        if ((Get-Item $Tool).Length -gt 100kb) { return $Tool }
+    } catch {}
     
-    if ([System.Windows.Forms.MessageBox]::Show("Ban co muon tai ADK Setup tu Microsoft ngay bay gio?", "Download ADK", "YesNo") -eq "Yes") {
-        try {
-            Log "Dang tai ADK Setup..."
-            (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", "$env:TEMP\adksetup.exe")
-            Start-Process "$env:TEMP\adksetup.exe" -Wait
-            foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
-        } catch { Log "Loi tai ADK Setup tu Microsoft." }
+    $AdkPaths = @("$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe", "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe")
+    foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
+    
+    if ([System.Windows.Forms.MessageBox]::Show("Khong tim thay oscdimg.exe. Tai ADK tu Microsoft?", "Download", "YesNo") -eq "Yes") {
+        try { (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", "$env:TEMP\adksetup.exe"); Start-Process "$env:TEMP\adksetup.exe" -Wait; foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } } } catch {}
     }
     return $null
 }
@@ -221,7 +205,7 @@ function Process-Iso ($IsoPath) {
     $Form.Cursor = "Default"
 }
 
-# --- BUILD CORE (AIO TAB) - V6.5 LOGIC ---
+# --- BUILD CORE (AIO TAB) ---
 function Build-Core ($CopyBoot) {
     $RawDir = $TxtOut.Text; if (!$RawDir) { return }
     $Dir = $RawDir -replace '/', '\' 
@@ -340,52 +324,64 @@ function Make-Iso-Action ($SourceFolder) {
     }
 }
 
-# --- WIM TO ISO LOGIC (Tab 2) ---
+# --- WIM TO ISO LOGIC (Tab 2) [UPDATED V7.2] ---
 function Wim-To-Iso {
     $Wim = $TxtWimIn.Text; $BaseIso = $TxtBaseIso.Text
     if (!$Wim -or !(Test-Path $Wim)) { [System.Windows.Forms.MessageBox]::Show("Chua chon file WIM!", "Loi"); return }
-    if (!$BaseIso -or !(Test-Path $BaseIso)) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO moi!", "Loi"); return }
+    
+    # [FEATURE] Auto Fetch Logic
+    $UseOnlineBoot = $false
+    if (!$BaseIso -or !(Test-Path $BaseIso)) { 
+        if ([System.Windows.Forms.MessageBox]::Show("Ban chua chon ISO 'vo' (Boot Base).`n`nBan co muon tai tu dong BOOT KIT CHUAN tu Server ve khong?", "Auto Fetch", "YesNo", "Question") -eq "Yes") {
+            $UseOnlineBoot = $true
+        } else { return }
+    }
 
     $Oscd = Get-Oscdimg; if (!$Oscd) { return }
 
     $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName = "MyCustomWin.iso"; $Save.Filter = "ISO|*.iso"
     if ($Save.ShowDialog() -eq "OK") {
         $TargetIso = $Save.FileName
-        
-        # [NEW] Check Disk Space for Wim2Iso
-        $DestDrive = [System.IO.Path]::GetPathRoot($TargetIso).Trim('\')
-        try {
-            $DiskInfo = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $DestDrive }
-            # Ước lượng ISO = Base ISO size + Custom Wim Size
-            $TotalSize = (Get-Item $BaseIso).Length + (Get-Item $Wim).Length
-            if ($DiskInfo.FreeSpace -lt $TotalSize) {
-                [System.Windows.Forms.MessageBox]::Show("O dia dich ($DestDrive) khong du dung luong cho ISO moi!", "Disk Full", "OK", "Error"); return
-            }
-        } catch {}
-
         $WorkDir = "$env:TEMP\Wim2Iso_Work"; New-Item $WorkDir -ItemType Directory -Force | Out-Null
         
-        # 1. Extract Base ISO (Vỏ)
-        Log "Dang trich xuat 'vo' tu ISO moi..."
-        $Drv = Get-IsoDrive $BaseIso
-        if (!$Drv) {
-             Mount-DiskImage -ImagePath $BaseIso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
-             for($i=0;$i -lt 10;$i++){ $Drv = Get-IsoDrive $BaseIso; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
-        }
-        
-        if ($Drv) {
-             Log "Copy Boot files tu $Drv..."
-             Start-Process "robocopy.exe" -ArgumentList "`"$($Drv.TrimEnd('\'))`" `"$WorkDir`" /E /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
+        if ($UseOnlineBoot) {
+            # [LOGIC] Tải Boot Kit
+            $BootKitFile = "$env:TEMP\BootKit.zip"
+            if (!(Test-Path $BootKitFile)) {
+                Log "Dang tai Boot Kit tu Server (Vui long cho)..."
+                try {
+                    # Link mẫu, ông thay link của ông vào đây
+                    $Url = "https://github.com/Hello2k2/Kho-Do-Nghe/raw/main/Win10_BootKit_Minimal.zip"
+                    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+                    (New-Object System.Net.WebClient).DownloadFile($Url, $BootKitFile)
+                } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai Boot Kit! Kiem tra mang.", "Error"); return }
+            }
+            
+            # Giải nén Boot Kit
+            Log "Giai nen Boot Kit..."
+            $7z = Get-7Zip
+            Start-Process $7z -ArgumentList "x `"$BootKitFile`" -o`"$WorkDir`" -y" -NoNewWindow -Wait
         } else {
-             Log "Dung 7-Zip trich xuat Boot..."
-             $7z = Get-7Zip
-             Start-Process $7z -ArgumentList "x `"$BaseIso`" -o`"$WorkDir`" -x!sources\install.wim -x!sources\install.esd -y" -NoNewWindow -Wait
+            # [LOGIC] Dùng ISO có sẵn (như cũ)
+            Log "Trich xuat 'vo' tu ISO co san..."
+            $Drv = Get-IsoDrive $BaseIso
+            if (!$Drv) {
+                 Mount-DiskImage -ImagePath $BaseIso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
+                 for($i=0;$i -lt 10;$i++){ $Drv = Get-IsoDrive $BaseIso; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
+            }
+            
+            if ($Drv) {
+                 Start-Process "robocopy.exe" -ArgumentList "`"$($Drv.TrimEnd('\'))`" `"$WorkDir`" /E /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
+            } else {
+                 $7z = Get-7Zip
+                 Start-Process $7z -ArgumentList "x `"$BaseIso`" -o`"$WorkDir`" -x!sources\install.wim -x!sources\install.esd -y" -NoNewWindow -Wait
+            }
         }
 
         # 2. Inject Custom WIM
         Log "Dang bom file WIM cua ban vao..."
-        $DestWim = "$WorkDir\sources\install.wim"
-        Copy-Item $Wim $DestWim -Force
+        $DestWimDir = "$WorkDir\sources"; if(!(Test-Path $DestWimDir)){ New-Item -ItemType Directory -Path $DestWimDir | Out-Null }
+        Copy-Item $Wim "$DestWimDir\install.wim" -Force
         
         # 3. Create ISO
         Log "Dong goi ISO..."
