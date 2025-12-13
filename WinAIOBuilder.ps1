@@ -1,9 +1,10 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 6.4 (Final Ultimate)
-    - Feature: Nuclear Fix (Xóa sạch file WIM cũ, gỡ Read-Only).
-    - Feature: Custom ISO Source (Chuột phải nút tạo ISO để chọn folder tùy ý).
-    - Feature: Full Recovery (GitHub -> Local -> Manual -> ADK Download).
+    Version: 7.1 (THE PERFECT UNION)
+    - Combined: Giao diện Tab (v7.0) + Cơ chế bảo vệ cốt lõi (v6.5).
+    - Feature: AIO Builder (Ghép ISO) với Nuclear Wipe & Read-Only Fix.
+    - Feature: Wim To ISO (Tạo bộ cài từ file WIM) với Disk Space Guard.
+    - Feature: Full Recovery (ADK Download, GitHub, Local).
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -37,80 +38,99 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS AIO BUILDER V6.4 (CUSTOM ISO SOURCE)"
-$Form.Size = New-Object System.Drawing.Size(950, 800)
+$Form.Text = "WIN AIO BUILDER v7.1 - PHAT TAN PC (ULTIMATE MERGE)"
+$Form.Size = New-Object System.Drawing.Size(950, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "TẠO WINDOWS AIO & HDD BOOT"; $LblT.Font = New-Object System.Drawing.Font("Impact", 18); $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $Form.Controls.Add($LblT)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "PHAT TAN PC - SYSTEM BUILDER"; $LblT.Font = New-Object System.Drawing.Font("Impact", 20); $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $Form.Controls.Add($LblT)
 
-# ================= SECTIONS =================
+# --- TAB CONTROL ---
+$TabControl = New-Object System.Windows.Forms.TabControl
+$TabControl.Location = "20,60"; $TabControl.Size = "900,730"
+$TabControl.Appearance = "FlatButtons"; $TabControl.ItemSize = New-Object System.Drawing.Size(150, 30)
 
-# 1. INPUT ISO
-$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "1. Danh Sách ISO Nguồn"; $GbIso.Location = "20,50"; $GbIso.Size = "895,250"; $GbIso.ForeColor = "Yellow"; $Form.Controls.Add($GbIso)
+# TAB 1: AIO BUILDER
+$TabAIO = New-Object System.Windows.Forms.TabPage; $TabAIO.Text = "  1. GHEP ISO AIO  "; $TabAIO.BackColor = $Theme.Back
+$TabControl.Controls.Add($TabAIO)
 
-$TxtIsoList = New-Object System.Windows.Forms.TextBox; $TxtIsoList.Location = "15,25"; $TxtIsoList.Size = "580,25"; $TxtIsoList.ReadOnly = $true; $GbIso.Controls.Add($TxtIsoList)
-$BtnAdd = New-Object System.Windows.Forms.Button; $BtnAdd.Text = "THÊM ISO..."; $BtnAdd.Location = "610,23"; $BtnAdd.Size = "100,27"; $BtnAdd.BackColor = "DimGray"; $BtnAdd.ForeColor = "White"; $GbIso.Controls.Add($BtnAdd)
-$BtnEject = New-Object System.Windows.Forms.Button; $BtnEject.Text = "RESET LIST"; $BtnEject.Location = "720,23"; $BtnEject.Size = "100,27"; $BtnEject.BackColor = "DarkRed"; $BtnEject.ForeColor = "White"; $GbIso.Controls.Add($BtnEject)
+# TAB 2: WIM TO ISO
+$TabW2I = New-Object System.Windows.Forms.TabPage; $TabW2I.Text = "  2. WIM TO ISO  "; $TabW2I.BackColor = $Theme.Back
+$TabControl.Controls.Add($TabW2I)
 
-$Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,60"; $Grid.Size = "865,175"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
+$Form.Controls.Add($TabControl)
+
+# ==================== GUI TAB 1: AIO BUILDER ====================
+$GbIso = New-Object System.Windows.Forms.GroupBox; $GbIso.Text = "Danh Sách ISO Nguồn"; $GbIso.Location = "15,15"; $GbIso.Size = "860,250"; $GbIso.ForeColor = "Yellow"; $TabAIO.Controls.Add($GbIso)
+
+$TxtIsoList = New-Object System.Windows.Forms.TextBox; $TxtIsoList.Location = "15,25"; $TxtIsoList.Size = "550,25"; $TxtIsoList.ReadOnly = $true; $GbIso.Controls.Add($TxtIsoList)
+$BtnAdd = New-Object System.Windows.Forms.Button; $BtnAdd.Text = "THEM ISO"; $BtnAdd.Location = "580,23"; $BtnAdd.Size = "90,27"; $BtnAdd.BackColor = "DimGray"; $BtnAdd.ForeColor = "White"; $GbIso.Controls.Add($BtnAdd)
+$BtnEject = New-Object System.Windows.Forms.Button; $BtnEject.Text = "RESET"; $BtnEject.Location = "680,23"; $BtnEject.Size = "80,27"; $BtnEject.BackColor = "DarkRed"; $BtnEject.ForeColor = "White"; $GbIso.Controls.Add($BtnEject)
+
+$Grid = New-Object System.Windows.Forms.DataGridView; $Grid.Location = "15,60"; $Grid.Size = "830,175"; $Grid.BackgroundColor = "Black"; $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
 $ColChk = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ColChk.Name = "Select"; $ColChk.HeaderText = "[X]"; $ColChk.Width = 40; $Grid.Columns.Add($ColChk) | Out-Null
-$Grid.Columns.Add("ISO", "Đường dẫn File"); $Grid.Columns.Add("Index", "Index"); $Grid.Columns.Add("Name", "Phiên Bản"); $Grid.Columns.Add("Size", "Dung Lượng"); $Grid.Columns.Add("Arch", "Bit"); 
-$Grid.Columns.Add("WimPath", "WimPath"); 
-$Grid.Columns.Add("BuildVer", "Kernel Version"); $Grid.Columns[7].Visible = $false 
+$Grid.Columns.Add("ISO", "File"); $Grid.Columns.Add("Index", "Idx"); $Grid.Columns.Add("Name", "Version"); $Grid.Columns.Add("Size", "Size"); $Grid.Columns.Add("Arch", "Bit"); 
+$Grid.Columns.Add("WimPath", "WimPath"); $Grid.Columns.Add("BuildVer", "Kernel"); $Grid.Columns[7].Visible = $false; $Grid.Columns[6].Visible = $false; $Grid.Columns[5].Visible = $false;
+$Grid.Columns[1].Width = 50; $Grid.Columns[3].Width = 80; $Grid.Columns[4].Width = 60; $GbIso.Controls.Add($Grid)
 
-$Grid.Columns[1].Width = 50; $Grid.Columns[3].Width = 80; $Grid.Columns[4].Width = 60; $Grid.Columns[5].Visible = $false; $GbIso.Controls.Add($Grid)
+$GbBuild = New-Object System.Windows.Forms.GroupBox; $GbBuild.Text = "Cấu Hình & Build AIO"; $GbBuild.Location = "15,280"; $GbBuild.Size = "860,100"; $GbBuild.ForeColor = "Lime"; $TabAIO.Controls.Add($GbBuild)
+$LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Output:"; $LblOut.Location = "15,25"; $LblOut.AutoSize = $true; $GbBuild.Controls.Add($LblOut)
+$TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "70,22"; $TxtOut.Size = "350,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
+$BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "430,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
+$BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "START BUILD AIO"; $BtnBuild.Location = "500,20"; $BtnBuild.Size = "340,60"; $BtnBuild.BackColor = "Green"; $BtnBuild.ForeColor = "White"; $BtnBuild.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $GbBuild.Controls.Add($BtnBuild)
 
-# 2. BUILD OPTIONS
-$GbBuild = New-Object System.Windows.Forms.GroupBox; $GbBuild.Text = "2. Cấu Hình & Build"; $GbBuild.Location = "20,310"; $GbBuild.Size = "895,120"; $GbBuild.ForeColor = "Lime"; $Form.Controls.Add($GbBuild)
-
-$LblOut = New-Object System.Windows.Forms.Label; $LblOut.Text = "Thư mục làm việc:"; $LblOut.Location = "15,25"; $LblOut.AutoSize = $true; $GbBuild.Controls.Add($LblOut)
-$TxtOut = New-Object System.Windows.Forms.TextBox; $TxtOut.Location = "120,22"; $TxtOut.Size = "400,25"; $TxtOut.Text = "D:\AIO_Output"; $GbBuild.Controls.Add($TxtOut)
-$BtnBrowseOut = New-Object System.Windows.Forms.Button; $BtnBrowseOut.Text = "..."; $BtnBrowseOut.Location = "530,20"; $BtnBrowseOut.Size = "40,27"; $GbBuild.Controls.Add($BtnBrowseOut)
-
-# Context Menu Build
+# Context Menu AIO
 $MenuBuild = New-Object System.Windows.Forms.ContextMenu
-$Item1 = $MenuBuild.MenuItems.Add("1. Build ra file cài đặt (install.wim + CMD Admin)")
-$Item2 = $MenuBuild.MenuItems.Add("2. Chuẩn bị cấu trúc ISO (Để tạo file ISO Boot)")
+$Item1 = $MenuBuild.MenuItems.Add("1. Build ra folder cai dat (install.wim)")
+$Item2 = $MenuBuild.MenuItems.Add("2. Tao cau truc ISO Boot (Full)")
 
-$BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text = "BẮT ĐẦU BUILD AIO ▼"; $BtnBuild.Location = "600,20"; $BtnBuild.Size = "280,80"; $BtnBuild.BackColor = "Green"; $BtnBuild.ForeColor = "White"; $BtnBuild.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold); $GbBuild.Controls.Add($BtnBuild)
+# Tools AIO
+$GbIsoTool = New-Object System.Windows.Forms.GroupBox; $GbIsoTool.Text = "ISO & HDD Boot Tools"; $GbIsoTool.Location = "15,390"; $GbIsoTool.Size = "860,100"; $GbIsoTool.ForeColor = "Orange"; $TabAIO.Controls.Add($GbIsoTool)
 
-# 3. CREATE ISO
-$GbIsoTool = New-Object System.Windows.Forms.GroupBox; $GbIsoTool.Text = "3. Đóng Gói Ra File ISO"; $GbIsoTool.Location = "20,440"; $GbIsoTool.Size = "440,150"; $GbIsoTool.ForeColor = "Orange"; $Form.Controls.Add($GbIsoTool)
-
-# [NEW] Menu ẩn cho nút tạo ISO
+# Hidden Menu for ISO
 $MenuIsoHidden = New-Object System.Windows.Forms.ContextMenu
 $MItem_Default = $MenuIsoHidden.MenuItems.Add("1. Tao ISO tu thu muc hien tai (Default)")
 $MItem_Custom  = $MenuIsoHidden.MenuItems.Add("2. Chon thu muc nguon khac de tao ISO... (Import)")
 
-$BtnMakeIso = New-Object System.Windows.Forms.Button; $BtnMakeIso.Text = "TẠO FILE ISO NGAY"; $BtnMakeIso.Location = "20,30"; $BtnMakeIso.Size = "400,50"; $BtnMakeIso.BackColor = "DarkOrange"; $BtnMakeIso.ForeColor = "Black"; $BtnMakeIso.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold); $GbIsoTool.Controls.Add($BtnMakeIso)
-$LblIsoNote = New-Object System.Windows.Forms.Label; $LblIsoNote.Text = "* Chuot trai: Mac dinh | Chuot phai: Chon folder nguon tuy y."; $LblIsoNote.Location = "20,90"; $LblIsoNote.AutoSize = $true; $LblIsoNote.ForeColor = "Gray"; $GbIsoTool.Controls.Add($LblIsoNote)
+$BtnMakeIso = New-Object System.Windows.Forms.Button; $BtnMakeIso.Text = "MAKE ISO"; $BtnMakeIso.Location = "20,30"; $BtnMakeIso.Size = "400,50"; $BtnMakeIso.BackColor = "DarkOrange"; $BtnMakeIso.ForeColor = "Black"; $GbIsoTool.Controls.Add($BtnMakeIso)
+$BtnHddBoot = New-Object System.Windows.Forms.Button; $BtnHddBoot.Text = "HDD BOOT"; $BtnHddBoot.Location = "440,30"; $BtnHddBoot.Size = "400,50"; $BtnHddBoot.BackColor = "Firebrick"; $BtnHddBoot.ForeColor = "White"; $GbIsoTool.Controls.Add($BtnHddBoot)
 
-# 4. HDD BOOT
-$GbHdd = New-Object System.Windows.Forms.GroupBox; $GbHdd.Text = "4. HDD Boot (Không cần USB)"; $GbHdd.Location = "475,440"; $GbHdd.Size = "440,150"; $GbHdd.ForeColor = "Red"; $Form.Controls.Add($GbHdd)
-$BtnHddBoot = New-Object System.Windows.Forms.Button; $BtnHddBoot.Text = "TẠO MENU BOOT HDD"; $BtnHddBoot.Location = "20,30"; $BtnHddBoot.Size = "400,50"; $BtnHddBoot.BackColor = "Firebrick"; $BtnHddBoot.ForeColor = "White"; $BtnHddBoot.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold); $GbHdd.Controls.Add($BtnHddBoot)
-$LblHddStat = New-Object System.Windows.Forms.Label; $LblHddStat.Text = "Tự động tạo BCD và WinPE"; $LblHddStat.Location = "20,90"; $LblHddStat.AutoSize = $true; $GbHdd.Controls.Add($LblHddStat)
+# Log AIO
+$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "15,500"; $TxtLog.Size = "860,180"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $TabAIO.Controls.Add($TxtLog)
 
-# Log Area
-$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.Location = "20,600"; $TxtLog.Size = "895,140"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"; $Form.Controls.Add($TxtLog)
 
-# --- FUNCTIONS ---
-function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
+# ==================== GUI TAB 2: WIM TO ISO ====================
+$GbWimIn = New-Object System.Windows.Forms.GroupBox; $GbWimIn.Text = "1. Chon File WIM Nguon"; $GbWimIn.Location = "20,20"; $GbWimIn.Size = "850,80"; $GbWimIn.ForeColor = "Cyan"; $TabW2I.Controls.Add($GbWimIn)
+$TxtWimIn = New-Object System.Windows.Forms.TextBox; $TxtWimIn.Location = "20,30"; $TxtWimIn.Size = "650,25"; $GbWimIn.Controls.Add($TxtWimIn)
+$BtnBrWim = New-Object System.Windows.Forms.Button; $BtnBrWim.Text = "CHON WIM..."; $BtnBrWim.Location = "690,28"; $BtnBrWim.Size = "140,27"; $BtnBrWim.BackColor = "DimGray"; $BtnBrWim.ForeColor = "White"; $GbWimIn.Controls.Add($BtnBrWim)
+
+$GbBootBase = New-Object System.Windows.Forms.GroupBox; $GbBootBase.Text = "2. Chon ISO Moi (De lay Boot)"; $GbBootBase.Location = "20,110"; $GbBootBase.Size = "850,80"; $GbBootBase.ForeColor = "Yellow"; $TabW2I.Controls.Add($GbBootBase)
+$TxtBaseIso = New-Object System.Windows.Forms.TextBox; $TxtBaseIso.Location = "20,30"; $TxtBaseIso.Size = "650,25"; $GbBootBase.Controls.Add($TxtBaseIso)
+$BtnBrBase = New-Object System.Windows.Forms.Button; $BtnBrBase.Text = "CHON ISO MOI..."; $BtnBrBase.Location = "690,28"; $BtnBrBase.Size = "140,27"; $BtnBrBase.BackColor = "DimGray"; $BtnBrBase.ForeColor = "White"; $GbBootBase.Controls.Add($BtnBrBase)
+$LblNoteW2I = New-Object System.Windows.Forms.Label; $LblNoteW2I.Text = "* Chon ISO Win 10/11 bat ky de lam 'vo' cho file WIM cua ban."; $LblNoteW2I.Location = "20,55"; $LblNoteW2I.AutoSize = $true; $LblNoteW2I.ForeColor = "Gray"; $GbBootBase.Controls.Add($LblNoteW2I)
+
+$GbOutW2I = New-Object System.Windows.Forms.GroupBox; $GbOutW2I.Text = "3. Xuat File ISO"; $GbOutW2I.Location = "20,200"; $GbOutW2I.Size = "850,150"; $GbOutW2I.ForeColor = "Lime"; $TabW2I.Controls.Add($GbOutW2I)
+$BtnStartW2I = New-Object System.Windows.Forms.Button; $BtnStartW2I.Text = "TAO ISO TU FILE WIM"; $BtnStartW2I.Location = "225,40"; $BtnStartW2I.Size = "400,60"; $BtnStartW2I.BackColor = "Green"; $BtnStartW2I.ForeColor = "White"; $BtnStartW2I.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $GbOutW2I.Controls.Add($BtnStartW2I)
+
+$TxtLog2 = New-Object System.Windows.Forms.TextBox; $TxtLog2.Multiline = $true; $TxtLog2.Location = "20,370"; $TxtLog2.Size = "850,300"; $TxtLog2.BackColor = "Black"; $TxtLog2.ForeColor = "Cyan"; $TxtLog2.ReadOnly = $true; $TxtLog2.ScrollBars = "Vertical"; $TabW2I.Controls.Add($TxtLog2)
+
+
+# --- COMMON FUNCTIONS ---
+function Log ($M) { 
+    $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret()
+    $TxtLog2.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog2.ScrollToCaret()
+    [System.Windows.Forms.Application]::DoEvents() 
+}
 
 function Get-7Zip {
     $7z = "$env:TEMP\7zr.exe"; if (Test-Path $7z) { return $7z }
     Log "Dang tai 7-Zip..."; try { (New-Object System.Net.WebClient).DownloadFile("https://www.7-zip.org/a/7zr.exe", $7z); return $7z } catch { Log "Loi tai 7-Zip!"; return $null }
 }
 
-# [FIX] Đã trả lại Full Logic ADK Download
 function Get-Oscdimg {
     $Tool = "$env:TEMP\oscdimg.exe"
-    
-    # 1. Check Temp
     if (Test-Path $Tool) { return $Tool }
-    
-    # 2. Check GitHub
     Log "Check 1: Dang tai oscdimg.exe tu GitHub..."
     try {
         $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
@@ -119,7 +139,6 @@ function Get-Oscdimg {
         if ((Get-Item $Tool).Length -gt 100kb) { Log "Tai tu GitHub thanh cong!"; return $Tool }
     } catch { Log "GitHub Link loi hoac khong co mang." }
 
-    # 3. Check Local ADK
     Log "Check 2: Quet ADK trong may..."
     $AdkPaths = @(
         "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
@@ -128,14 +147,12 @@ function Get-Oscdimg {
     )
     foreach ($P in $AdkPaths) { if (Test-Path $P) { Log "Tim thay ADK tai: $P"; return $P } }
 
-    # 4. Check Manual
     if ([System.Windows.Forms.MessageBox]::Show("Khong tim thay oscdimg.exe.`n`nBan co muon CHON FILE THU CONG (Browse) khong?", "Tim File", "YesNo", "Question") -eq "Yes") {
         $OFD = New-Object System.Windows.Forms.OpenFileDialog
         $OFD.Filter = "Oscdimg Tool (oscdimg.exe)|oscdimg.exe"
         if ($OFD.ShowDialog() -eq "OK") { return $OFD.FileName }
     }
     
-    # 5. [RESTORED] Check Download Microsoft
     if ([System.Windows.Forms.MessageBox]::Show("Ban co muon tai ADK Setup tu Microsoft ngay bay gio?", "Download ADK", "YesNo") -eq "Yes") {
         try {
             Log "Dang tai ADK Setup..."
@@ -144,14 +161,13 @@ function Get-Oscdimg {
             foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
         } catch { Log "Loi tai ADK Setup tu Microsoft." }
     }
-
     return $null
 }
 
 function Get-IsoDrive ($IsoPath) {
     if ($Global:IsoCache.ContainsKey($IsoPath)) {
         $CachedDrv = $Global:IsoCache[$IsoPath]
-        if ((Test-Path "$CachedDrv\sources\install.wim") -or (Test-Path "$CachedDrv\sources\install.esd") -or (Test-Path "$CachedDrv\bootmgr")) { return $CachedDrv }
+        if ((Test-Path "$CachedDrv\sources") -or (Test-Path "$CachedDrv\bootmgr")) { return $CachedDrv }
         else { $Global:IsoCache.Remove($IsoPath) }
     }
     try {
@@ -171,56 +187,48 @@ function Get-IsoDrive ($IsoPath) {
     return $null
 }
 
+# --- AIO LOGIC (Tab 1) ---
 function Scan-Wim ($WimPath, $SourceName) {
     try {
-        Log "Da tim thay WIM. Dang doc metadata..."
         $Info = Get-WindowsImage -ImagePath $WimPath
         foreach ($I in $Info) {
             $RealVer = $I.Version; if (!$RealVer) { $RealVer = "0.0.0.0" }
             $Grid.Rows.Add($true, $SourceName, $I.ImageIndex, $I.ImageName, "$([Math]::Round($I.Size/1GB,2)) GB", $I.Architecture, $WimPath, $RealVer) | Out-Null
         }
-        Log "Da them thanh cong: $SourceName"
-    } catch { Log "Loi doc WIM: $($_.Exception.Message)" }
+        Log "Loaded: $SourceName"
+    } catch { Log "Loi WIM: $WimPath" }
 }
 
 function Process-Iso ($IsoPath) {
-    $Form.Cursor = "WaitCursor"; Log "Dang xu ly ISO: $IsoPath..."
+    $Form.Cursor = "WaitCursor"; Log "Reading: $IsoPath..."
     $Drv = Get-IsoDrive $IsoPath 
     if (!$Drv) {
-        try {
-            Log "Dang Mount ISO..."
-            Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
-            for($i=0;$i -lt 15;$i++){ $Drv = Get-IsoDrive $IsoPath; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
-        } catch { Log "Mount that bai" }
-    } else { Log "ISO da duoc mount san tai: $Drv" }
-
+        try { Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null; for($i=0;$i -lt 15;$i++){ $Drv = Get-IsoDrive $IsoPath; if($Drv){ break }; Start-Sleep -Milliseconds 500 } } catch {}
+    } 
     if ($Drv) {
         $Global:IsoCache[$IsoPath] = $Drv
         $WimFiles = Get-ChildItem -Path $Drv -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
         if ($WimFiles) { Scan-Wim $WimFiles[0].FullName $IsoPath; $Form.Cursor="Default"; return }
     }
-    
-    Log "Dismount va dung 7-Zip..."
+    Log "Mount failed. 7-Zip scan..."
     Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Out-Null
-    $7z = Get-7Zip
-    if ($7z) {
+    $7z = Get-7Zip; if ($7z) {
         $Hash = (Get-Item $IsoPath).Name.GetHashCode(); $ExtractDir = "$Global:TempWimDir\$Hash"; New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
-        Log "Trich xuat bang 7-Zip (Wait)..."
-        $P = Start-Process $7z -ArgumentList "e `"$IsoPath`" sources/install.wim sources/install.esd -o`"$ExtractDir`" -y" -NoNewWindow -PassThru -Wait
+        Start-Process $7z -ArgumentList "e `"$IsoPath`" sources/install.wim sources/install.esd -o`"$ExtractDir`" -y" -NoNewWindow -Wait
         $ExtWim = Get-ChildItem -Path $ExtractDir -Include "install.wim","install.esd" -Recurse -ErrorAction SilentlyContinue
-        if ($ExtWim) { Scan-Wim $ExtWim[0].FullName $IsoPath } else { Log "KHONG TIM THAY FILE WIM!" }
+        if ($ExtWim) { Scan-Wim $ExtWim[0].FullName $IsoPath }
     }
     $Form.Cursor = "Default"
 }
 
-# --- BUILD CORE ---
+# --- BUILD CORE (AIO TAB) - V6.5 LOGIC ---
 function Build-Core ($CopyBoot) {
     $RawDir = $TxtOut.Text; if (!$RawDir) { return }
     $Dir = $RawDir -replace '/', '\' 
     
     $RootDrive = [System.IO.Path]::GetPathRoot($Dir)
     $DriveInfo = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $RootDrive.Trim('\') }
-    if ($DriveInfo.DriveType -eq 5) { [System.Windows.Forms.MessageBox]::Show("Khong the luu vao o dia CD/DVD ($RootDrive)!", "Loi Duong Dan"); return }
+    if ($DriveInfo.DriveType -eq 5) { [System.Windows.Forms.MessageBox]::Show("Khong the luu vao o dia CD/DVD!", "Loi"); return }
 
     if (!(Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir -Force | Out-Null }
     $SourceDir = "$Dir\sources"; if (!(Test-Path $SourceDir)) { New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null }
@@ -239,13 +247,10 @@ function Build-Core ($CopyBoot) {
         
         Log "-> CHON BASE: $($BestIsoRow.Cells[3].Value) (Kernel: $MaxVer)"
         $FirstSource = $BestIsoRow.Cells[1].Value
-        $FirstWim = $BestIsoRow.Cells[6].Value 
-        
-        Log "Dang tim lai o dia da Mount..."
         $Drv = Get-IsoDrive $FirstSource
 
         if (!$Drv) {
-            Log "Dismount & 7-Zip Mode (Full Structure)..."
+            Log "Dismount & 7-Zip Mode..."
             Dismount-DiskImage -ImagePath $FirstSource -ErrorAction SilentlyContinue | Out-Null
             $7z = Get-7Zip
             $ZArgs = @("x", "$FirstSource", "-o$Dir", "-x!sources\install.wim", "-x!sources\install.esd", "-y")
@@ -256,15 +261,13 @@ function Build-Core ($CopyBoot) {
             Start-Process "robocopy.exe" -ArgumentList $RoboArgs -NoNewWindow -Wait
         }
 
-        # [NUCLEAR FIX] Gỡ Read-Only và Xóa sạch file WIM lọt lưới
+        # [NUCLEAR FIX]
         Log "Dang don dep va kiem tra quyen ghi (Nuclear Wipe)..."
         Start-Process "attrib" -ArgumentList "-r `"$Dir\*.*`" /s /d" -NoNewWindow -Wait
-        
         if (Test-Path "$SourceDir\install.wim") { Remove-Item "$SourceDir\install.wim" -Force -ErrorAction SilentlyContinue }
         if (Test-Path "$SourceDir\install.esd") { Remove-Item "$SourceDir\install.esd" -Force -ErrorAction SilentlyContinue }
     }
 
-    # 5. EXPORT WIM
     $DestWim = "$SourceDir\install.wim"
     $Count = 1
     foreach ($T in $Tasks) {
@@ -282,108 +285,153 @@ function Build-Core ($CopyBoot) {
     if (!$CopyBoot) {
         $Cmd = @"
 @echo off
->nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
-if '%errorlevel%' NEQ '0' ( goto UAC ) else ( goto Admin )
-:UAC
-echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
-echo UAC.ShellExecute "%~s0", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
-"%temp%\getadmin.vbs" & exit /B
-:Admin
 pushd "%~dp0"
-title PHAT TAN PC - INSTALLER
+title PHAT TAN PC
 set WIM=%~dp0sources\install.wim
 if not exist "%WIM%" set WIM=%~dp0install.wim
-if not exist "%WIM%" ( echo KHONG THAY INSTALL.WIM & pause & exit )
-dism /Get-ImageInfo /ImageFile:"%WIM%"
-set /p idx="NHAP INDEX: "
-format C: /q /y /fs:ntfs
-dism /Apply-Image /ImageFile:"%WIM%" /Index:%idx% /ApplyDir:C:\
+dism /Apply-Image /ImageFile:"%WIM%" /Index:1 /ApplyDir:C:\
 bcdboot C:\Windows /s C:
-echo DONE!
-timeout 10
 wpeutil reboot
 "@
         [IO.File]::WriteAllText("$Dir\AIO_Installer.cmd", $Cmd)
     }
 
-    Log "HOAN TAT QUY TRINH!"
-    [System.Windows.Forms.MessageBox]::Show("Da xong! File tai: $Dir", "Thanh Cong")
+    Log "HOAN TAT!"
+    [System.Windows.Forms.MessageBox]::Show("Da xong!", "OK")
     Invoke-Item $Dir
     $BtnBuild.Enabled=$true
 }
 
-# --- NEW FUNCTION: CREATE ISO FROM FOLDER ---
+# --- MAKE ISO FROM FOLDER (WITH DISK GUARD) ---
 function Make-Iso-Action ($SourceFolder) {
     if (!$SourceFolder -or !(Test-Path $SourceFolder)) { [System.Windows.Forms.MessageBox]::Show("Thu muc khong ton tai!", "Loi"); return }
     $Oscd = Get-Oscdimg; if (!$Oscd) { return }
     
     $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName="WinAIO.iso"; $Save.Filter="ISO|*.iso"
     if ($Save.ShowDialog() -eq "OK") {
-        $Target = $Save.FileName; Log "Creating ISO from: $SourceFolder..."
+        $Target = $Save.FileName
+        
+        # Check Disk Space
+        $DestDrive = [System.IO.Path]::GetPathRoot($Target).Trim('\')
+        try {
+            $DiskInfo = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $DestDrive }
+            $SrcSize = (Get-ChildItem $SourceFolder -Recurse | Measure-Object -Property Length -Sum).Sum
+            if ($DiskInfo.FreeSpace -lt ($SrcSize + 500MB)) {
+                Log "LOI: O dia $DestDrive khong du dung luong!"
+                [System.Windows.Forms.MessageBox]::Show("O dia dich ($DestDrive) khong du dung luong!", "Disk Full", "OK", "Error")
+                return
+            }
+        } catch {}
+
+        Log "Creating ISO from: $SourceFolder..."
         $Form.Cursor="WaitCursor"
-        # Cắt dấu \ ở cuối nếu có để tránh lỗi
         $Src = $SourceFolder.TrimEnd('\')
         
-        # Args cho Oscdimg (Hỗ trợ boot UEFI/Legacy)
+        # Check Root Drive Access
+        if ($Src.Length -le 3) {
+            if ([System.Windows.Forms.MessageBox]::Show("Ban dang chon NGUON ISO la Goc o dia ($Src). Tiep tuc?", "Warning", "YesNo", "Warning") -eq "No") {
+                $Form.Cursor="Default"; return
+            }
+        }
+
         $Args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$Src\boot\etfsboot.com`"#pEF,e,b`"$Src\efi\microsoft\boot\efisys.bin`" `"$Src`" `"$Target`""
-        
         Start-Process $Oscd -ArgumentList $Args -NoNewWindow -Wait
         Log "Done!"; [System.Windows.Forms.MessageBox]::Show("ISO Created!", "Success"); $Form.Cursor="Default"
     }
 }
 
+# --- WIM TO ISO LOGIC (Tab 2) ---
+function Wim-To-Iso {
+    $Wim = $TxtWimIn.Text; $BaseIso = $TxtBaseIso.Text
+    if (!$Wim -or !(Test-Path $Wim)) { [System.Windows.Forms.MessageBox]::Show("Chua chon file WIM!", "Loi"); return }
+    if (!$BaseIso -or !(Test-Path $BaseIso)) { [System.Windows.Forms.MessageBox]::Show("Chua chon ISO moi!", "Loi"); return }
+
+    $Oscd = Get-Oscdimg; if (!$Oscd) { return }
+
+    $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName = "MyCustomWin.iso"; $Save.Filter = "ISO|*.iso"
+    if ($Save.ShowDialog() -eq "OK") {
+        $TargetIso = $Save.FileName
+        
+        # [NEW] Check Disk Space for Wim2Iso
+        $DestDrive = [System.IO.Path]::GetPathRoot($TargetIso).Trim('\')
+        try {
+            $DiskInfo = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $DestDrive }
+            # Ước lượng ISO = Base ISO size + Custom Wim Size
+            $TotalSize = (Get-Item $BaseIso).Length + (Get-Item $Wim).Length
+            if ($DiskInfo.FreeSpace -lt $TotalSize) {
+                [System.Windows.Forms.MessageBox]::Show("O dia dich ($DestDrive) khong du dung luong cho ISO moi!", "Disk Full", "OK", "Error"); return
+            }
+        } catch {}
+
+        $WorkDir = "$env:TEMP\Wim2Iso_Work"; New-Item $WorkDir -ItemType Directory -Force | Out-Null
+        
+        # 1. Extract Base ISO (Vỏ)
+        Log "Dang trich xuat 'vo' tu ISO moi..."
+        $Drv = Get-IsoDrive $BaseIso
+        if (!$Drv) {
+             Mount-DiskImage -ImagePath $BaseIso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
+             for($i=0;$i -lt 10;$i++){ $Drv = Get-IsoDrive $BaseIso; if($Drv){ break }; Start-Sleep -Milliseconds 500 }
+        }
+        
+        if ($Drv) {
+             Log "Copy Boot files tu $Drv..."
+             Start-Process "robocopy.exe" -ArgumentList "`"$($Drv.TrimEnd('\'))`" `"$WorkDir`" /E /XF install.wim install.esd /MT:16 /NFL /NDL" -NoNewWindow -Wait
+        } else {
+             Log "Dung 7-Zip trich xuat Boot..."
+             $7z = Get-7Zip
+             Start-Process $7z -ArgumentList "x `"$BaseIso`" -o`"$WorkDir`" -x!sources\install.wim -x!sources\install.esd -y" -NoNewWindow -Wait
+        }
+
+        # 2. Inject Custom WIM
+        Log "Dang bom file WIM cua ban vao..."
+        $DestWim = "$WorkDir\sources\install.wim"
+        Copy-Item $Wim $DestWim -Force
+        
+        # 3. Create ISO
+        Log "Dong goi ISO..."
+        $Args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$WorkDir\boot\etfsboot.com`"#pEF,e,b`"$WorkDir\efi\microsoft\boot\efisys.bin`" `"$WorkDir`" `"$TargetIso`""
+        Start-Process $Oscd -ArgumentList $Args -NoNewWindow -Wait
+        
+        # Cleanup
+        Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+        Log "DONE! ISO Custom da san sang tai: $TargetIso"
+        [System.Windows.Forms.MessageBox]::Show("Tao ISO Custom Thanh Cong!", "Success")
+    }
+}
+
 # --- EVENTS ---
-$BtnAdd.Add_Click({ 
-    $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO/WIM|*.iso;*.wim;*.esd"; $O.Multiselect=$true
-    if($O.ShowDialog() -eq "OK"){ 
-        foreach($f in $O.FileNames){ if(!($TxtIsoList.Text.Contains($f))){ $TxtIsoList.Text+="$f; "; Process-Iso $f } } 
-    } 
-})
-
-$BtnEject.Add_Click({ 
-    Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue
-    Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue
-    $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:IsoCache=@{}; Log "Reset." 
-})
-
+# Tab 1 Events
+$BtnAdd.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO/WIM|*.iso;*.wim;*.esd"; $O.Multiselect=$true; if($O.ShowDialog() -eq "OK"){ foreach($f in $O.FileNames){ if(!($TxtIsoList.Text.Contains($f))){ $TxtIsoList.Text+="$f; "; Process-Iso $f } } } })
+$BtnEject.Add_Click({ Get-DiskImage -ImagePath "*.iso" | Dismount-DiskImage -ErrorAction SilentlyContinue; Remove-Item $Global:TempWimDir -Recurse -Force; $TxtIsoList.Text=""; $Grid.Rows.Clear(); $Global:IsoCache=@{}; Log "Reset." })
 $BtnBrowseOut.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtOut.Text=$F.SelectedPath} })
-
 $BtnBuild.Add_Click({ $Pt = New-Object System.Drawing.Point(0, $BtnBuild.Height); $MenuBuild.Show($BtnBuild, $Pt) })
 $Item1.Add_Click({ Build-Core $false }); $Item2.Add_Click({ Build-Core $true })
 
-# [LOGIC] SỰ KIỆN MENU TẠO ISO
+# Make ISO Events
 $BtnMakeIso.Add_MouseDown({
-    if ($_.Button -eq 'Right') { 
-        $MenuIsoHidden.Show($BtnMakeIso, $_.Location) 
-    } else {
-        # Chuột trái: Mặc định lấy theo đường dẫn Textbox
-        Make-Iso-Action $TxtOut.Text
-    }
+    if ($_.Button -eq 'Right') { $MenuIsoHidden.Show($BtnMakeIso, $_.Location) } else { Make-Iso-Action $TxtOut.Text }
 })
-
 $MItem_Default.Add_Click({ Make-Iso-Action $TxtOut.Text })
 $MItem_Custom.Add_Click({ 
-    $F = New-Object System.Windows.Forms.FolderBrowserDialog
-    $F.Description = "Chon thu muc chua bo cai Windows de dong goi ISO"
-    if ($F.ShowDialog() -eq "OK") { Make-Iso-Action $F.SelectedPath }
+    $F = New-Object System.Windows.Forms.FolderBrowserDialog; $F.Description = "Chon thu muc chua bo cai Windows"; if ($F.ShowDialog() -eq "OK") { Make-Iso-Action $F.SelectedPath }
 })
+
+# Tab 2 Events
+$BtnBrWim.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="Windows Image|*.wim;*.esd"; if($O.ShowDialog() -eq "OK"){$TxtWimIn.Text=$O.FileName} })
+$BtnBrBase.Add_Click({ $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO Image|*.iso"; if($O.ShowDialog() -eq "OK"){$TxtBaseIso.Text=$O.FileName} })
+$BtnStartW2I.Add_Click({ Wim-To-Iso })
 
 $BtnHddBoot.Add_Click({
     $OutDir = $TxtOut.Text; if (!($Grid.Rows.Count)) { return }
     $MaxVer = [Version]"0.0.0.0"; $BestRow = $Grid.Rows[0]
     foreach ($Row in $Grid.Rows) { try { if ([Version]$Row.Cells[7].Value -gt $MaxVer) { $MaxVer = [Version]$Row.Cells[7].Value; $BestRow = $Row } } catch {} }
     
-    $FirstIso = $BestRow.Cells[1].Value
-    $FirstWim = $BestRow.Cells[6].Value 
-    Log "HDD BOOT: Su dung Boot Core cua $($BestRow.Cells[3].Value)..."
-    
-    $Drv = Get-IsoDrive $FirstIso
+    $FirstIso = $BestRow.Cells[1].Value; $Drv = Get-IsoDrive $FirstIso
     if (!$Drv) {
-         Log "HDD Boot: Dismount & 7-Zip..."
          Dismount-DiskImage -ImagePath $FirstIso -ErrorAction SilentlyContinue | Out-Null
          $7z = Get-7Zip; Start-Process $7z -ArgumentList "e `"$FirstIso`" sources/boot.wim -o`"$OutDir`" -y" -NoNewWindow -Wait 
     } else { 
-         Log "Copy boot.wim tu $Drv..."; Copy-Item "$Drv\sources\boot.wim" "$OutDir\boot.wim" -Force
+         Copy-Item "$Drv\sources\boot.wim" "$OutDir\boot.wim" -Force
          if (!(Test-Path "$OutDir\boot.sdi")) { Copy-Item "$Drv\boot\boot.sdi" "$OutDir\boot.sdi" -Force } 
     }
     
@@ -400,7 +448,9 @@ $BtnHddBoot.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("HDD Boot Menu Created!", "Success")
 })
 
-$Form.Add_FormClosing({ try { foreach ($Iso in $Global:IsoCache.Values) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force -ErrorAction SilentlyContinue } catch {} })
+$Form.Add_FormClosing({ try { foreach ($Iso in $Global:IsoCache.Values) { Dismount-DiskImage -ImagePath $Iso -ErrorAction SilentlyContinue | Out-Null }; Remove-Item $Global:TempWimDir -Recurse -Force } catch {} })
+
+# --- START ---
 $Form.ShowDialog() | Out-Null
 
-} catch { [System.Windows.Forms.MessageBox]::Show("Loi Script: $($_.Exception.Message)", "Critical Error") }
+} catch { [System.Windows.Forms.MessageBox]::Show("Error: $($_.Exception.Message)", "Critical") }
