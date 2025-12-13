@@ -39,7 +39,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WIN AIO BUILDER v7.2 - PHAT TAN PC (AUTO BOOT KIT)"
+$Form.Text = "WIN AIO BUILDER v7.3 - PHAT TAN PC (AUTO BOOT KIT)"
 $Form.Size = New-Object System.Drawing.Size(950, 850)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
