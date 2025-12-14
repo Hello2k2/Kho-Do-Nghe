@@ -1,0 +1,12 @@
+[
+  {
+    "Name": "Boot Kit Windows 10 (Nhe - Chuan UEFI/Legacy)",
+    "Url": "LINK_TAI_FILE_ZIP_BOOT_WIN10_CUA_ONG",
+    "FileName": "BootKit_W10.zip"
+  },
+  {
+    "Name": "Boot Kit Windows 11 (Moi nhat - Ho tro Gen 12+)",
+    "Url": "LINK_TAI_FILE_ZIP_BOOT_WIN11_CUA_ONG",
+    "FileName": "BootKit_W11.zip"
+  }
+]
