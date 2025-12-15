@@ -1,289 +1,278 @@
-# --- 1. FORCE ADMIN & PRE-SETUP ---
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
-}
+<#
+    USB BOOT MAKER - PHAT TAN PC (HANDMADE PRO EDITION)
+    Features: 
+    - Auto Dual-Partition (UEFI/Legacy Hybrid)
+    - Support GLIM/Grub2/WinPE Boot Kits
+    - Safe DiskPart Wrapper
+    - NO Hardcoded Drive Letters (Auto Detect)
+    - NO Hardcoded GUI Coordinates (Responsive Dock Layout)
+    - Dark Titanium UI
+#>
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-$ErrorActionPreference = "SilentlyContinue"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-# --- 2. THEME NEON (Modern Dark) ---
+# --- CẤU HÌNH ---
+$Global:LocalJson = "$PSScriptRoot\bootkits.json"
+$Global:TempDir = "$env:TEMP\UsbBootMaker"
+if (!(Test-Path $Global:TempDir)) { New-Item -ItemType Directory -Path $Global:TempDir -Force | Out-Null }
+
+# --- THEME CONFIG (DARK TITANIUM) ---
 $Theme = @{
-    Back      = [System.Drawing.Color]::FromArgb(32, 32, 32)
-    Panel     = [System.Drawing.Color]::FromArgb(45, 45, 48)
-    Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215) # Blue Metro
-    Warning   = [System.Drawing.Color]::FromArgb(255, 140, 0)
-    Success   = [System.Drawing.Color]::FromArgb(40, 167, 69)
-    Border    = [System.Drawing.Color]::FromArgb(60, 60, 60)
+    BgForm   = [System.Drawing.Color]::FromArgb(18, 18, 22)
+    BgPanel  = [System.Drawing.Color]::FromArgb(32, 32, 38)
+    TextMain = [System.Drawing.Color]::FromArgb(245, 245, 245)
+    Accent   = [System.Drawing.Color]::FromArgb(0, 255, 255) # Cyan
+    Warn     = [System.Drawing.Color]::FromArgb(255, 50, 80)  # Red
+    Success  = [System.Drawing.Color]::FromArgb(50, 205, 50) # Green
+    Border   = [System.Drawing.Color]::FromArgb(80, 80, 100)
 }
 
-# --- 3. HELPER FUNCTIONS FOR UI ---
-function New-Panel ($Parent, $Dock, $Padding) {
-    $P = New-Object System.Windows.Forms.Panel
-    $P.Dock = $Dock; $P.BackColor = $Theme.Panel; $P.Padding = $Padding
-    if ($Parent) { $Parent.Controls.Add($P) }
-    return $P
+# --- HELPER FUNCTIONS ---
+function Log-Msg ($Msg) { 
+    $TxtLog.Text += "[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n"
+    $TxtLog.SelectionStart = $TxtLog.Text.Length; $TxtLog.ScrollToCaret()
+    [System.Windows.Forms.Application]::DoEvents()
 }
 
-function New-Label ($Parent, $Txt, $FontStyles, $Color) {
-    $L = New-Object System.Windows.Forms.Label
-    $L.Text = $Txt; $L.AutoSize = $true; $L.ForeColor = $Color
-    if ($FontStyles -eq "Title") { $L.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold) }
-    elseif ($FontStyles -eq "Header") { $L.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold) }
-    else { $L.Font = New-Object System.Drawing.Font("Segoe UI", 10) }
-    if ($Parent) { $Parent.Controls.Add($L) }
-    return $L
+function Run-DiskPartScript ($ScriptContent) {
+    $F = "$Global:TempDir\dp_script.txt"
+    [IO.File]::WriteAllText($F, $ScriptContent)
+    $P = Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow -PassThru
+    return $P.ExitCode
 }
 
-function New-Button ($Parent, $Txt, $Color, $W, $H, $Event) {
-    $B = New-Object System.Windows.Forms.Button
-    $B.Text = $Txt; $B.BackColor = $Color; $B.ForeColor = "White"
-    $B.FlatStyle = "Flat"; $B.FlatAppearance.BorderSize = 0
-    $B.Size = New-Object System.Drawing.Size($W, $H); $B.Cursor = "Hand"
-    $B.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $B.Add_Click($Event)
-    if ($Parent) { $Parent.Controls.Add($B) }
-    return $B
+function Get-DriveLetterByLabel ($Label) {
+    try {
+        Get-Disk | Update-Disk -ErrorAction SilentlyContinue
+        $Vol = Get-Volume | Where-Object { $_.FileSystemLabel -eq $Label } | Select-Object -First 1
+        if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
+    } catch {}
+    return $null
 }
 
-# --- 4. MAIN FORM SETUP ---
+# --- GUI INIT (RESPONSIVE LAYOUT) ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "OFFICE MASTER TOOLKIT - DEVELOPED BY PHAT TAN PC"
-$Form.Size = New-Object System.Drawing.Size(1100, 750)
+$Form.Text = "USB BOOT MAKER PRO - GLIM EDITION"
+$Form.Size = New-Object System.Drawing.Size(800, 650)
 $Form.StartPosition = "CenterScreen"
-$Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
+$Form.BackColor = $Theme.BgForm
+$Form.ForeColor = $Theme.TextMain
+$Form.Padding = New-Object System.Windows.Forms.Padding(20) # Canh le toan bo form
 
-# --- HEADER ---
-$HeaderPanel = New-Panel $Form "Top" (New-Object System.Windows.Forms.Padding(10))
-$HeaderPanel.Height = 60; $HeaderPanel.BackColor = $Theme.Back
-$Title = New-Label $HeaderPanel "MICROSOFT OFFICE DEPLOYMENT & ACTIVATION HUB" "Title" $Theme.Accent
-$Title.Location = New-Object System.Drawing.Point(10, 15)
+# Fonts
+$F_Head = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+$F_Norm = New-Object System.Drawing.Font("Segoe UI", 10)
+$F_Code = New-Object System.Drawing.Font("Consolas", 9)
 
-# --- MAIN LAYOUT (TABLE LAYOUT) ---
-# Chia giao diện làm 4 phần bằng TableLayoutPanel để không phải set cứng tọa độ
-$Table = New-Object System.Windows.Forms.TableLayoutPanel
-$Table.Dock = "Fill"; $Table.ColumnCount = 2; $Table.RowCount = 2
-$Table.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
-$Table.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
-$Table.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 55))) # Hàng trên lớn hơn chút
-$Table.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 45)))
-$Table.Padding = New-Object System.Windows.Forms.Padding(10)
-$Form.Controls.Add($Table)
+# --- 1. BOTTOM PANEL (START BUTTON) ---
+# Xep duoi cung (Dock Bottom)
+$PnlBottom = New-Object System.Windows.Forms.Panel
+$PnlBottom.Height = 80
+$PnlBottom.Dock = "Bottom"
+$PnlBottom.Padding = New-Object System.Windows.Forms.Padding(100, 20, 100, 10) # Canh giua nut
+$Form.Controls.Add($PnlBottom)
 
-# --- SECTION 1: SELECTION (Top Left) ---
-$Pnl1 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
-$Table.Controls.Add($Pnl1, 0, 0)
-New-Label $Pnl1 "1. PHIÊN BẢN & KIẾN TRÚC" "Header" $Theme.Warning | Out-Null
+$BtnStart = New-Object System.Windows.Forms.Button
+$BtnStart.Text = "🚀 KHOI TAO USB BOOT NGAY"
+$BtnStart.Dock = "Fill"
+$BtnStart.Font = $F_Head
+$BtnStart.BackColor = $Theme.Warn
+$BtnStart.ForeColor = "White"
+$BtnStart.FlatStyle = "Flat"
+$PnlBottom.Controls.Add($BtnStart)
 
-$GbVer = New-Object System.Windows.Forms.GroupBox; $GbVer.Text = "Chọn Phiên Bản"; $GbVer.ForeColor = "White"; $GbVer.Location = "15, 40"; $GbVer.Size = "220, 180"
-$Pnl1.Controls.Add($GbVer)
-$OfficeVers = @("Office 2016", "Office 2019", "Office 2021", "Office 2024", "Microsoft 365")
-$RadioVers = @(); $vY = 25
-foreach ($V in $OfficeVers) {
-    $R = New-Object System.Windows.Forms.RadioButton; $R.Text = $V; $R.Location = "15, $vY"; $R.AutoSize = $true; $GbVer.Controls.Add($R)
-    if ($V -eq "Office 2021") { $R.Checked = $true }; $RadioVers += $R; $vY += 30
-}
+# --- 2. HEADER PANEL ---
+# Xep tren cung (Dock Top)
+$PnlHead = New-Object System.Windows.Forms.Panel
+$PnlHead.Height = 70
+$PnlHead.Dock = "Top"
+$Form.Controls.Add($PnlHead)
 
-$GbArch = New-Object System.Windows.Forms.GroupBox; $GbArch.Text = "Hệ (Bit)"; $GbArch.ForeColor = "White"; $GbArch.Location = "250, 40"; $GbArch.Size = "200, 80"
-$Pnl1.Controls.Add($GbArch)
-$R64 = New-Object System.Windows.Forms.RadioButton; $R64.Text = "x64 (Chuẩn)"; $R64.Location = "15, 30"; $R64.AutoSize = $true; $R64.Checked = $true; $GbArch.Controls.Add($R64)
-$R86 = New-Object System.Windows.Forms.RadioButton; $R86.Text = "x86 (Máy cũ)"; $R86.Location = "110, 30"; $R86.AutoSize = $true; $GbArch.Controls.Add($R86)
+$LblSub = New-Object System.Windows.Forms.Label
+$LblSub.Text = "Auto Dual-Partition (UEFI/Legacy Hybrid) - Auto Detect Letter"
+$LblSub.Dock = "Top"
+$LblSub.Height = 25
+$LblSub.Font = $F_Norm
+$LblSub.ForeColor = "Gray"
+$PnlHead.Controls.Add($LblSub)
 
-# --- SECTION 2: APPS (Top Right) ---
-$Pnl2 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
-$Table.Controls.Add($Pnl2, 1, 0)
-New-Label $Pnl2 "2. ỨNG DỤNG CẦN CÀI" "Header" $Theme.Warning | Out-Null
+$LblTitle = New-Object System.Windows.Forms.Label
+$LblTitle.Text = "⚡ USB BOOT CREATOR (GLIM MULTIBOOT)"
+$LblTitle.Dock = "Top"
+$LblTitle.Height = 35
+$LblTitle.Font = $F_Head
+$LblTitle.ForeColor = $Theme.Accent
+$PnlHead.Controls.Add($LblTitle)
 
-$FlowApp = New-Object System.Windows.Forms.FlowLayoutPanel; $FlowApp.Location = "15, 40"; $FlowApp.Size = "450, 250"; $FlowApp.AutoScroll = $true
-$Pnl2.Controls.Add($FlowApp)
-$AppsList = @("Word", "Excel", "PowerPoint", "Outlook", "OneNote", "Access", "Publisher", "Teams", "OneDrive", "SkypeForBusiness")
-$ChkApps = @()
-foreach ($A in $AppsList) {
-    $C = New-Object System.Windows.Forms.CheckBox; $C.Text = $A; $C.Width = 130; $C.Checked = ($A -match "Word|Excel|PowerPoint")
-    $FlowApp.Controls.Add($C); $ChkApps += $C
-}
+# --- 3. USB GROUP ---
+# Xep tiep theo sau Header
+$GbUSB = New-Object System.Windows.Forms.GroupBox
+$GbUSB.Text = "1. CHON THIET BI USB (CANH BAO: SE XOA SACH DU LIEU!)"
+$GbUSB.Height = 80
+$GbUSB.Dock = "Top"
+$GbUSB.ForeColor = $Theme.Warn
+# Padding (L, T, R, B) de tranh de len chu GroupBox
+$GbUSB.Padding = New-Object System.Windows.Forms.Padding(10, 30, 10, 15)
+$Form.Controls.Add($GbUSB)
 
-# --- SECTION 3: CONFIG (Bottom Left) ---
-$Pnl3 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
-$Table.Controls.Add($Pnl3, 0, 1)
-New-Label $Pnl3 "3. CẤU HÌNH NÂNG CAO" "Header" $Theme.Warning | Out-Null
+$BtnRefresh = New-Object System.Windows.Forms.Button
+$BtnRefresh.Text = "🔄 LAM MOI"
+$BtnRefresh.Width = 120
+$BtnRefresh.Dock = "Right"
+$BtnRefresh.BackColor = $Theme.BgPanel
+$BtnRefresh.ForeColor = "White"
+$GbUSB.Controls.Add($BtnRefresh)
 
-$GbExt = New-Object System.Windows.Forms.GroupBox; $GbExt.Text = "Sản phẩm & Ngôn ngữ"; $GbExt.ForeColor = "White"; $GbExt.Location = "15, 40"; $GbExt.Size = "450, 100"
-$Pnl3.Controls.Add($GbExt)
+# Panel dem de tach nut va combo
+$PnlSep1 = New-Object System.Windows.Forms.Panel; $PnlSep1.Width=10; $PnlSep1.Dock="Right"; $GbUSB.Controls.Add($PnlSep1)
 
-$ChkVisio = New-Object System.Windows.Forms.CheckBox; $ChkVisio.Text = "Visio Pro"; $ChkVisio.Location = "15, 25"; $ChkVisio.AutoSize = $true; $GbExt.Controls.Add($ChkVisio)
-$ChkProj = New-Object System.Windows.Forms.CheckBox; $ChkProj.Text = "Project Pro"; $ChkProj.Location = "150, 25"; $ChkProj.AutoSize = $true; $GbExt.Controls.Add($ChkProj)
-$ChkVl = New-Object System.Windows.Forms.CheckBox; $ChkVl.Text = "Volume License (VL)"; $ChkVl.Location = "300, 25"; $ChkVl.AutoSize = $true; $ChkVl.Checked = $true; $ChkVl.ForeColor = "Cyan"; $GbExt.Controls.Add($ChkVl)
+$CbUSB = New-Object System.Windows.Forms.ComboBox
+$CbUSB.Dock = "Fill"
+$CbUSB.Font = $F_Norm
+$CbUSB.BackColor = $Theme.BgPanel
+$CbUSB.ForeColor = "White"
+$CbUSB.DropDownStyle = "DropDownList"
+$GbUSB.Controls.Add($CbUSB)
+$CbUSB.BringToFront() # Dam bao no hien len tren
 
-$CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location = "15, 60"; $CbLang.Width = 150; $CbLang.Items.AddRange(@("en-us", "vi-vn")); $CbLang.SelectedIndex = 0
-$GbExt.Controls.Add($CbLang)
+# --- Spacer ---
+$Spacer1 = New-Object System.Windows.Forms.Panel; $Spacer1.Height=20; $Spacer1.Dock="Top"; $Form.Controls.Add($Spacer1)
 
-# Action Buttons (Install/Download/Uninstall)
-$FlowAct = New-Object System.Windows.Forms.FlowLayoutPanel; $FlowAct.Location = "15, 150"; $FlowAct.AutoSize = $true
-$Pnl3.Controls.Add($FlowAct)
-New-Button $FlowAct "CÀI ĐẶT (INSTALL)" "OrangeRed" 140 40 { Start-Install "Install" } | Out-Null
-New-Button $FlowAct "TẢI VỀ (DOWNLOAD)" "Gold" 140 40 { Start-Install "Download" } | Out-Null
-New-Button $FlowAct "GỠ BỎ (UNINSTALL)" "Gray" 140 40 { Start-Uninstall } | Out-Null
+# --- 4. KIT GROUP ---
+$GbKit = New-Object System.Windows.Forms.GroupBox
+$GbKit.Text = "2. CHON PHIEN BAN BOOT (TU GITHUB RELEASE)"
+$GbKit.Height = 80
+$GbKit.Dock = "Top"
+$GbKit.ForeColor = $Theme.Accent
+$GbKit.Padding = New-Object System.Windows.Forms.Padding(10, 30, 10, 15)
+$Form.Controls.Add($GbKit)
 
+$CbKit = New-Object System.Windows.Forms.ComboBox
+$CbKit.Dock = "Fill"
+$CbKit.Font = $F_Norm
+$CbKit.BackColor = $Theme.BgPanel
+$CbKit.ForeColor = "White"
+$CbKit.DropDownStyle = "DropDownList"
+$GbKit.Controls.Add($CbKit)
 
-# --- SECTION 4: ACTIVATION CENTER (Bottom Right - NEW) ---
-$Pnl4 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
-$Table.Controls.Add($Pnl4, 1, 1)
-New-Label $Pnl4 "4. QUẢN LÝ LICENSE & KÍCH HOẠT" "Header" "Magenta" | Out-Null
+# --- Spacer ---
+$Spacer2 = New-Object System.Windows.Forms.Panel; $Spacer2.Height=20; $Spacer2.Dock="Top"; $Form.Controls.Add($Spacer2)
 
-$GbLic = New-Object System.Windows.Forms.GroupBox; $GbLic.Text = "Công Cụ Kích Hoạt"; $GbLic.ForeColor = "White"; $GbLic.Location = "15, 40"; $GbLic.Size = "450, 160"
-$Pnl4.Controls.Add($GbLic)
-
-# Manual Key
-New-Label $GbLic "Nhập Key thủ công:" "Normal" "Silver" | % {$_.Location = "15, 25"}
-$TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location = "15, 45"; $TxtKey.Size = "300, 25"
-$GbLic.Controls.Add($TxtKey)
-New-Button $GbLic "Nạp Key" $Theme.Accent 100 27 { Install-Key } | % {$_.Location = "325, 43"}
-
-# Clean & MAS
-New-Button $GbLic "XÓA LICENSE (CLEAN SKUs)" "Crimson" 200 40 { Clean-Licenses } | % {$_.Location = "15, 90"}
-New-Button $GbLic "CHẠY MAS (OHOOK / KMS)" "SeaGreen" 200 40 { Run-MAS } | % {$_.Location = "225, 90"}
-
-# --- BOTTOM LOG ---
-$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Dock = "Bottom"; $TxtLog.Height = 100
-$TxtLog.Multiline = $true; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"
+# --- 5. LOG (FILL REMAINING) ---
+$TxtLog = New-Object System.Windows.Forms.TextBox
+$TxtLog.Multiline = $true
+$TxtLog.ScrollBars = "Vertical"
+$TxtLog.Dock = "Fill"
+$TxtLog.BackColor = "Black"
+$TxtLog.ForeColor = "Lime"
+$TxtLog.Font = $F_Code
+$TxtLog.ReadOnly = $true
 $Form.Controls.Add($TxtLog)
 
-# ================= LOGIC & FUNCTIONS =================
+# --- THU TU Z-ORDER (QUAN TRONG DE DOCK DUNG) ---
+# Trong WinForms, cai nao Add sau cung se duoc uu tien Dock truoc (tu ngoai vao trong) hoac Fill.
+# De sap xep dung: Bottom -> Header -> USB -> Kit -> Log (Fill)
+# Cach don gian nhat la BringToFront theo thu tu nguoc lai
+$PnlBottom.BringToFront()
+$PnlHead.BringToFront()
+$GbUSB.BringToFront()
+$Spacer1.BringToFront()
+$GbKit.BringToFront()
+$Spacer2.BringToFront()
+$TxtLog.BringToFront()
 
-function Log ($M) { 
-    $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n") 
-    $TxtLog.ScrollToCaret()
-}
+# --- LOGIC ---
+# (Giu nguyen logic xu ly nhu cu)
 
-function Get-Odt {
-    $OdtPath = "$env:TEMP\setup.exe"
-    if (!(Test-Path $OdtPath)) {
-        Log "Đang tải Office Deployment Tool..."
-        try { (New-Object System.Net.WebClient).DownloadFile("https://otp.landian.vip/en-us/setup.exe", $OdtPath) } 
-        catch { Log "Lỗi tải ODT! Kiểm tra mạng." }
-    }
-    return $OdtPath
-}
-
-# --- LOGIC ACTIVATION ---
-
-function Install-Key {
-    $K = $TxtKey.Text.Trim()
-    if ($K.Length -lt 5) { Log "Vui lòng nhập Key hợp lệ."; return }
-    Log "Đang nạp key: $K..."
-    $proc = Start-Process "cscript" -ArgumentList "//nologo $env:SystemRoot\System32\slmgr.vbs /ipk $K" -NoNewWindow -PassThru -Wait
-    if ($proc.ExitCode -eq 0) { Log "Nạp Key thành công! Đang thử kích hoạt online..." 
-        Start-Process "cscript" -ArgumentList "//nologo $env:SystemRoot\System32\slmgr.vbs /ato" -NoNewWindow -Wait
-        Log "Lệnh kích hoạt đã gửi."
-    } else { Log "Lỗi nạp Key." }
-}
-
-function Clean-Licenses {
-    Log "Đang tìm kiếm Skus Office (OSPP.VBS)..."
-    $OsppPath = "$env:ProgramFiles\Microsoft Office\Office16\OSPP.VBS"
-    if (!(Test-Path $OsppPath)) { $OsppPath = "${env:ProgramFiles(x86)}\Microsoft Office\Office16\OSPP.VBS" }
-    
-    if (Test-Path $OsppPath) {
-        if ([System.Windows.Forms.MessageBox]::Show("Hành động này sẽ xóa toàn bộ Key Office hiện tại.`nBạn có chắc chắn?", "Cảnh báo", "YesNo", "Warning") -eq "Yes") {
-            Log "Đang quét key..."
-            $Output = & cscript //nologo $OsppPath /dstatus
-            $Keys = $Output | Select-String "Last 5 characters of installed product key: (.+)" | % { $_.Matches.Groups[1].Value }
-            
-            if ($Keys) {
-                foreach ($K in $Keys) {
-                    Log "Đang gỡ key đuôi: $K"
-                    & cscript //nologo $OsppPath /unpkey:$K | Out-Null
-                }
-                Log "Đã dọn sạch license cũ! Sẵn sàng nạp key mới hoặc Ohook."
-                [System.Windows.Forms.MessageBox]::Show("Đã xóa sạch license!", "Thành công")
-            } else { Log "Không tìm thấy key nào để xóa." }
-        }
-    } else { Log "Không tìm thấy file OSPP.VBS. Có thể Office chưa cài đặt?" }
-}
-
-function Run-MAS {
-    if ([System.Windows.Forms.MessageBox]::Show("Chạy Microsoft Activation Scripts (MAS)?`nĐây là script bên thứ 3 (Massgrave), dùng để kích hoạt Ohook hoặc Online KMS.", "Xác nhận", "YesNo", "Question") -eq "Yes") {
-        Log "Đang gọi MAS..."
-        # Lệnh chuẩn để gọi MAS
-        Start-Process powershell.exe -ArgumentList "irm https://massgrave.dev/get | iex"
-        Log "Cửa sổ MAS đã mở. Vui lòng chọn số [1] (Kích hoạt HWID/Ohook) trên cửa sổ đen mới hiện ra."
-    }
-}
-
-# --- LOGIC ODT INSTALL ---
-function Start-Install ($Mode) {
-    $VerStr = ($RadioVers | Where {$_.Checked}).Text
-    $Arch = if ($R64.Checked) { "64" } else { "32" }
-    $Lang = $CbLang.SelectedItem
-    $IsVol = $ChkVl.Checked
-    
-    # Map Product ID
-    $ProdID = switch -Regex ($VerStr) {
-        "2016" { if($IsVol){"ProPlusVolume"}else{"ProPlusRetail"} }
-        "2019" { if($IsVol){"ProPlus2019Volume"}else{"ProPlus2019Retail"} }
-        "2021" { if($IsVol){"ProPlus2021Volume"}else{"ProPlus2021Retail"} }
-        "2024" { if($IsVol){"ProPlus2024Volume"}else{"ProPlus2024Retail"} }
-        "365"  { "O365ProPlusRetail" }
-    }
-    
-    # XML Generation
-    $XmlPath = "$env:TEMP\config_office.xml"
-    $W = New-Object System.IO.StreamWriter($XmlPath)
-    $W.WriteLine('<Configuration>')
-    
-    $Channel = if($VerStr -match "2019|2021|2024"){"PerpetualVL2019"}else{"Current"}
-    if($VerStr -match "2021"){$Channel="PerpetualVL2021"}
-    
-    $SrcStr = if ($Mode -eq "Download") { 'SourcePath="' + "$env:USERPROFILE\Desktop\Office_Install" + '"' } else { "" }
-
-    $W.WriteLine('  <Add OfficeClientEdition="' + $Arch + '" Channel="' + $Channel + '" ' + $SrcStr + '>')
-    $W.WriteLine('    <Product ID="' + $ProdID + '">')
-    $W.WriteLine('      <Language ID="' + $Lang + '" />')
-    
-    foreach ($C in $ChkApps) {
-        if (!$C.Checked) {
-            $AppID = switch ($C.Text) {
-                "Word" {"Word"} "Excel" {"Excel"} "PowerPoint" {"PowerPoint"} "Outlook" {"Outlook"} 
-                "OneNote" {"OneNote"} "Access" {"Access"} "Publisher" {"Publisher"} "Teams" {"Teams"} "OneDrive" {"Groove"} "SkypeForBusiness" {"Lync"}
-            }
-            $W.WriteLine('      <ExcludeApp ID="' + $AppID + '" />')
-        }
-    }
-    $W.WriteLine('    </Product>')
-    
-    # Extra Products (Visio/Project)
-    if ($ChkVisio.Checked) { $Vid=if($IsVol){"VisioPro2021Volume"}else{"VisioProRetail"}; $W.WriteLine('    <Product ID="'+$Vid+'"><Language ID="'+$Lang+'" /></Product>') }
-    if ($ChkProj.Checked) { $Pid=if($IsVol){"ProjectPro2021Volume"}else{"ProjectProRetail"}; $W.WriteLine('    <Product ID="'+$Pid+'"><Language ID="'+$Lang+'" /></Product>') }
-    
-    $W.WriteLine('  </Add>')
-    if ($Mode -eq "Install") {
-        $W.WriteLine('  <Display Level="Full" AcceptEULA="TRUE" />')
-        $W.WriteLine('  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />')
-    }
-    $W.WriteLine('</Configuration>')
-    $W.Close()
-    
-    # Execute
-    $Setup = Get-Odt
+function Load-UsbList {
+    $CbUSB.Items.Clear()
     try {
-        if ($Mode -eq "Install") {
-            Log "Đang cài đặt $ProdID..."
-            Start-Process $Setup -ArgumentList "/configure `"$XmlPath`"" 
+        $Disks = Get-Disk | Where-Object { $_.BusType -eq "USB" -or $_.MediaType -eq "Removable" }
+        if ($Disks) {
+            foreach ($D in $Disks) {
+                $SizeGB = [Math]::Round($D.Size / 1GB, 1)
+                $Name = if ($D.FriendlyName) { $D.FriendlyName } else { "Unknown Device" }
+                $CbUSB.Items.Add("Disk $($D.Number): $Name ($SizeGB GB)")
+            }
         } else {
-            Log "Đang tải về..."
-            Start-Process $Setup -ArgumentList "/download `"$XmlPath`""
+            $CbUSB.Items.Add("Khong tim thay USB nao!")
         }
-    } catch { Log "Lỗi thực thi: $_" }
+        if ($CbUSB.Items.Count -gt 0) { $CbUSB.SelectedIndex = 0 }
+    } catch { Log-Msg "Loi lay danh sach USB: $($_.Exception.Message)" }
 }
 
-function Start-Uninstall {
-    if ([System.Windows.Forms.MessageBox]::Show("Gỡ bỏ toàn bộ Office?", "Warning", "YesNo") -eq "Yes") {
-        $X = "$env:TEMP\rem.xml"; [IO.File]::WriteAllText($X, '<Configuration><Remove All="TRUE"/></Configuration>')
-        Start-Process (Get-Odt) -ArgumentList "/configure `"$X`""
-        Log "Đã gửi lệnh gỡ bỏ."
+function Load-Kits {
+    $CbKit.Items.Clear()
+    if (Test-Path $Global:LocalJson) {
+        try {
+            $Json = Get-Content $Global:LocalJson -Raw | ConvertFrom-Json
+            $Global:KitData = $Json
+            foreach ($Item in $Json) { $CbKit.Items.Add($Item.Name) }
+            if ($CbKit.Items.Count -gt 0) { $CbKit.SelectedIndex = 0 }
+            Log-Msg "Da tai danh sach Boot Kit tu file JSON."
+        } catch { Log-Msg "Loi doc file JSON: $($_.Exception.Message)" }
+    } else {
+        Log-Msg "Khong tim thay bootkits.json!"; $CbKit.Items.Add("Demo Mode")
     }
 }
 
-$Form.ShowDialog() | Out-Null
+function Download-File ($Url, $Dest) {
+    Log-Msg "Dang tai xuong tu: $Url"; Log-Msg "Vui long cho..."
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        $Wc = New-Object System.Net.WebClient
+        $Wc.DownloadFile($Url, $Dest)
+        return $true
+    } catch { Log-Msg "LOI TAI FILE: $($_.Exception.Message)"; return $false }
+}
+
+$BtnStart.Add_Click({
+    if ($CbUSB.SelectedItem -match "Disk (\d+)") { $DiskID = $Matches[1] } 
+    else { [System.Windows.Forms.MessageBox]::Show("Chon USB truoc!", "Loi"); return }
+
+    $SelKitName = $CbKit.SelectedItem
+    $KitObj = $Global:KitData | Where-Object { $_.Name -eq $SelKitName } | Select-Object -First 1
+    if (!$KitObj) { [System.Windows.Forms.MessageBox]::Show("Chon Boot Kit!", "Loi"); return }
+
+    if ([System.Windows.Forms.MessageBox]::Show("CANH BAO: XOA SACH DISK $DiskID?`n`nTiep tuc?", "Warning", "YesNo", "Warning") -ne "Yes") { return }
+
+    $BtnStart.Enabled = $false; $Form.Cursor = "WaitCursor"
+    
+    # 1. Download
+    $ZipPath = "$Global:TempDir\$($KitObj.FileName)"
+    if (!(Test-Path $ZipPath)) {
+        if (!(Download-File $KitObj.Url $ZipPath)) { $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    }
+
+    # 2. DiskPart (Auto Letter)
+    Log-Msg "Dang phan vung (DiskPart)..."
+    $Cmd = "select disk $DiskID`nclean`ncreate partition primary size=4096`nformat fs=fat32 quick label=`"GLIM_BOOT`"`nactive`nassign`ncreate partition primary`nformat fs=ntfs quick label=`"GLIM_DATA`"`nassign`nexit"
+    Run-DiskPartScript $Cmd
+    
+    Log-Msg "Doi Windows nhan o dia (5s)..."; Start-Sleep -Seconds 5
+    
+    $BootDrv = Get-DriveLetterByLabel "GLIM_BOOT"
+    $DataDrv = Get-DriveLetterByLabel "GLIM_DATA"
+    if (!$BootDrv) { Log-Msg "LOI: Khong tim thay phan vung BOOT!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    Log-Msg "Boot: $BootDrv | Data: $DataDrv"
+
+    # 3. Extract
+    Log-Msg "Dang giai nen vao $BootDrv..."
+    try {
+        Get-ChildItem "$BootDrv\" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $ZipPath -DestinationPath "$BootDrv\" -Force
+        Log-Msg "Giai nen hoan tat."
+    } catch { Log-Msg "LOI GIAI NEN: $($_.Exception.Message)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+
+    Log-Msg "=== XONG! ==="; Log-Msg "GLIM_DATA ($DataDrv): Chep ISO vao day."
+    [System.Windows.Forms.MessageBox]::Show("Thanh Cong!", "Success")
+    $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    if ($DataDrv) { Invoke-Item "$DataDrv\" }
+})
+
+$BtnRefresh.Add_Click({ Load-UsbList; Load-Kits })
+
+$Form.Add_Load({ Load-UsbList; Load-Kits; Log-Msg "Ready. Responsive Mode." })
+[System.Windows.Forms.Application]::Run($Form)
