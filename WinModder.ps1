@@ -114,24 +114,81 @@ function Log ($Box, $Msg) {
 }
 
 # --- TOOL DOWNLOADER (OSCDIMG) FIX ---
+# --- TOOL MANAGER (OSCDIMG) - QUY TRÌNH 5 BƯỚC ---
 function Check-Tools {
-    $Osc = "$ToolsDir\oscdimg.exe"
-    if (!(Test-Path $Osc)) {
-        if ([System.Windows.Forms.MessageBox]::Show("Thiếu file oscdimg.exe để tạo ISO.`nTải về ngay?", "Thiếu Tool", "YesNo") -eq "Yes") {
-            try {
-                Set-Status "Đang tải oscdimg.exe..."
-                # Link du phong on dinh hon
-                $Url = "https://github.com/momo5502/oscdimg/raw/master/oscdimg.exe"
-                Invoke-WebRequest -Uri $Url -OutFile $Osc -UseBasicParsing
-                [System.Windows.Forms.MessageBox]::Show("Đã tải xong Tool!", "Success")
-            } catch { 
-                [System.Windows.Forms.MessageBox]::Show("Lỗi tải Tool: $($_.Exception.Message)`nHay thu kiem tra mang.", "Error"); return $false 
-            }
-        } else { return $false }
-    }
-    return $true
-}
+    $OscTarget = "$ToolsDir\oscdimg.exe"
 
+    # BƯỚC 1: Kiểm tra xem đã có sẵn trong thư mục Tool của App chưa
+    if (Test-Path $OscTarget) { return $true }
+
+    # BƯỚC 2: Tự động tải từ Github (Kho-Do-Nghe)
+    # Check file > 100KB để tránh file lỗi 0kb hoặc file html 404
+    Set-Status "Đang tải oscdimg.exe từ Server Phat Tan..."
+    try {
+        $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
+        (New-Object System.Net.WebClient).DownloadFile($Url, $OscTarget)
+        
+        if ((Get-Item $OscTarget).Length -gt 100kb) {
+            Set-Status "Tải xong Tool."
+            return $true
+        } else {
+            # Nếu file tải về quá nhẹ (file lỗi), xóa đi để chạy bước tiếp theo
+            Remove-Item $OscTarget -Force 
+        }
+    } catch { 
+        Set-Status "Lỗi tải Server, chuyển sang bước tìm kiếm..."
+    }
+
+    # BƯỚC 3: Quét xem máy có cài sẵn Windows ADK không
+    $AdkPaths = @(
+        "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
+        "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
+        "C:\Windows\System32\oscdimg.exe"
+    )
+    foreach ($P in $AdkPaths) {
+        if (Test-Path $P) {
+            Copy-Item $P $OscTarget -Force
+            return $true
+        }
+    }
+
+    # BƯỚC 4 & 5: Hỏi người dùng (Browse hoặc Tải ADK)
+    $Ask = [System.Windows.Forms.MessageBox]::Show("Không tìm thấy file tạo ISO (oscdimg.exe).`n`n- Bấm [YES] để trỏ đường dẫn file (nếu bạn có sẵn).`n- Bấm [NO] để tải bộ cài ADK từ Microsoft (Sẽ rất lâu).`n- Bấm [CANCEL] để hủy.", "Thiếu Tool", "YesNoCancel", "Warning")
+
+    if ($Ask -eq "Yes") {
+        # --- BƯỚC 4: BROWSE FILE ---
+        $O = New-Object System.Windows.Forms.OpenFileDialog
+        $O.Title = "Chọn file oscdimg.exe trên máy của bạn"
+        $O.Filter = "Oscdimg Tool|oscdimg.exe"
+        if ($O.ShowDialog() -eq "OK") {
+            try {
+                Copy-Item $O.FileName $OscTarget -Force
+                return $true
+            } catch {
+                [System.Windows.Forms.MessageBox]::Show("Lỗi copy file: $($_.Exception.Message)", "Error")
+            }
+        }
+    }
+    elseif ($Ask -eq "No") {
+        # --- BƯỚC 5: TẢI ADK SETUP (LAST RESORT) ---
+        try {
+            Set-Status "Đang tải bộ cài ADK (adksetup.exe)..."
+            $AdkSetup = "$env:TEMP\adksetup.exe"
+            (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", $AdkSetup)
+            
+            if ([System.Windows.Forms.MessageBox]::Show("Đã tải xong ADK Setup. Bạn hãy cài đặt nó, sau đó chạy lại Tool này.`n`nBấm OK để mở bộ cài.", "Hướng dẫn") -eq "OK") {
+                Start-Process $AdkSetup -Wait
+                # Hy vọng sau khi cài xong nó nằm ở đường dẫn mặc định, check lại lần nữa
+                foreach ($P in $AdkPaths) {
+                    if (Test-Path $P) { Copy-Item $P $OscTarget -Force; return $true }
+                }
+            }
+        } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi tải ADK. Vui lòng kiểm tra mạng.", "Error") }
+    }
+
+    Set-Status "Thiếu Tool, không thể tạo ISO."
+    return $false
+}
 # --- TAB 1 LOGIC: CAPTURE ---
 $BtnCapBrowse.Add_Click({
     $S = New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="ISO File|*.iso"; $S.FileName="PhatTan_Backup.iso"
