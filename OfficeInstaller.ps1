@@ -1,4 +1,4 @@
-# --- 1. FORCE ADMIN ---
+# --- 1. FORCE ADMIN & PRE-SETUP ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
@@ -7,134 +7,219 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME NEON ---
+# --- 2. THEME NEON (Modern Dark) ---
 $Theme = @{
-    Back      = [System.Drawing.Color]::FromArgb(30, 30, 30)
-    Card      = [System.Drawing.Color]::FromArgb(40, 40, 45)
+    Back      = [System.Drawing.Color]::FromArgb(32, 32, 32)
+    Panel     = [System.Drawing.Color]::FromArgb(45, 45, 48)
     Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    BtnBack   = [System.Drawing.Color]::FromArgb(60, 60, 60)
-    BtnHover  = [System.Drawing.Color]::FromArgb(255, 140, 0)
-    Accent    = [System.Drawing.Color]::FromArgb(255, 69, 0)
-    Border    = [System.Drawing.Color]::FromArgb(255, 69, 0)
+    Accent    = [System.Drawing.Color]::FromArgb(0, 120, 215) # Blue Metro
+    Warning   = [System.Drawing.Color]::FromArgb(255, 140, 0)
+    Success   = [System.Drawing.Color]::FromArgb(40, 167, 69)
+    Border    = [System.Drawing.Color]::FromArgb(60, 60, 60)
 }
 
-# --- GUI SETUP ---
+# --- 3. HELPER FUNCTIONS FOR UI ---
+function New-Panel ($Parent, $Dock, $Padding) {
+    $P = New-Object System.Windows.Forms.Panel
+    $P.Dock = $Dock; $P.BackColor = $Theme.Panel; $P.Padding = $Padding
+    if ($Parent) { $Parent.Controls.Add($P) }
+    return $P
+}
+
+function New-Label ($Parent, $Txt, $FontStyles, $Color) {
+    $L = New-Object System.Windows.Forms.Label
+    $L.Text = $Txt; $L.AutoSize = $true; $L.ForeColor = $Color
+    if ($FontStyles -eq "Title") { $L.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold) }
+    elseif ($FontStyles -eq "Header") { $L.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold) }
+    else { $L.Font = New-Object System.Drawing.Font("Segoe UI", 10) }
+    if ($Parent) { $Parent.Controls.Add($L) }
+    return $L
+}
+
+function New-Button ($Parent, $Txt, $Color, $W, $H, $Event) {
+    $B = New-Object System.Windows.Forms.Button
+    $B.Text = $Txt; $B.BackColor = $Color; $B.ForeColor = "White"
+    $B.FlatStyle = "Flat"; $B.FlatAppearance.BorderSize = 0
+    $B.Size = New-Object System.Drawing.Size($W, $H); $B.Cursor = "Hand"
+    $B.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $B.Add_Click($Event)
+    if ($Parent) { $Parent.Controls.Add($B) }
+    return $B
+}
+
+# --- 4. MAIN FORM SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "MICROSOFT OFFICE INSTALLER - ODT GUI"
-$Form.Size = New-Object System.Drawing.Size(1000, 700)
+$Form.Text = "OFFICE MASTER TOOLKIT - DEVELOPED BY PHAT TAN PC"
+$Form.Size = New-Object System.Drawing.Size(1100, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
-$Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "OFFICE DEPLOYMENT TOOL (ODT)"; $LblT.Font = "Impact, 22"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
+# --- HEADER ---
+$HeaderPanel = New-Panel $Form "Top" (New-Object System.Windows.Forms.Padding(10))
+$HeaderPanel.Height = 60; $HeaderPanel.BackColor = $Theme.Back
+$Title = New-Label $HeaderPanel "MICROSOFT OFFICE DEPLOYMENT & ACTIVATION HUB" "Title" $Theme.Accent
+$Title.Location = New-Object System.Drawing.Point(10, 15)
 
-# --- PAINT HANDLER ---
-$PaintHandler = {
-    param($sender, $e)
-    $Pen = New-Object System.Drawing.Pen($Theme.Border, 2)
-    $Rect = $sender.ClientRectangle; $Rect.Width-=2; $Rect.Height-=2; $Rect.X+=1; $Rect.Y+=1
-    $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
-}
+# --- MAIN LAYOUT (TABLE LAYOUT) ---
+# Chia giao diện làm 4 phần bằng TableLayoutPanel để không phải set cứng tọa độ
+$Table = New-Object System.Windows.Forms.TableLayoutPanel
+$Table.Dock = "Fill"; $Table.ColumnCount = 2; $Table.RowCount = 2
+$Table.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
+$Table.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
+$Table.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 55))) # Hàng trên lớn hơn chút
+$Table.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 45)))
+$Table.Padding = New-Object System.Windows.Forms.Padding(10)
+$Form.Controls.Add($Table)
 
-# --- CONFIG DATA ---
+# --- SECTION 1: SELECTION (Top Left) ---
+$Pnl1 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
+$Table.Controls.Add($Pnl1, 0, 0)
+New-Label $Pnl1 "1. PHIÊN BẢN & KIẾN TRÚC" "Header" $Theme.Warning | Out-Null
+
+$GbVer = New-Object System.Windows.Forms.GroupBox; $GbVer.Text = "Chọn Phiên Bản"; $GbVer.ForeColor = "White"; $GbVer.Location = "15, 40"; $GbVer.Size = "220, 180"
+$Pnl1.Controls.Add($GbVer)
 $OfficeVers = @("Office 2016", "Office 2019", "Office 2021", "Office 2024", "Microsoft 365")
-$Archs = @("x64 (64-bit)", "x86 (32-bit)")
-$Langs = @("en-us", "vi-vn", "ko-kr", "ja-jp", "zh-cn", "fr-fr", "ru-ru", "de-de", "es-es")
-$AppsList = @("Word", "Excel", "PowerPoint", "Outlook", "OneNote", "Access", "Publisher", "Teams", "OneDrive", "SkypeForBusiness")
-
-# ================= UI SECTIONS =================
-
-# 1. VERSION
-$PnlVer = New-Object System.Windows.Forms.Panel; $PnlVer.Location="20,80"; $PnlVer.Size="300,320"; $PnlVer.BackColor=$Theme.Card; $PnlVer.Add_Paint($PaintHandler); $Form.Controls.Add($PnlVer)
-$L1 = New-Object System.Windows.Forms.Label; $L1.Text="1. PHIEN BAN & KIEN TRUC"; $L1.Location="10,10"; $L1.AutoSize=$true; $L1.Font="Segoe UI, 10, Bold"; $PnlVer.Controls.Add($L1)
-
-$GbVer = New-Object System.Windows.Forms.GroupBox; $GbVer.Text="Chon Phien Ban"; $GbVer.Location="15,40"; $GbVer.Size="270,180"; $GbVer.ForeColor="White"; $PnlVer.Controls.Add($GbVer)
-$RadioVers = @()
-$Y = 25
+$RadioVers = @(); $vY = 25
 foreach ($V in $OfficeVers) {
-    $R = New-Object System.Windows.Forms.RadioButton; $R.Text=$V; $R.Location="20,$Y"; $R.AutoSize=$true; $R.Font="Segoe UI, 10"
-    if ($V -eq "Office 2021") { $R.Checked=$true }
-    $GbVer.Controls.Add($R); $RadioVers += $R; $Y += 30
+    $R = New-Object System.Windows.Forms.RadioButton; $R.Text = $V; $R.Location = "15, $vY"; $R.AutoSize = $true; $GbVer.Controls.Add($R)
+    if ($V -eq "Office 2021") { $R.Checked = $true }; $RadioVers += $R; $vY += 30
 }
 
-$GbArch = New-Object System.Windows.Forms.GroupBox; $GbArch.Text="Kien Truc (Bit)"; $GbArch.Location="15,230"; $GbArch.Size="270,70"; $GbArch.ForeColor="White"; $PnlVer.Controls.Add($GbArch)
-$RadioArchs = @()
-$R64 = New-Object System.Windows.Forms.RadioButton; $R64.Text="x64 (Chuan)"; $R64.Location="20,30"; $R64.AutoSize=$true; $R64.Checked=$true; $GbArch.Controls.Add($R64)
-$R86 = New-Object System.Windows.Forms.RadioButton; $R86.Text="x86 (May yeu)"; $R86.Location="140,30"; $R86.AutoSize=$true; $GbArch.Controls.Add($R86)
+$GbArch = New-Object System.Windows.Forms.GroupBox; $GbArch.Text = "Hệ (Bit)"; $GbArch.ForeColor = "White"; $GbArch.Location = "250, 40"; $GbArch.Size = "200, 80"
+$Pnl1.Controls.Add($GbArch)
+$R64 = New-Object System.Windows.Forms.RadioButton; $R64.Text = "x64 (Chuẩn)"; $R64.Location = "15, 30"; $R64.AutoSize = $true; $R64.Checked = $true; $GbArch.Controls.Add($R64)
+$R86 = New-Object System.Windows.Forms.RadioButton; $R86.Text = "x86 (Máy cũ)"; $R86.Location = "110, 30"; $R86.AutoSize = $true; $GbArch.Controls.Add($R86)
 
-# 2. APPS
-$PnlApp = New-Object System.Windows.Forms.Panel; $PnlApp.Location="340,80"; $PnlApp.Size="300,320"; $PnlApp.BackColor=$Theme.Card; $PnlApp.Add_Paint($PaintHandler); $Form.Controls.Add($PnlApp)
-$L2 = New-Object System.Windows.Forms.Label; $L2.Text="2. UNG DUNG CAN CAI"; $L2.Location="10,10"; $L2.AutoSize=$true; $L2.Font="Segoe UI, 10, Bold"; $PnlApp.Controls.Add($L2)
+# --- SECTION 2: APPS (Top Right) ---
+$Pnl2 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
+$Table.Controls.Add($Pnl2, 1, 0)
+New-Label $Pnl2 "2. ỨNG DỤNG CẦN CÀI" "Header" $Theme.Warning | Out-Null
 
-$FlowApp = New-Object System.Windows.Forms.FlowLayoutPanel; $FlowApp.Location="15,40"; $FlowApp.Size="270,260"; $FlowApp.FlowDirection="TopDown"; $PnlApp.Controls.Add($FlowApp)
+$FlowApp = New-Object System.Windows.Forms.FlowLayoutPanel; $FlowApp.Location = "15, 40"; $FlowApp.Size = "450, 250"; $FlowApp.AutoScroll = $true
+$Pnl2.Controls.Add($FlowApp)
+$AppsList = @("Word", "Excel", "PowerPoint", "Outlook", "OneNote", "Access", "Publisher", "Teams", "OneDrive", "SkypeForBusiness")
 $ChkApps = @()
 foreach ($A in $AppsList) {
-    $C = New-Object System.Windows.Forms.CheckBox; $C.Text=$A; $C.AutoSize=$true; $C.Font="Segoe UI, 10"; $C.Margin="3,3,20,5"
-    if ($A -match "Word|Excel|PowerPoint") { $C.Checked=$true }
+    $C = New-Object System.Windows.Forms.CheckBox; $C.Text = $A; $C.Width = 130; $C.Checked = ($A -match "Word|Excel|PowerPoint")
     $FlowApp.Controls.Add($C); $ChkApps += $C
 }
 
-$BtnSelAll = New-Object System.Windows.Forms.Button; $BtnSelAll.Text="All"; $BtnSelAll.Location="220,5"; $BtnSelAll.Size="35,25"; $BtnSelAll.FlatStyle="Flat"; $PnlApp.Controls.Add($BtnSelAll)
-$BtnSelAll.Add_Click({ foreach($c in $ChkApps){$c.Checked=$true} })
-$BtnSelNone = New-Object System.Windows.Forms.Button; $BtnSelNone.Text="X"; $BtnSelNone.Location="260,5"; $BtnSelNone.Size="25,25"; $BtnSelNone.FlatStyle="Flat"; $PnlApp.Controls.Add($BtnSelNone)
-$BtnSelNone.Add_Click({ foreach($c in $ChkApps){$c.Checked=$false} })
+# --- SECTION 3: CONFIG (Bottom Left) ---
+$Pnl3 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
+$Table.Controls.Add($Pnl3, 0, 1)
+New-Label $Pnl3 "3. CẤU HÌNH NÂNG CAO" "Header" $Theme.Warning | Out-Null
 
-# 3. EXTRA
-$PnlExt = New-Object System.Windows.Forms.Panel; $PnlExt.Location="660,80"; $PnlExt.Size="300,320"; $PnlExt.BackColor=$Theme.Card; $PnlExt.Add_Paint($PaintHandler); $Form.Controls.Add($PnlExt)
-$L3 = New-Object System.Windows.Forms.Label; $L3.Text="3. CAU HINH BO SUNG"; $L3.Location="10,10"; $L3.AutoSize=$true; $L3.Font="Segoe UI, 10, Bold"; $PnlExt.Controls.Add($L3)
+$GbExt = New-Object System.Windows.Forms.GroupBox; $GbExt.Text = "Sản phẩm & Ngôn ngữ"; $GbExt.ForeColor = "White"; $GbExt.Location = "15, 40"; $GbExt.Size = "450, 100"
+$Pnl3.Controls.Add($GbExt)
 
-$GbPro = New-Object System.Windows.Forms.GroupBox; $GbPro.Text="San Pham Rieng Le"; $GbPro.Location="15,40"; $GbPro.Size="270,80"; $GbPro.ForeColor="Gold"; $PnlExt.Controls.Add($GbPro)
-$ChkVisio = New-Object System.Windows.Forms.CheckBox; $ChkVisio.Text="Visio Pro"; $ChkVisio.Location="20,25"; $ChkVisio.AutoSize=$true; $GbPro.Controls.Add($ChkVisio)
-$ChkProj = New-Object System.Windows.Forms.CheckBox; $ChkProj.Text="Project Pro"; $ChkProj.Location="140,25"; $ChkProj.AutoSize=$true; $GbPro.Controls.Add($ChkProj)
-$ChkVl = New-Object System.Windows.Forms.CheckBox; $ChkVl.Text="Dung Ban Volume License (VL)"; $ChkVl.Location="20,50"; $ChkVl.AutoSize=$true; $ChkVl.ForeColor="Cyan"; $ChkVl.Checked=$true; $GbPro.Controls.Add($ChkVl)
+$ChkVisio = New-Object System.Windows.Forms.CheckBox; $ChkVisio.Text = "Visio Pro"; $ChkVisio.Location = "15, 25"; $ChkVisio.AutoSize = $true; $GbExt.Controls.Add($ChkVisio)
+$ChkProj = New-Object System.Windows.Forms.CheckBox; $ChkProj.Text = "Project Pro"; $ChkProj.Location = "150, 25"; $ChkProj.AutoSize = $true; $GbExt.Controls.Add($ChkProj)
+$ChkVl = New-Object System.Windows.Forms.CheckBox; $ChkVl.Text = "Volume License (VL)"; $ChkVl.Location = "300, 25"; $ChkVl.AutoSize = $true; $ChkVl.Checked = $true; $ChkVl.ForeColor = "Cyan"; $GbExt.Controls.Add($ChkVl)
 
-$LblLang = New-Object System.Windows.Forms.Label; $LblLang.Text="Ngon Ngu:"; $LblLang.Location="15,140"; $LblLang.AutoSize=$true; $PnlExt.Controls.Add($LblLang)
-$CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location="100,135"; $CbLang.Size="180,25"; $CbLang.DropDownStyle="DropDownList"
-foreach ($L in $Langs) { $CbLang.Items.Add($L) | Out-Null }; $CbLang.SelectedIndex=0; $PnlExt.Controls.Add($CbLang)
+$CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location = "15, 60"; $CbLang.Width = 150; $CbLang.Items.AddRange(@("en-us", "vi-vn")); $CbLang.SelectedIndex = 0
+$GbExt.Controls.Add($CbLang)
 
-$LblPath = New-Object System.Windows.Forms.Label; $LblPath.Text="Noi cai dat (Bo trong = Mac dinh):"; $LblPath.Location="15,180"; $LblPath.AutoSize=$true; $PnlExt.Controls.Add($LblPath)
-$TxtPath = New-Object System.Windows.Forms.TextBox; $TxtPath.Location="15,205"; $TxtPath.Size="220,25"; $PnlExt.Controls.Add($TxtPath)
-$BtnPath = New-Object System.Windows.Forms.Button; $BtnPath.Text="..."; $BtnPath.Location="240,203"; $BtnPath.Size="40,27"; $BtnPath.FlatStyle="Flat"; $PnlExt.Controls.Add($BtnPath)
-$BtnPath.Add_Click({ $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if($FBD.ShowDialog() -eq "OK"){$TxtPath.Text=$FBD.SelectedPath} })
+# Action Buttons (Install/Download/Uninstall)
+$FlowAct = New-Object System.Windows.Forms.FlowLayoutPanel; $FlowAct.Location = "15, 150"; $FlowAct.AutoSize = $true
+$Pnl3.Controls.Add($FlowAct)
+New-Button $FlowAct "CÀI ĐẶT (INSTALL)" "OrangeRed" 140 40 { Start-Install "Install" } | Out-Null
+New-Button $FlowAct "TẢI VỀ (DOWNLOAD)" "Gold" 140 40 { Start-Install "Download" } | Out-Null
+New-Button $FlowAct "GỠ BỎ (UNINSTALL)" "Gray" 140 40 { Start-Uninstall } | Out-Null
 
-# --- ACTIONS ---
-$PnlAct = New-Object System.Windows.Forms.Panel; $PnlAct.Location="20,420"; $PnlAct.Size="940,120"; $PnlAct.BackColor=$Theme.Card; $PnlAct.Add_Paint($PaintHandler); $Form.Controls.Add($PnlAct)
 
-function Add-BigBtn ($Txt, $X, $Col, $Cmd) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="$X,35"; $B.Size="280,50"; $B.Font="Segoe UI, 12, Bold"
-    $B.BackColor=$Col; $B.ForeColor="Black"; $B.FlatStyle="Flat"; $B.Cursor="Hand"; $B.Add_Click($Cmd)
-    $PnlAct.Controls.Add($B)
+# --- SECTION 4: ACTIVATION CENTER (Bottom Right - NEW) ---
+$Pnl4 = New-Panel $Table "Fill" (New-Object System.Windows.Forms.Padding(10))
+$Table.Controls.Add($Pnl4, 1, 1)
+New-Label $Pnl4 "4. QUẢN LÝ LICENSE & KÍCH HOẠT" "Header" "Magenta" | Out-Null
+
+$GbLic = New-Object System.Windows.Forms.GroupBox; $GbLic.Text = "Công Cụ Kích Hoạt"; $GbLic.ForeColor = "White"; $GbLic.Location = "15, 40"; $GbLic.Size = "450, 160"
+$Pnl4.Controls.Add($GbLic)
+
+# Manual Key
+New-Label $GbLic "Nhập Key thủ công:" "Normal" "Silver" | % {$_.Location = "15, 25"}
+$TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location = "15, 45"; $TxtKey.Size = "300, 25"
+$GbLic.Controls.Add($TxtKey)
+New-Button $GbLic "Nạp Key" $Theme.Accent 100 27 { Install-Key } | % {$_.Location = "325, 43"}
+
+# Clean & MAS
+New-Button $GbLic "XÓA LICENSE (CLEAN SKUs)" "Crimson" 200 40 { Clean-Licenses } | % {$_.Location = "15, 90"}
+New-Button $GbLic "CHẠY MAS (OHOOK / KMS)" "SeaGreen" 200 40 { Run-MAS } | % {$_.Location = "225, 90"}
+
+# --- BOTTOM LOG ---
+$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Dock = "Bottom"; $TxtLog.Height = 100
+$TxtLog.Multiline = $true; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.ReadOnly = $true; $TxtLog.ScrollBars = "Vertical"
+$Form.Controls.Add($TxtLog)
+
+# ================= LOGIC & FUNCTIONS =================
+
+function Log ($M) { 
+    $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n") 
+    $TxtLog.ScrollToCaret()
 }
-
-Add-BigBtn "CAI DAT OFFICE NGAY" 20 "OrangeRed" { Start-Install "Install" }
-Add-BigBtn "TAI VE (TAO BO CAI OFF)" 330 "Gold" { Start-Install "Download" }
-Add-BigBtn "GO OFFICE CU (UNINSTALL)" 640 "Gray" { Start-Uninstall }
-
-$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline=$true; $TxtLog.Location="20,560"; $TxtLog.Size="940,80"; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.ReadOnly=$true; $Form.Controls.Add($TxtLog)
-
-# ================= LOGIC =================
-
-function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n") }
 
 function Get-Odt {
     $OdtPath = "$env:TEMP\setup.exe"
     if (!(Test-Path $OdtPath)) {
-        Log "Dang tai Office Deployment Tool..."
-        try {
-            (New-Object System.Net.WebClient).DownloadFile("https://otp.landian.vip/en-us/setup.exe", $OdtPath) 
-        } catch { Log "Loi tai ODT! Kiem tra mang." }
+        Log "Đang tải Office Deployment Tool..."
+        try { (New-Object System.Net.WebClient).DownloadFile("https://otp.landian.vip/en-us/setup.exe", $OdtPath) } 
+        catch { Log "Lỗi tải ODT! Kiểm tra mạng." }
     }
     return $OdtPath
 }
 
+# --- LOGIC ACTIVATION ---
+
+function Install-Key {
+    $K = $TxtKey.Text.Trim()
+    if ($K.Length -lt 5) { Log "Vui lòng nhập Key hợp lệ."; return }
+    Log "Đang nạp key: $K..."
+    $proc = Start-Process "cscript" -ArgumentList "//nologo $env:SystemRoot\System32\slmgr.vbs /ipk $K" -NoNewWindow -PassThru -Wait
+    if ($proc.ExitCode -eq 0) { Log "Nạp Key thành công! Đang thử kích hoạt online..." 
+        Start-Process "cscript" -ArgumentList "//nologo $env:SystemRoot\System32\slmgr.vbs /ato" -NoNewWindow -Wait
+        Log "Lệnh kích hoạt đã gửi."
+    } else { Log "Lỗi nạp Key." }
+}
+
+function Clean-Licenses {
+    Log "Đang tìm kiếm Skus Office (OSPP.VBS)..."
+    $OsppPath = "$env:ProgramFiles\Microsoft Office\Office16\OSPP.VBS"
+    if (!(Test-Path $OsppPath)) { $OsppPath = "${env:ProgramFiles(x86)}\Microsoft Office\Office16\OSPP.VBS" }
+    
+    if (Test-Path $OsppPath) {
+        if ([System.Windows.Forms.MessageBox]::Show("Hành động này sẽ xóa toàn bộ Key Office hiện tại.`nBạn có chắc chắn?", "Cảnh báo", "YesNo", "Warning") -eq "Yes") {
+            Log "Đang quét key..."
+            $Output = & cscript //nologo $OsppPath /dstatus
+            $Keys = $Output | Select-String "Last 5 characters of installed product key: (.+)" | % { $_.Matches.Groups[1].Value }
+            
+            if ($Keys) {
+                foreach ($K in $Keys) {
+                    Log "Đang gỡ key đuôi: $K"
+                    & cscript //nologo $OsppPath /unpkey:$K | Out-Null
+                }
+                Log "Đã dọn sạch license cũ! Sẵn sàng nạp key mới hoặc Ohook."
+                [System.Windows.Forms.MessageBox]::Show("Đã xóa sạch license!", "Thành công")
+            } else { Log "Không tìm thấy key nào để xóa." }
+        }
+    } else { Log "Không tìm thấy file OSPP.VBS. Có thể Office chưa cài đặt?" }
+}
+
+function Run-MAS {
+    if ([System.Windows.Forms.MessageBox]::Show("Chạy Microsoft Activation Scripts (MAS)?`nĐây là script bên thứ 3 (Massgrave), dùng để kích hoạt Ohook hoặc Online KMS.", "Xác nhận", "YesNo", "Question") -eq "Yes") {
+        Log "Đang gọi MAS..."
+        # Lệnh chuẩn để gọi MAS
+        Start-Process powershell.exe -ArgumentList "irm https://massgrave.dev/get | iex"
+        Log "Cửa sổ MAS đã mở. Vui lòng chọn số [1] (Kích hoạt HWID/Ohook) trên cửa sổ đen mới hiện ra."
+    }
+}
+
+# --- LOGIC ODT INSTALL ---
 function Start-Install ($Mode) {
-    # 1. PARAMS
     $VerStr = ($RadioVers | Where {$_.Checked}).Text
     $Arch = if ($R64.Checked) { "64" } else { "32" }
     $Lang = $CbLang.SelectedItem
     $IsVol = $ChkVl.Checked
     
-    # 2. MAP PRODUCT ID
+    # Map Product ID
     $ProdID = switch -Regex ($VerStr) {
         "2016" { if($IsVol){"ProPlusVolume"}else{"ProPlusRetail"} }
         "2019" { if($IsVol){"ProPlus2019Volume"}else{"ProPlus2019Retail"} }
@@ -143,21 +228,19 @@ function Start-Install ($Mode) {
         "365"  { "O365ProPlusRetail" }
     }
     
-    # 3. CREATE XML (FIXED SYNTAX)
+    # XML Generation
     $XmlPath = "$env:TEMP\config_office.xml"
-    $Writer = New-Object System.IO.StreamWriter($XmlPath)
-    $Writer.WriteLine('<Configuration>') # Dung nhay don bao ngoai
+    $W = New-Object System.IO.StreamWriter($XmlPath)
+    $W.WriteLine('<Configuration>')
     
-    $SrcAttr = if ($Mode -eq "Download" -or $TxtPath.Text) { 
-        $P = if($TxtPath.Text){$TxtPath.Text}else{"$env:USERPROFILE\Desktop\Office_Install_Files"}
-        'SourcePath="' + $P + '"' 
-    } else { "" }
+    $Channel = if($VerStr -match "2019|2021|2024"){"PerpetualVL2019"}else{"Current"}
+    if($VerStr -match "2021"){$Channel="PerpetualVL2021"}
     
-    # FIX: Dùng chuỗi ghép (Concatenation) để tránh lỗi Parser
-    $Writer.WriteLine('  <Add OfficeClientEdition="' + $Arch + '" Channel="PerpetualVL2021" ' + $SrcAttr + '>')
-    
-    $Writer.WriteLine('    <Product ID="' + $ProdID + '">')
-    $Writer.WriteLine('      <Language ID="' + $Lang + '" />')
+    $SrcStr = if ($Mode -eq "Download") { 'SourcePath="' + "$env:USERPROFILE\Desktop\Office_Install" + '"' } else { "" }
+
+    $W.WriteLine('  <Add OfficeClientEdition="' + $Arch + '" Channel="' + $Channel + '" ' + $SrcStr + '>')
+    $W.WriteLine('    <Product ID="' + $ProdID + '">')
+    $W.WriteLine('      <Language ID="' + $Lang + '" />')
     
     foreach ($C in $ChkApps) {
         if (!$C.Checked) {
@@ -165,54 +248,41 @@ function Start-Install ($Mode) {
                 "Word" {"Word"} "Excel" {"Excel"} "PowerPoint" {"PowerPoint"} "Outlook" {"Outlook"} 
                 "OneNote" {"OneNote"} "Access" {"Access"} "Publisher" {"Publisher"} "Teams" {"Teams"} "OneDrive" {"Groove"} "SkypeForBusiness" {"Lync"}
             }
-            $Writer.WriteLine('      <ExcludeApp ID="' + $AppID + '" />')
+            $W.WriteLine('      <ExcludeApp ID="' + $AppID + '" />')
         }
     }
-    $Writer.WriteLine('    </Product>')
+    $W.WriteLine('    </Product>')
     
-    if ($ChkVisio.Checked) {
-        $Vid = if($IsVol){"VisioPro2021Volume"}else{"VisioProRetail"}
-        $Writer.WriteLine('    <Product ID="' + $Vid + '"><Language ID="' + $Lang + '" /></Product>')
-    }
-    if ($ChkProj.Checked) {
-        $Pid = if($IsVol){"ProjectPro2021Volume"}else{"ProjectProRetail"}
-        $Writer.WriteLine('    <Product ID="' + $Pid + '"><Language ID="' + $Lang + '" /></Product>')
-    }
+    # Extra Products (Visio/Project)
+    if ($ChkVisio.Checked) { $Vid=if($IsVol){"VisioPro2021Volume"}else{"VisioProRetail"}; $W.WriteLine('    <Product ID="'+$Vid+'"><Language ID="'+$Lang+'" /></Product>') }
+    if ($ChkProj.Checked) { $Pid=if($IsVol){"ProjectPro2021Volume"}else{"ProjectProRetail"}; $W.WriteLine('    <Product ID="'+$Pid+'"><Language ID="'+$Lang+'" /></Product>') }
     
-    $Writer.WriteLine('  </Add>')
-    
+    $W.WriteLine('  </Add>')
     if ($Mode -eq "Install") {
-        $Writer.WriteLine('  <Display Level="Full" AcceptEULA="TRUE" />')
-        $Writer.WriteLine('  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />')
+        $W.WriteLine('  <Display Level="Full" AcceptEULA="TRUE" />')
+        $W.WriteLine('  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />')
     }
-    $Writer.WriteLine('</Configuration>')
-    $Writer.Close()
+    $W.WriteLine('</Configuration>')
+    $W.Close()
     
-    # 4. RUN
+    # Execute
     $Setup = Get-Odt
-    Log "Da tao file Config.xml. Dang chay setup.exe..."
-    
     try {
         if ($Mode -eq "Install") {
+            Log "Đang cài đặt $ProdID..."
             Start-Process $Setup -ArgumentList "/configure `"$XmlPath`"" 
-            Log "Da khoi chay trinh cai dat Office!"
         } else {
-            Log "Dang tai file cai dat ve... (Se mat thoi gian)"
-            $Proc = Start-Process $Setup -ArgumentList "/download `"$XmlPath`"" -PassThru
-            while (!$Proc.HasExited) { [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -m 500 }
-            Log "Da tai xong! Kiem tra thu muc chon."
-            [System.Windows.Forms.MessageBox]::Show("Tai xong Office Offline!", "Thanh cong")
+            Log "Đang tải về..."
+            Start-Process $Setup -ArgumentList "/download `"$XmlPath`""
         }
-    } catch { Log "Loi chay Setup: $($_.Exception.Message)" }
+    } catch { Log "Lỗi thực thi: $_" }
 }
 
 function Start-Uninstall {
-    if ([System.Windows.Forms.MessageBox]::Show("Ban co chac muon GO BO toan bo Office?", "Canh bao", "YesNo", "Warning") -eq "Yes") {
-        $XmlPath = "$env:TEMP\remove_office.xml"
-        [IO.File]::WriteAllText($XmlPath, '<Configuration><Remove All="TRUE" /></Configuration>')
-        $Setup = Get-Odt
-        Start-Process $Setup -ArgumentList "/configure `"$XmlPath`""
-        Log "Da gui lenh go bo Office."
+    if ([System.Windows.Forms.MessageBox]::Show("Gỡ bỏ toàn bộ Office?", "Warning", "YesNo") -eq "Yes") {
+        $X = "$env:TEMP\rem.xml"; [IO.File]::WriteAllText($X, '<Configuration><Remove All="TRUE"/></Configuration>')
+        Start-Process (Get-Odt) -ArgumentList "/configure `"$X`""
+        Log "Đã gửi lệnh gỡ bỏ."
     }
 }
 
