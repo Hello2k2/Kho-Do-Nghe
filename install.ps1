@@ -1,7 +1,7 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
     Author:  Phat Tan
-    Version: 11.6 (Corrected Credits + Final Polish)
+    Version: 11.7 (Auto-Repair Temp Folder Fix)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -20,9 +20,12 @@ $BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
 $RawUrl  = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/"
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.json"
 $TempDir = "$env:TEMP\PhatTan_Tool"
+
+# Tao folder lan dau
 if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
 
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+# Fix TLS de tai Github khong loi
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
 
 # --- 3. THEME ENGINE ---
 $Global:DarkMode = $true 
@@ -111,39 +114,56 @@ $PaintHandler = {
     } catch {}
 }
 
-# --- 5. CORE FUNCTIONS ---
-function Log-Msg ($Msg) { Write-Host " $Msg" -ForegroundColor Cyan }
+# --- 5. CORE FUNCTIONS (FIXED) ---
 
+# Hàm này tải file .exe/.rar
 function Tai-Va-Chay {
     param ($Link, $Name, $Type)
+    
+    # [FIX] Tự tạo lại folder Temp nếu bị xóa
+    if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+
     if ($Link -notmatch "^http") { $Link = "$BaseUrl$Link" }
     $Dest = "$TempDir\$Name"
+    
     try {
         (New-Object System.Net.WebClient).DownloadFile($Link, $Dest)
         if (Test-Path $Dest) {
             if ($Type -eq "Msi") { Start-Process "msiexec.exe" "/i `"$Dest`" /quiet /norestart" -Wait }
             else { Start-Process $Dest -Wait }
         }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi download: $Name`nKiem tra lai file tren Github.", "Error") }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi tải file: $Name`nCó thể link die hoặc mạng lỗi.", "Error") }
 }
 
+# Hàm này tải code Powershell (Module)
 function Load-Module ($ScriptName) {
+    # [FIX] Tự tạo lại folder Temp nếu bị xóa (QUAN TRỌNG)
+    if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+
     $LocalPath = "$TempDir\$ScriptName"
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Url = "$RawUrl$ScriptName" + "?t=$Ts"
+    
     try {
         $WebClient = New-Object System.Net.WebClient
         $WebClient.Encoding = [System.Text.Encoding]::UTF8
+        
+        # Tải nội dung code về RAM trước
         $Content = $WebClient.DownloadString($Url)
+        
+        # Ghi xuống file (Lúc này chắc chắn folder đã tồn tại nhờ dòng FIX bên trên)
         $Stream = [System.IO.StreamWriter]::new($LocalPath, $false, [System.Text.Encoding]::UTF8)
         $Stream.Write($Content); $Stream.Close()
+        
         if (Test-Path $LocalPath) { Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`"" }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi tai Module: $ScriptName`nChi tiet: $($_.Exception.Message)", "Loi Ket Noi") }
+    } catch { 
+        [System.Windows.Forms.MessageBox]::Show("Lỗi tải Module: $ScriptName`nChi tiết: $($_.Exception.Message)`n`n(Mẹo: Kiểm tra lại mạng hoặc file trên Github)", "Lỗi Kết Nối") 
+    }
 }
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.6 (FINAL EDITION)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.7 (AUTO FIX TEMP)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false; $Form.Opacity = 0
@@ -226,16 +246,16 @@ foreach ($T in $JsonTabs) {
 # --- FOOTER ---
 $PnlFooter = New-Object System.Windows.Forms.Panel; $PnlFooter.Location="0,590"; $PnlFooter.Size="1050,120"; $PnlFooter.BackColor=[System.Drawing.Color]::Transparent; $Form.Controls.Add($PnlFooter)
 
-$BtnAll = New-Object System.Windows.Forms.Button; $BtnAll.Text="CHON TAT CA"; $BtnAll.Location="30,10"; $BtnAll.Size="120,40"; $BtnAll.FlatStyle="Flat"
+$BtnAll = New-Object System.Windows.Forms.Button; $BtnAll.Text="CHỌN TẤT CẢ"; $BtnAll.Location="30,10"; $BtnAll.Size="120,40"; $BtnAll.FlatStyle="Flat"
 $BtnAll.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$true} } } } }); $PnlFooter.Controls.Add($BtnAll)
 
-$BtnNone = New-Object System.Windows.Forms.Button; $BtnNone.Text="BO CHON"; $BtnNone.Location="160,10"; $BtnNone.Size="120,40"; $BtnNone.FlatStyle="Flat"
+$BtnNone = New-Object System.Windows.Forms.Button; $BtnNone.Text="BỎ CHỌN"; $BtnNone.Location="160,10"; $BtnNone.Size="120,40"; $BtnNone.FlatStyle="Flat"
 $BtnNone.Add_Click({ foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$false} } } } }); $PnlFooter.Controls.Add($BtnNone)
 
-$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Font="Segoe UI, 14, Bold"; $BtnInstall.Location="360,10"; $BtnInstall.Size="320,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"; $BtnInstall.Cursor="Hand"
+$BtnInstall = New-Object System.Windows.Forms.Button; $BtnInstall.Text="TIẾN HÀNH CÀI ĐẶT ĐÃ CHỌN"; $BtnInstall.Font="Segoe UI, 14, Bold"; $BtnInstall.Location="360,10"; $BtnInstall.Size="320,60"; $BtnInstall.BackColor="LimeGreen"; $BtnInstall.ForeColor="Black"; $BtnInstall.FlatStyle="Flat"; $BtnInstall.Cursor="Hand"
 Add-HoverEffect $BtnInstall
 $BtnInstall.Add_Click({
-    $BtnInstall.Enabled=$false; $BtnInstall.Text="DANG XU LY..."
+    $BtnInstall.Enabled=$false; $BtnInstall.Text="ĐANG XỬ LÝ..."
     foreach($P in $TabControl.TabPages){ 
         foreach($F in $P.Controls){ 
             foreach($C in $F.Controls){
@@ -247,7 +267,7 @@ $BtnInstall.Add_Click({
             }
         } 
     }
-    [System.Windows.Forms.MessageBox]::Show("Da Xong!", "Info"); $BtnInstall.Text="TIEN HANH CAI DAT DA CHON"; $BtnInstall.Enabled=$true
+    [System.Windows.Forms.MessageBox]::Show("Đã Xong!", "Info"); $BtnInstall.Text="TIẾN HÀNH CÀI ĐẶT ĐÃ CHỌN"; $BtnInstall.Enabled=$true
 }); $PnlFooter.Controls.Add($BtnInstall)
 
 # --- NÚT GHI CÔNG & DONATE ---
@@ -260,7 +280,7 @@ $BtnDonate.Add_Click({
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
 }); $PnlFooter.Controls.Add($BtnDonate)
 
-# NÚT CREDITS (GHI CÔNG - ĐÃ SỬA LẠI)
+# NÚT CREDITS
 $BtnCredit = New-Object System.Windows.Forms.Button; $BtnCredit.Text="ℹ️ CREDITS"; $BtnCredit.Location="750,55"; $BtnCredit.Size="210,35"; $BtnCredit.BackColor="DarkSlateBlue"; $BtnCredit.ForeColor="White"; $BtnCredit.FlatStyle="Flat"
 $BtnCredit.Add_Click({
     [System.Windows.Forms.MessageBox]::Show(
