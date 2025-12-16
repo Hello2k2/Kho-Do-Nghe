@@ -1,6 +1,6 @@
 <#
     WINDOWS MODDER STUDIO - PHAT TAN PC
-    Version: 3.0 (Final Boss: Kill Background Apps + Browser Exclusion)
+    Version: 3.1 (IE Ghostbuster: Fix edb.log + WebCache Lock)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -29,12 +29,12 @@ function Log ($Box, $Msg, $Type="INFO") {
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT MẠNH) ---
+# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT CHẶN IE & CACHE) ---
 function Create-DismConfig {
     if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
     $ConfigPath = "$ToolsDir\WimScript.ini"
     
-    # DANH SÁCH BỎ QUA CÁC FILE ĐANG BỊ KHÓA (User Data của Browser)
+    # DANH SÁCH "SÁT THỦ" DIỆT LỖI LOCK FILE
     $Content = @"
 [ExclusionList]
 \$ntfs.log
@@ -58,22 +58,22 @@ function Create-DismConfig {
 \Users\*\AppData\Local\Microsoft\Edge\User Data
 \Users\*\AppData\Local\Google\Chrome\User Data
 \Users\*\AppData\Local\Temp
+\Users\*\AppData\Local\Microsoft\Internet Explorer
+\Users\*\AppData\Local\Microsoft\Windows\INetCache
+\Users\*\AppData\Local\Microsoft\Windows\WebCache
+\Users\*\AppData\Local\Microsoft\Windows\History
+\Users\*\ntuser.dat.LOG*
+\Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG*
 "@
     [System.IO.File]::WriteAllText($ConfigPath, $Content)
     return $ConfigPath
 }
 
-# --- HÀM KILL PROCESS (DIỆT ỨNG DỤNG NGẦM) ---
+# --- HÀM KILL PROCESS ---
 function Kill-BackgroundApps {
-    $Apps = @("msedge", "chrome", "OneDrive", "Teams", "Skype", "SearchApp", "Cortana", "calculator", "photos")
-    
+    $Apps = @("msedge", "chrome", "OneDrive", "Teams", "Skype", "SearchApp", "Cortana", "calculator", "photos", "iexplore")
     foreach ($App in $Apps) {
-        try {
-            $Procs = Get-Process -Name $App -ErrorAction SilentlyContinue
-            if ($Procs) {
-                Stop-Process -Name $App -Force -ErrorAction SilentlyContinue
-            }
-        } catch {}
+        try { Stop-Process -Name $App -Force -ErrorAction SilentlyContinue } catch {}
     }
 }
 
@@ -89,7 +89,7 @@ function Toggle-Services ($State) {
     }
 }
 
-# --- CÁC HÀM HỖ TRỢ KHÁC ---
+# --- CÁC HÀM HỖ TRỢ ---
 function Grant-FullAccess ($Path) {
     if (Test-Path $Path) { Start-Process "icacls" -ArgumentList "`"$Path`" /grant Everyone:F /T /C /Q" -Wait -NoNewWindow }
 }
@@ -120,7 +120,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V3.0 (ANTI-EDGE EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V3.1 (IE FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -156,7 +156,7 @@ $GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="CAPTURE WINDOWS"
 $LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu file WIM tại:"; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $GbCap.Controls.Add($LblC1)
 $TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,65"; $TxtCapOut.Size="650,25"; $TxtCapOut.Text="D:\PhatTan_Backup.wim"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="700,63"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
-$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Auto Kill Edge/Chrome)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
+$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Deep Clean)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
 $TxtLogCap = New-Object System.Windows.Forms.TextBox; $TxtLogCap.Multiline=$true; $TxtLogCap.Location="30,180"; $TxtLogCap.Size="770,260"; $TxtLogCap.BackColor="Black"; $TxtLogCap.ForeColor="Lime"; $TxtLogCap.ScrollBars="Vertical"; $TxtLogCap.ReadOnly=$true; $TxtLogCap.Font="Consolas, 9"; $GbCap.Controls.Add($TxtLogCap)
 
 # --- TAB 2 ---
@@ -211,26 +211,26 @@ function Smart-Unmount ($Commit) {
     return $Success
 }
 
-# --- LOGIC CAPTURE (V3.0) ---
+# --- LOGIC CAPTURE (V3.1) ---
 $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
     Update-Workspace; Prepare-Dirs
     
-    # 1. TẠO CONFIG EXCLUDE (THÊM EDGE/CHROME DATA)
+    # 1. TẠO CONFIG EXCLUDE (THÊM IE & WEBCACHE)
     $ConfigFile = Create-DismConfig
-    Log $TxtLogCap "Configured Exclusions (Edge/Chrome blocked)" "INFO"
+    Log $TxtLogCap "Đã cấu hình chặn IE/WebCache." "INFO"
 
     $WimTarget = $TxtCapOut.Text
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # 2. KILL BACKGROUND APPS (MỚI)
-    Log $TxtLogCap "Đang tắt Edge, Chrome, OneDrive..." "WARN"
+    # 2. KILL BACKGROUND APPS
+    Log $TxtLogCap "Đang tắt ứng dụng ngầm..." "WARN"
     Kill-BackgroundApps
     
     # 3. STOP SERVICES
-    Log $TxtLogCap "Stopping Services..." "WARN"
+    Log $TxtLogCap "Dừng Services..." "WARN"
     Toggle-Services "STOP"
     
     Log $TxtLogCap "Capturing C:..." "INFO"
@@ -240,13 +240,13 @@ $BtnStartCap.Add_Click({
     $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:C:\ /Name:`"MyWin`" /Compress:max /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`"" -Wait -NoNewWindow -PassThru
     
     # 5. RESTORE
-    Log $TxtLogCap "Restoring Services..." "INFO"
+    Log $TxtLogCap "Khôi phục Services..." "INFO"
     Toggle-Services "START"
 
     if ($Proc.ExitCode -eq 0) { 
-        Log $TxtLogCap "SUCCESS!" "INFO"; [System.Windows.Forms.MessageBox]::Show("Capture xong!")
+        Log $TxtLogCap "THÀNH CÔNG!" "INFO"; [System.Windows.Forms.MessageBox]::Show("Capture xong!")
     } else { 
-        Log $TxtLogCap "Failed (Code $($Proc.ExitCode)). Check Log." "ERR" 
+        Log $TxtLogCap "Vẫn lỗi (Code $($Proc.ExitCode)). Hãy khởi động lại máy." "ERR" 
     }
     $BtnStartCap.Enabled=$true; $Form.Cursor="Default"
 })
