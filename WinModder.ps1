@@ -1,6 +1,6 @@
 <#
     WINDOWS MODDER STUDIO - PHAT TAN PC
-    Version: 2.7 (Live Capture Fix: Auto WimScript.ini + Exclude Locked Files)
+    Version: 2.8 (Live Capture Final: Auto Stop Services + Enhanced Exclusions)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -29,12 +29,12 @@ function Log ($Box, $Msg, $Type="INFO") {
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# --- HÀM TẠO FILE CẤU HÌNH DISM (FIX LỖI 32 KHI CAPTURE) ---
+# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT MỚI) ---
 function Create-DismConfig {
     if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
     $ConfigPath = "$ToolsDir\WimScript.ini"
     
-    # Danh sách các file hệ thống đang chạy cần bỏ qua để không bị lỗi Access Denied
+    # Danh sách loại trừ mở rộng để tránh lỗi edb.jtx và các file lock khác
     $Content = @"
 [ExclusionList]
 \$ntfs.log
@@ -49,9 +49,32 @@ function Create-DismConfig {
 \DumpStack.log
 \Config.Msi
 \Windows\SoftwareDistribution
+\ProgramData\Microsoft\Search
+\Windows\System32\LogFiles
+\Windows\Logs
+\PerfLogs
 "@
     [System.IO.File]::WriteAllText($ConfigPath, $Content)
     return $ConfigPath
+}
+
+# --- HÀM QUẢN LÝ DỊCH VỤ (FIX LỖI 0x80070020) ---
+function Toggle-Services ($State) {
+    # Danh sách các dịch vụ hay khóa file
+    $Services = @("wsearch", "sysmain", "cryptsvc", "wuauserv", "bits")
+    
+    foreach ($Svc in $Services) {
+        if ($State -eq "STOP") {
+            if ((Get-Service $Svc).Status -eq "Running") {
+                Stop-Service -Name $Svc -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            # Chỉ bật lại những cái thiết yếu nếu cần (hoặc để Windows tự bật lại sau)
+            if ((Get-Service $Svc).Status -eq "Stopped") {
+                Start-Service -Name $Svc -ErrorAction SilentlyContinue
+            }
+        }
+    }
 }
 
 # --- HÀM CẤP QUYỀN ---
@@ -91,7 +114,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V2.7 (LIVE OS CAPTURE)"
+$Form.Text = "WINDOWS MODDER STUDIO V2.8 (LIVE CAPTURE FINAL)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -139,7 +162,7 @@ $LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu file WIM tại
 $TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,65"; $TxtCapOut.Size="650,25"; $TxtCapOut.Text="D:\PhatTan_Backup.wim"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="700,63"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
 
-$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Hỗ trợ Live OS)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
+$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (An toàn & Tự động)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
 
 $TxtLogCap = New-Object System.Windows.Forms.TextBox; $TxtLogCap.Multiline=$true; $TxtLogCap.Location="30,180"; $TxtLogCap.Size="770,260"; $TxtLogCap.BackColor="Black"; $TxtLogCap.ForeColor="Lime"; $TxtLogCap.ScrollBars="Vertical"; $TxtLogCap.ReadOnly=$true; $TxtLogCap.Font="Consolas, 9"; $GbCap.Controls.Add($TxtLogCap)
 
@@ -163,7 +186,7 @@ $TxtLogMod = New-Object System.Windows.Forms.TextBox; $TxtLogMod.Multiline=$true
 $BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text="3. TẠO ISO MỚI (REBUILD)"; $BtnBuild.Location="20,420"; $BtnBuild.Size="845,60"; $BtnBuild.BackColor="Green"; $BtnBuild.ForeColor="White"; $BtnBuild.Font="Segoe UI, 14, Bold"; $BtnBuild.Enabled=$false; $TabMod.Controls.Add($BtnBuild)
 
 # =========================================================================================
-# LOGIC CORE (V2.7 - CONFIG FILE FIX)
+# LOGIC CORE (V2.8)
 # =========================================================================================
 
 # --- TOOL CHECKER ---
@@ -215,26 +238,34 @@ function Smart-Unmount ($Commit) {
     return $Success
 }
 
-# --- LOGIC CAPTURE (FIXED) ---
+# --- LOGIC CAPTURE (V2.8 FIXED) ---
 $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
     Update-Workspace; Prepare-Dirs
     
-    # 1. TẠO FILE CẤU HÌNH LOẠI TRỪ (QUAN TRỌNG)
+    # 1. TẠO FILE CẤU HÌNH LOẠI TRỪ (MẠNH HƠN)
     $ConfigFile = Create-DismConfig
     Log $TxtLogCap "Đã tạo file cấu hình: $ConfigFile" "INFO"
 
     $WimTarget = $TxtCapOut.Text
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
+    # 2. TẮT SERVICES GÂY LOCK (QUAN TRỌNG)
+    Log $TxtLogCap "Đang tắt Windows Search & SysMain..." "WARN"
+    Toggle-Services "STOP"
+    
     Log $TxtLogCap "Đang Capture ổ C (Live OS)..." "INFO"
     Release-Locks 
 
-    # 2. CHẠY LỆNH DISM VỚI /ConfigFile
+    # 3. CHẠY LỆNH DISM
     $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:C:\ /Name:`"MyWin`" /Compress:max /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`"" -Wait -NoNewWindow -PassThru
     
+    # 4. BẬT LẠI SERVICES
+    Log $TxtLogCap "Khôi phục Services..." "INFO"
+    Toggle-Services "START"
+
     if ($Proc.ExitCode -eq 0) { 
         Log $TxtLogCap "Capture THÀNH CÔNG!" "INFO"
         [System.Windows.Forms.MessageBox]::Show("Capture xong!")
@@ -245,7 +276,7 @@ $BtnStartCap.Add_Click({
     $BtnStartCap.Enabled=$true; $Form.Cursor="Default"
 })
 
-# --- MODDING LOGIC (SAME AS V2.6) ---
+# --- MODDING LOGIC ---
 $BtnIsoSrc.Add_Click({ $O=New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO|*.iso"; if($O.ShowDialog()-eq"OK"){$TxtIsoSrc.Text=$O.FileName; $GbAct.Enabled=$true} })
 
 function Force-Cleanup {
