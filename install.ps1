@@ -225,6 +225,7 @@ Add-Btn $P3 "🤖 GEMINI AI" { Load-Module "GeminiAI.ps1" }
 Add-Btn $P3 "🛍️ LTSC STORE" { Load-Module "StoreInstaller.ps1" }
 Add-Btn $P3 "⬇️ ISO TURBO" { Load-Module "ISODownloader.ps1" }
 Add-Btn $P3 "☁️ BACKUP PRO" { Load-Module "BackupCenter.ps1" }
+Add-Btn $P3 "☁️ Tạo USBBOOT PRO" { Load-Module "UsbBootMaker.ps1" }
 Add-Btn $P3 "🛒 WINGET APP" { Load-Module "AppStore.ps1" }
 
 # > LOAD JSON APPS
