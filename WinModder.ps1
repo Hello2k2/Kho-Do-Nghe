@@ -3,29 +3,42 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# [FIX] Ép buộc sử dụng TLS 1.2 để tải file từ Github không bị lỗi
+# [FIX] Ép buộc sử dụng TLS 1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- CONFIG ---
-# Tu dong chuyen WorkDir sang o dia khac C neu co the, neu khong thi dung D mac dinh
-$WorkDir = "D:\PhatTan_WinModder" 
+# --- CONFIG (AUTO DETECT DRIVE) ---
+# [FIX 267] Tu dong chon o dia luu tru (Uu tien D -> E -> C)
+if (Test-Path "D:\") { $BaseDrive = "D:\" }
+elseif (Test-Path "E:\") { $BaseDrive = "E:\" }
+else { $BaseDrive = "$env:SystemDrive\" } # Fallback ve C:\ neu khong co o khac
+
+$WorkDir = "${BaseDrive}PhatTan_WinModder"
 $ToolsDir = "$env:TEMP\PhatTan_Tools"
-
-# Tao cac thu muc can thiet
-if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
-if (!(Test-Path $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
-
-# [FIX LOI 5] Tao thu muc Temp rieng cho DISM de tranh loi Access Denied tren o C
 $ScratchDir = "$WorkDir\Scratch"
-if (!(Test-Path $ScratchDir)) { New-Item -ItemType Directory -Path $ScratchDir -Force | Out-Null }
+
+# --- INIT FOLDERS & PERMISSIONS ---
+function Init-Workspace {
+    if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
+    if (!(Test-Path $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
+    
+    # [FIX 267] Tao Scratch Dir va Reset Quyen (Full Control) ngay lap tuc
+    if (Test-Path $ScratchDir) { Remove-Item $ScratchDir -Recurse -Force -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Path $ScratchDir -Force | Out-Null
+    
+    # Cap quyen Full Control cho Everyone de DISM khong bao loi Access Denied/267
+    Start-Process "icacls" -ArgumentList "`"$ScratchDir`" /grant Everyone:F /T /C /Q" -Wait -NoNewWindow
+}
+
+# Goi ham khoi tao ngay khi mo Tool
+Init-Workspace
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V2.1 (FIX DISM ERROR 5)"
+$Form.Text = "WINDOWS MODDER STUDIO V2.2 (AUTO DRIVE + FIX PERMISSION)"
 $Form.Size = New-Object System.Drawing.Size(920, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25)
@@ -45,7 +58,7 @@ $Form.Controls.Add($LblT)
 # Status Strip
 $StatusStrip = New-Object System.Windows.Forms.StatusStrip
 $StatusLbl = New-Object System.Windows.Forms.ToolStripStatusLabel
-$StatusLbl.Text = "Ready."
+$StatusLbl.Text = "Work Dir: $WorkDir" # Hien thi noi lam viec
 $StatusLbl.ForeColor = "Black"
 $StatusStrip.Items.Add($StatusLbl) | Out-Null
 $Form.Controls.Add($StatusStrip)
@@ -74,10 +87,10 @@ $TabMod = Make-Tab "2. MODDING ISO (CHỈNH SỬA)"
 # =========================================================================================
 $GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="QUY TRÌNH ĐÓNG GÓI WINDOWS ĐANG CHẠY"; $GbCap.Location="20,20"; $GbCap.Size="820,450"; $GbCap.ForeColor="Cyan"; $TabCap.Controls.Add($GbCap)
 
-$LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu ý: Tắt Defender và các phần mềm đang chạy.`nTool sẽ chụp lại toàn bộ ổ C: và nén thành install.wim."; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $LblC1.ForeColor="LightGray"; $GbCap.Controls.Add($LblC1)
+$LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu ý: Tắt Defender. Tool sẽ tự động chọn ổ đĩa trống để làm nơi lưu tạm (Scratch)."; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $LblC1.ForeColor="LightGray"; $GbCap.Controls.Add($LblC1)
 
 $LblC2 = New-Object System.Windows.Forms.Label; $LblC2.Text="Nơi lưu file ISO thành phẩm:"; $LblC2.Location="30,100"; $LblC2.AutoSize=$true; $GbCap.Controls.Add($LblC2)
-$TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,125"; $TxtCapOut.Size="550,25"; $TxtCapOut.Text="D:\PhatTan_Backup.iso"; $GbCap.Controls.Add($TxtCapOut)
+$TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,125"; $TxtCapOut.Size="550,25"; $TxtCapOut.Text="${BaseDrive}PhatTan_Backup.iso"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="600,123"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
 
 $BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE & TẠO ISO"; $BtnStartCap.Location="30,180"; $BtnStartCap.Size="670,60"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 12, Bold"; $GbCap.Controls.Add($BtnStartCap)
@@ -121,39 +134,33 @@ function Log ($Box, $Msg) {
     $Box.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $Msg`r`n"); $Box.ScrollToCaret(); Set-Status $Msg
 }
 
-# --- TOOL MANAGER (OSCDIMG) - QUY TRÌNH 5 BƯỚC ---
+# --- TOOL MANAGER (OSCDIMG) ---
 function Check-Tools {
     $OscTarget = "$ToolsDir\oscdimg.exe"
     if (Test-Path $OscTarget) { return $true }
 
-    Set-Status "Đang tải oscdimg.exe từ Server Phat Tan..."
+    Set-Status "Đang tải oscdimg.exe..."
     try {
         $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
         (New-Object System.Net.WebClient).DownloadFile($Url, $OscTarget)
-        if ((Get-Item $OscTarget).Length -gt 100kb) { Set-Status "Tải xong Tool."; return $true } 
-        else { Remove-Item $OscTarget -Force }
-    } catch { Set-Status "Lỗi tải Server, chuyển sang bước tìm kiếm..." }
+        if ((Get-Item $OscTarget).Length -gt 100kb) { return $true } else { Remove-Item $OscTarget -Force }
+    } catch {}
 
     $AdkPaths = @(
         "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
         "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
         "C:\Windows\System32\oscdimg.exe"
     )
-    foreach ($P in $AdkPaths) {
-        if (Test-Path $P) { Copy-Item $P $OscTarget -Force; return $true }
-    }
+    foreach ($P in $AdkPaths) { if (Test-Path $P) { Copy-Item $P $OscTarget -Force; return $true } }
 
-    $Ask = [System.Windows.Forms.MessageBox]::Show("Không tìm thấy file tạo ISO (oscdimg.exe).`n`n- Bấm [YES] để trỏ đường dẫn file.`n- Bấm [NO] để tải ADK (Lâu).", "Thiếu Tool", "YesNoCancel", "Warning")
-
+    $Ask = [System.Windows.Forms.MessageBox]::Show("Thiếu oscdimg.exe. Bấm YES để trỏ đường dẫn file (nếu có), NO để tải ADK.", "Warning", "YesNoCancel", "Warning")
     if ($Ask -eq "Yes") {
         $O = New-Object System.Windows.Forms.OpenFileDialog; $O.Filter = "Oscdimg|oscdimg.exe"
         if ($O.ShowDialog() -eq "OK") { Copy-Item $O.FileName $OscTarget -Force; return $true }
     } elseif ($Ask -eq "No") {
         try {
-            Set-Status "Đang tải bộ cài ADK..."
-            $AdkSetup = "$env:TEMP\adksetup.exe"
-            (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", $AdkSetup)
-            if ([System.Windows.Forms.MessageBox]::Show("Tải xong ADK. Cài đặt xong hãy chạy lại Tool.", "Hướng dẫn") -eq "OK") { Start-Process $AdkSetup -Wait }
+            (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", "$env:TEMP\adksetup.exe")
+            if ([System.Windows.Forms.MessageBox]::Show("Tải xong ADK. Cài đặt xong hãy bấm OK.", "Info") -eq "OK") { Start-Process "$env:TEMP\adksetup.exe" -Wait }
         } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi mạng.", "Error") }
     }
     return $false
@@ -171,28 +178,21 @@ $BtnStartCap.Add_Click({
     $WimFile = "$WorkDir\Capture\install.wim"
     $IsoDir  = "$WorkDir\Capture\ISO_Root"
     
-    # Canh bao neu luu file vao o C
-    if ($IsoPath -like "C:*") { 
-        if ([System.Windows.Forms.MessageBox]::Show("Lưu ISO vào ổ C dễ bị lỗi quyền (Access Denied).`nBạn có chắc chắn muốn tiếp tục không?", "Cảnh báo", "YesNo") -eq "No") { return }
-    }
+    Init-Workspace # Dam bao thu muc va quyen ton tai
 
     if (Test-Path $WorkDir) { Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
     New-Item -ItemType Directory -Path $IsoDir -Force | Out-Null
     
     $BtnStartCap.Enabled=$false; $Form.Cursor = "WaitCursor"
-    Log $TxtLogCap ">>> ĐANG BẮT ĐẦU CAPTURE Ổ C:..."
+    Log $TxtLogCap ">>> ĐANG CAPTURE Ổ C (Scratch: $ScratchDir)..."
     
     try {
-        # [FIX] Them ScratchDir de tranh loi Access Denied tren o C
         Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimFile`" /CaptureDir:C:\ /Name:`"Phat Tan Windows`" /Compress:max /ScratchDir:`"$ScratchDir`"" -Wait -NoNewWindow
-        
         if (Test-Path $WimFile) {
-            Log $TxtLogCap " [OK] Đã Capture xong C: -> install.wim"
-            [System.Windows.Forms.MessageBox]::Show("Đã tạo xong file install.wim!", "Thành công")
+            Log $TxtLogCap " [OK] Đã Capture xong."
+            [System.Windows.Forms.MessageBox]::Show("Thành công!", "Phat Tan PC")
             Invoke-Item (Split-Path $WimFile)
-        } else {
-             Log $TxtLogCap " [ERR] Lỗi Capture: Không tạo được file WIM. Hãy thử tắt Defender."
-        }
+        } else { Log $TxtLogCap " [ERR] Lỗi Capture. Check Defender." }
     } catch { Log $TxtLogCap " [ERR] Exception: $($_.Exception.Message)" }
     
     $BtnStartCap.Enabled=$true; $Form.Cursor = "Default"
@@ -208,84 +208,77 @@ $BtnIsoSrc.Add_Click({
 })
 
 function Force-Cleanup {
-    Log $TxtLogMod ">>> Đang dọn dẹp (Cleanup-Wim)..."
-    # [FIX] Them lenh Cleanup-Mountpoints de xoa triet de
+    Log $TxtLogMod ">>> Cleaning up..."
     Start-Process "dism" -ArgumentList "/Cleanup-Mountpoints" -Wait -NoNewWindow
     Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
     Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Discard" -Wait -NoNewWindow -ErrorAction SilentlyContinue
-    Log $TxtLogMod " [OK] Đã dọn dẹp."
+    Log $TxtLogMod " [OK] Done."
 }
 
 function Start-Mount {
     $Iso = $TxtIsoSrc.Text
     if (!(Test-Path $Iso)) { return }
     
+    Init-Workspace # Dam bao Scratch Dir ton tai va full quyen
+    
     if (Test-Path $WorkDir) { Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
     New-Item -ItemType Directory -Path $Global:ExtractDir -Force | Out-Null
     New-Item -ItemType Directory -Path $Global:MountDir -Force | Out-Null
     
     $Form.Cursor = "WaitCursor"
-    Log $TxtLogMod ">>> Đang Mount ISO ra ổ ảo..."
+    Log $TxtLogMod ">>> Mounting ISO..."
     Mount-DiskImage -ImagePath $Iso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
     $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume
     $Drv = "$($Vol.DriveLetter):"
     
-    Log $TxtLogMod ">>> Đang copy dữ liệu ISO..."
+    Log $TxtLogMod ">>> Copying Data..."
     Copy-Item "$Drv\*" $Global:ExtractDir -Recurse -Force
     
-    # Auto Check ESD vs WIM
     $Wim = "$Global:ExtractDir\sources\install.wim"
     $Esd = "$Global:ExtractDir\sources\install.esd"
     
     if (!(Test-Path $Wim)) { 
         if (Test-Path $Esd) { 
-            Log $TxtLogMod " [DETECT] Phát hiện file ESD. Đang Convert sang WIM..."
-            Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$Esd`" /SourceIndex:1 /DestinationImageFile:`"$Wim`" /Compress:max /CheckIntegrity" -Wait -NoNewWindow
+            Log $TxtLogMod " [DETECT] ESD Found. Converting..."
+            Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$Esd`" /SourceIndex:1 /DestinationImageFile:`"$Wim`" /Compress:max /CheckIntegrity /ScratchDir:`"$ScratchDir`"" -Wait -NoNewWindow
             Remove-Item $Esd -Force
         } else {
-            $Form.Cursor = "Default"
-            [System.Windows.Forms.MessageBox]::Show("Không tìm thấy install.wim hoặc install.esd!", "Lỗi"); return
+            $Form.Cursor = "Default"; [System.Windows.Forms.MessageBox]::Show("Không tìm thấy WIM/ESD!", "Lỗi"); return
         }
     }
     
-    Log $TxtLogMod ">>> Đang Mount install.wim..."
-    # [FIX QUAN TRONG] Them /ScratchDir de fix loi Access Denied (Error 5)
+    Log $TxtLogMod ">>> Mounting WIM (Using Scratch: $ScratchDir)..."
+    # [FIX] Dung ScratchDir da duoc set quyen Full Control
     Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$Wim`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$ScratchDir`"" -Wait -NoNewWindow
     
-    $LblMountInfo.Text = "TRẠNG THÁI: ĐÃ MOUNT THÀNH CÔNG"
-    $LblMountInfo.ForeColor = "Lime"
+    $LblMountInfo.Text = "MOUNTED OK"; $LblMountInfo.ForeColor = "Lime"
     $BtnBuildIso.Enabled = $true
     $Form.Cursor = "Default"
     Log $TxtLogMod " [OK] Sẵn sàng Modding."
 }
 
 function Add-Folder {
-    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; $FBD.Description="Chọn thư mục muốn ném vào ổ C"
+    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog
     if ($FBD.ShowDialog() -eq "OK") {
-        $Src = $FBD.SelectedPath; $Name = Split-Path $Src -Leaf; $Dst = "$Global:MountDir\$Name"
-        Copy-Item $Src $Dst -Recurse -Force
-        Log $TxtLogMod " [OK] Đã thêm Folder: $Name"
+        $Src = $FBD.SelectedPath; $Dst = "$Global:MountDir\$(Split-Path $Src -Leaf)"
+        Copy-Item $Src $Dst -Recurse -Force; Log $TxtLogMod " [OK] Added: $Src"
     }
 }
 
 function Add-Driver {
-    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; $FBD.Description="Chọn thư mục chứa Driver (.inf)"
+    $FBD = New-Object System.Windows.Forms.FolderBrowserDialog
     if ($FBD.ShowDialog() -eq "OK") {
-        $Form.Cursor = "WaitCursor"
-        Log $TxtLogMod ">>> Đang Inject Driver..."
-        # [FIX] Them ScratchDir cho Driver
+        $Form.Cursor = "WaitCursor"; Log $TxtLogMod ">>> Injecting Drivers..."
         Start-Process "dism" -ArgumentList "/Image:`"$Global:MountDir`" /Add-Driver /Driver:`"$($FBD.SelectedPath)`" /Recurse /ScratchDir:`"$ScratchDir`"" -Wait -NoNewWindow
-        Log $TxtLogMod " [OK] Đã nạp Driver."
-        $Form.Cursor = "Default"
+        Log $TxtLogMod " [OK] Drivers Injected."; $Form.Cursor = "Default"
     }
 }
 
 function Add-DesktopFile {
     $O = New-Object System.Windows.Forms.OpenFileDialog
     if ($O.ShowDialog() -eq "OK") {
-        $Dst = "$Global:MountDir\Users\Public\Desktop"
-        Copy-Item $O.FileName $Dst -Force
-        Log $TxtLogMod " [OK] Đã thêm file vào Desktop."
+        Copy-Item $O.FileName "$Global:MountDir\Users\Public\Desktop" -Force
+        Log $TxtLogMod " [OK] Added to Desktop."
     }
 }
 
@@ -293,32 +286,21 @@ $BtnBuildIso.Add_Click({
     if (!(Check-Tools)) { return }
     $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.Filter="ISO File|*.iso"; $Save.FileName="Windows_Modded_PhatTan.iso"
     if ($Save.ShowDialog() -eq "OK") {
-        $IsoOut = $Save.FileName
-        $Osc = "$ToolsDir\oscdimg.exe"
-        
+        $IsoOut = $Save.FileName; $Osc = "$ToolsDir\oscdimg.exe"
         $Form.Cursor = "WaitCursor"
-        Log $TxtLogMod ">>> Đang Unmount và Lưu thay đổi..."
-        # [FIX] Them ScratchDir cho Unmount
+        Log $TxtLogMod ">>> Unmounting..."
         Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Commit /ScratchDir:`"$ScratchDir`"" -Wait -NoNewWindow
         
-        Log $TxtLogMod ">>> Đang đóng gói ISO (OSCDIMG)..."
+        Log $TxtLogMod ">>> Building ISO..."
         $BootData = "2#p0,e,b`"$Global:ExtractDir\boot\etfsboot.com`"#pEF,e,b`"$Global:ExtractDir\efi\microsoft\boot\efisys.bin`""
-        
         $Proc = Start-Process $Osc -ArgumentList "-bootdata:$BootData -u2 -udfver102 `"$Global:ExtractDir`" `"$IsoOut`"" -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
-            Log $TxtLogMod " [SUCCESS] ISO đã ra lò!"
-            [System.Windows.Forms.MessageBox]::Show("THÀNH CÔNG RỰC RỠ!`nFile ISO: $IsoOut", "Phat Tan PC")
-            Invoke-Item (Split-Path $IsoOut)
-        } else {
-            Log $TxtLogMod " [ERR] Lỗi đóng gói ISO. Mã lỗi: $($Proc.ExitCode)"
-             [System.Windows.Forms.MessageBox]::Show("Lỗi build ISO. Có thể thiếu file boot trong ISO gốc.", "Error")
-        }
+            Log $TxtLogMod " [SUCCESS] DONE!"; [System.Windows.Forms.MessageBox]::Show("XONG!", "Phat Tan PC"); Invoke-Item (Split-Path $IsoOut)
+        } else { Log $TxtLogMod " [ERR] Build Failed." }
         
         Dismount-DiskImage -ImagePath $TxtIsoSrc.Text -ErrorAction SilentlyContinue | Out-Null
-        $GbStep2.Enabled=$false; $BtnBuildIso.Enabled=$false
-        $LblMountInfo.Text="TRẠNG THÁI: HOÀN TẤT."
-        $Form.Cursor = "Default"
+        $GbStep2.Enabled=$false; $BtnBuildIso.Enabled=$false; $LblMountInfo.Text="DONE"; $Form.Cursor = "Default"
     }
 })
 
