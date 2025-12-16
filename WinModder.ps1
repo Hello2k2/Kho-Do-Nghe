@@ -1,6 +1,6 @@
 <#
     WINDOWS MODDER STUDIO - PHAT TAN PC
-    Version: 2.5 (Drive Selector + CD-ROM Filter + Fix Error 267)
+    Version: 2.6 (Anti-Lock Edition: Retry Logic + Jump-Out + Smart Unmount)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -19,41 +19,41 @@ $ErrorActionPreference = "SilentlyContinue"
 # GLOBAL VARIABLES
 # =========================================================================================
 $ToolsDir = "$env:TEMP\PhatTan_Tools"
-# Các biến khác sẽ được cập nhật khi người dùng chọn ổ đĩa
 
 # --- HÀM LOGGING ---
 function Log ($Box, $Msg, $Type="INFO") {
     $Time = [DateTime]::Now.ToString('HH:mm:ss')
-    $Color = "Lime"
-    if ($Type -eq "ERR") { $Color = "Red" }
-    if ($Type -eq "WARN") { $Color = "Yellow" }
-    if ($Type -eq "CMD") { $Color = "Cyan" }
-    
     $Box.AppendText("[$Time] [$Type] $Msg`r`n")
     $Box.ScrollToCaret()
     $StatusLbl.Text = "Status: $Msg"
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# --- HÀM CẤP QUYỀN (FIX 267) ---
+# --- HÀM CẤP QUYỀN ---
 function Grant-FullAccess ($Path) {
     if (Test-Path $Path) {
+        # Chạy icacls để fix lỗi quyền
         Start-Process "icacls" -ArgumentList "`"$Path`" /grant Everyone:F /T /C /Q" -Wait -NoNewWindow
     }
 }
 
-# --- HÀM CẬP NHẬT WORKSPACE KHI CHỌN Ổ ĐĨA ---
+# --- HÀM THOÁT KHỎI THƯ MỤC (FIX LỖI 32 DO TOOL) ---
+function Release-Locks {
+    # Chuyển thư mục làm việc của PowerShell về Temp để không bị lock folder Mount
+    Set-Location "$env:TEMP"
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
+}
+
+# --- HÀM CẬP NHẬT WORKSPACE ---
 function Update-Workspace {
-    # Lấy ổ đĩa từ ComboBox (VD: "C:")
     $SelDrive = $CboDrives.SelectedItem.ToString().Split(" ")[0]
-    
     $Global:WorkDir     = "$SelDrive\WinMod_Temp"
     $Global:MountDir    = "$Global:WorkDir\Mount"
     $Global:ExtractDir  = "$Global:WorkDir\Source"
     $Global:CaptureDir  = "$Global:WorkDir\Capture"
     $Global:ScratchDir  = "$Global:WorkDir\Scratch"
-    
-    $LblWorkDir.Text = "Thư mục làm việc hiện tại: $Global:WorkDir"
+    $LblWorkDir.Text = "Workspace: $Global:WorkDir"
 }
 
 # --- HÀM CHUẨN BỊ FOLDER ---
@@ -68,7 +68,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V2.5 (DRIVE SELECTOR)"
+$Form.Text = "WINDOWS MODDER STUDIO V2.6 (ANTI-LOCK FIX 32)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -81,21 +81,21 @@ $PanelTop = New-Object System.Windows.Forms.Panel; $PanelTop.Dock="Top"; $PanelT
 
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "PHAT TAN PC - SYSTEM BUILDER"; $LblT.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold); $LblT.ForeColor = "Gold"; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $PanelTop.Controls.Add($LblT)
 
-# --- DRIVE SELECTOR (QUAN TRỌNG) ---
-$LblSel = New-Object System.Windows.Forms.Label; $LblSel.Text = "Chọn ổ đĩa làm bộ nhớ đệm (Workspace):"; $LblSel.Location = "20, 50"; $LblSel.AutoSize=$true; $PanelTop.Controls.Add($LblSel)
+# --- DRIVE SELECTOR ---
+$LblSel = New-Object System.Windows.Forms.Label; $LblSel.Text = "Chọn ổ đĩa Workspace (Tránh ổ C nếu đầy, TRÁNH ổ CD):"; $LblSel.Location = "20, 50"; $LblSel.AutoSize=$true; $PanelTop.Controls.Add($LblSel)
 
-$CboDrives = New-Object System.Windows.Forms.ComboBox; $CboDrives.Location = "270, 48"; $CboDrives.Size = "200, 25"; $CboDrives.DropDownStyle = "DropDownList"; $PanelTop.Controls.Add($CboDrives)
+$CboDrives = New-Object System.Windows.Forms.ComboBox; $CboDrives.Location = "350, 48"; $CboDrives.Size = "150, 25"; $CboDrives.DropDownStyle = "DropDownList"; $PanelTop.Controls.Add($CboDrives)
 
-# Logic lấy danh sách ổ cứng (LOẠI BỎ Ổ CD)
-$Drives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } # Type 3 = HDD/SSD Fixed
+# Lấy danh sách ổ cứng (LOẠI BỎ Ổ CD)
+$Drives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } 
 foreach ($D in $Drives) {
     $FreeSpace = [Math]::Round($D.FreeSpace / 1GB, 1)
-    $CboDrives.Items.Add("$($D.DeviceID) (Trống: $FreeSpace GB)") | Out-Null
+    $CboDrives.Items.Add("$($D.DeviceID) (Free: $FreeSpace GB)") | Out-Null
 }
-if ($CboDrives.Items.Count -gt 0) { $CboDrives.SelectedIndex = 0 } # Chọn ổ đầu tiên mặc định
+if ($CboDrives.Items.Count -gt 0) { $CboDrives.SelectedIndex = 0 } 
 $CboDrives.Add_SelectedIndexChanged({ Update-Workspace })
 
-$LblWorkDir = New-Object System.Windows.Forms.Label; $LblWorkDir.Text = "..."; $LblWorkDir.Location = "490, 50"; $LblWorkDir.AutoSize=$true; $LblWorkDir.ForeColor="Lime"; $PanelTop.Controls.Add($LblWorkDir)
+$LblWorkDir = New-Object System.Windows.Forms.Label; $LblWorkDir.Text = "..."; $LblWorkDir.Location = "520, 50"; $LblWorkDir.AutoSize=$true; $LblWorkDir.ForeColor="Lime"; $PanelTop.Controls.Add($LblWorkDir)
 
 # Status Strip
 $StatusStrip = New-Object System.Windows.Forms.StatusStrip; $StatusStrip.BackColor="Black"
@@ -110,13 +110,13 @@ $TabCap = Make-Tab "1. CAPTURE OS"
 $TabMod = Make-Tab "2. MODDING ISO"
 
 # --- TAB 1: CAPTURE ---
-$GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="CAPTURE WINDOWS (Tạo install.wim từ ổ C)"; $GbCap.Location="20,20"; $GbCap.Size="845,470"; $GbCap.ForeColor="Cyan"; $TabCap.Controls.Add($GbCap)
+$GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="CAPTURE WINDOWS"; $GbCap.Location="20,20"; $GbCap.Size="845,470"; $GbCap.ForeColor="Cyan"; $TabCap.Controls.Add($GbCap)
 
-$LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Nơi lưu file WIM/ISO thành phẩm:"; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $GbCap.Controls.Add($LblC1)
+$LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Output WIM Path:"; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $GbCap.Controls.Add($LblC1)
 $TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,65"; $TxtCapOut.Size="650,25"; $TxtCapOut.Text="C:\PhatTan_Backup.wim"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="700,63"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
 
-$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (START)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
+$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
 
 $TxtLogCap = New-Object System.Windows.Forms.TextBox; $TxtLogCap.Multiline=$true; $TxtLogCap.Location="30,180"; $TxtLogCap.Size="770,260"; $TxtLogCap.BackColor="Black"; $TxtLogCap.ForeColor="Lime"; $TxtLogCap.ScrollBars="Vertical"; $TxtLogCap.ReadOnly=$true; $TxtLogCap.Font="Consolas, 9"; $GbCap.Controls.Add($TxtLogCap)
 
@@ -133,14 +133,14 @@ Add-Btn "1. MOUNT ISO" 30 30 "Cyan" { Start-Mount }
 Add-Btn "2. ADD FOLDER" 30 80 "White" { Add-Folder }
 Add-Btn "3. ADD DRIVERS" 30 130 "White" { Add-Driver }
 Add-Btn "4. ADD DESKTOP FILE" 30 180 "White" { Add-DesktopFile }
-Add-Btn "DỌN DẸP LỖI" 560 30 "Red" { Force-Cleanup }
+Add-Btn "DỌN DẸP LỖI (FORCE)" 560 30 "Red" { Force-Cleanup }
 
 $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="STATUS: UNMOUNTED"; $LblInfo.Location="300,40"; $LblInfo.AutoSize=$true; $LblInfo.Font="Segoe UI, 10, Bold"; $GbAct.Controls.Add($LblInfo)
 $TxtLogMod = New-Object System.Windows.Forms.TextBox; $TxtLogMod.Multiline=$true; $TxtLogMod.Location="300,80"; $TxtLogMod.Size="510,200"; $TxtLogMod.BackColor="Black"; $TxtLogMod.ForeColor="Cyan"; $TxtLogMod.ScrollBars="Vertical"; $TxtLogMod.ReadOnly=$true; $TxtLogMod.Font="Consolas, 9"; $GbAct.Controls.Add($TxtLogMod)
 $BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text="3. TẠO ISO MỚI (REBUILD)"; $BtnBuild.Location="20,420"; $BtnBuild.Size="845,60"; $BtnBuild.BackColor="Green"; $BtnBuild.ForeColor="White"; $BtnBuild.Font="Segoe UI, 14, Bold"; $BtnBuild.Enabled=$false; $TabMod.Controls.Add($BtnBuild)
 
 # =========================================================================================
-# LOGIC CORE
+# LOGIC CORE (V2.6)
 # =========================================================================================
 
 # --- TOOL CHECKER ---
@@ -156,11 +156,11 @@ function Check-Tools {
         if ((Get-Item $OscTarget).Length -gt 100kb) { return $true }
     } catch {}
 
-    $Msg = "Không tìm thấy 'oscdimg.exe'. Bạn có muốn Tool tự tải ADK không?"
+    $Msg = "Không tìm thấy 'oscdimg.exe'. Tự động tải ADK?"
     if ([System.Windows.Forms.MessageBox]::Show($Msg, "Missing Tool", "YesNo") -eq "Yes") {
         try {
             $Installer = "$env:TEMP\adksetup.exe"
-            Log $TxtLogMod "Đang tải ADK (chờ xíu)..."
+            Log $TxtLogMod "Đang tải ADK..."
             (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", $Installer)
             Log $TxtLogMod "Đang cài đặt ADK..."
             Start-Process $Installer -ArgumentList "/quiet /norestart /features OptionId.DeploymentTools" -Wait
@@ -170,53 +170,79 @@ function Check-Tools {
     return $false
 }
 
-# --- CAPTURE LOGIC ---
-$BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
+# --- SMART UNMOUNT (TRÁI TIM CỦA V2.6) ---
+function Smart-Unmount ($Commit) {
+    # 1. Thoát khỏi thư mục để tránh Lock
+    Release-Locks
+    
+    $Attempt = 1
+    $MaxRetry = 3
+    $Success = $false
+    
+    do {
+        Log $TxtLogMod "Đang Unmount... (Lần $Attempt)" "CMD"
+        
+        $ArgsList = "/Unmount-Image /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`""
+        if ($Commit) { $ArgsList += " /Commit" } else { $ArgsList += " /Discard" }
+        
+        $Proc = Start-Process "dism" -ArgumentList $ArgsList -Wait -NoNewWindow -PassThru
+        
+        if ($Proc.ExitCode -eq 0) {
+            $Success = $true
+            Log $TxtLogMod "Unmount thành công!" "INFO"
+        } else {
+            Log $TxtLogMod "Lỗi Unmount (Code $($Proc.ExitCode)). Đang thử lại..." "WARN"
+            Start-Sleep -Seconds 3 # Đợi 3s cho Windows nhả file
+            
+            # Nếu lỗi 32, thử Cleanup trước khi thử lại
+            Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+        }
+        $Attempt++
+    } while (($Attempt -le $MaxRetry) -and ($Success -eq $false))
+    
+    return $Success
+}
 
+# --- LOGIC ---
+$BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
-    Update-Workspace # Đảm bảo cập nhật theo ổ đĩa đang chọn
-    Prepare-Dirs
+    Update-Workspace; Prepare-Dirs
     
     $WimTarget = $TxtCapOut.Text
-    
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
-    Log $TxtLogCap "Bắt đầu Capture ổ C..." "INFO"
-    Log $TxtLogCap "Temp Workspace: $Global:ScratchDir" "WARN"
+    Log $TxtLogCap "Capture C:..." "INFO"
     
-    # Lệnh Capture
-    $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:C:\ /Name:`"MyWindows`" /Compress:max /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow -PassThru
+    Release-Locks # Đảm bảo không đứng trong thư mục
+    $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:C:\ /Name:`"MyWin`" /Compress:max /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow -PassThru
     
     if ($Proc.ExitCode -eq 0) { 
-        Log $TxtLogCap "Capture THÀNH CÔNG! File tại: $WimTarget" "INFO"
-        [System.Windows.Forms.MessageBox]::Show("Capture xong! Bạn có thể dùng file WIM này để tạo ISO ở Tab 2.")
-    } else { 
-        Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode))." "ERR"
-        Log $TxtLogCap "Gợi ý: Tắt Defender, hoặc chọn ổ đĩa khác làm Workspace." "WARN"
-    }
+        Log $TxtLogCap "Capture OK: $WimTarget" "INFO"
+        [System.Windows.Forms.MessageBox]::Show("Capture xong!")
+    } else { Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode))." "ERR" }
     
     $BtnStartCap.Enabled=$true; $Form.Cursor="Default"
 })
 
-# --- MODDING LOGIC ---
 $BtnIsoSrc.Add_Click({ $O=New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO|*.iso"; if($O.ShowDialog()-eq"OK"){$TxtIsoSrc.Text=$O.FileName; $GbAct.Enabled=$true} })
 
 function Force-Cleanup {
-    Log $TxtLogMod "Dọn dẹp file rác..."
+    Release-Locks
+    Log $TxtLogMod "Đang Cleanup..."
     Start-Process "dism" -ArgumentList "/Cleanup-Mountpoints" -Wait -NoNewWindow
     Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
+    
+    # Thử Unmount Discard thông minh
     if (Test-Path $Global:MountDir) {
-        Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Discard" -Wait -NoNewWindow
+        Smart-Unmount $false # false = Discard
         Remove-Item $Global:MountDir -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Log $TxtLogMod "Đã dọn dẹp."
+    Log $TxtLogMod "Dọn dẹp xong."
 }
 
 function Start-Mount {
     $Iso = $TxtIsoSrc.Text
-    Update-Workspace
-    Prepare-Dirs
-    
+    Update-Workspace; Prepare-Dirs
     $Form.Cursor="WaitCursor"
     Force-Cleanup
     Ensure-Dir $Global:ExtractDir; Ensure-Dir $Global:MountDir
@@ -225,31 +251,32 @@ function Start-Mount {
     Log $TxtLogMod "Mounting ISO..."
     Mount-DiskImage -ImagePath $Iso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
     $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume
-    if (!$Vol) { Log $TxtLogMod "Lỗi đọc file ISO." "ERR"; $Form.Cursor="Default"; return }
+    if (!$Vol) { Log $TxtLogMod "Lỗi đọc ISO." "ERR"; $Form.Cursor="Default"; return }
     
-    Log $TxtLogMod "Extracting files..."
+    Log $TxtLogMod "Copying files..."
     Copy-Item "$($Vol.DriveLetter):\*" $Global:ExtractDir -Recurse -Force
     
     $Wim = "$Global:ExtractDir\sources\install.wim"
-    $Esd = "$Global:ExtractDir\sources\install.esd"
+    if (!(Test-Path $Wim)) { $Wim = "$Global:ExtractDir\sources\install.esd" } # Check ESD fallback
 
-    if (!(Test-Path $Wim)) {
-        if (Test-Path $Esd) {
-            Log $TxtLogMod "ESD Detected. Converting to WIM..."
-            Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$Esd`" /SourceIndex:1 /DestinationImageFile:`"$Wim`" /Compress:max /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
-            Remove-Item $Esd -Force
-        } else { Log $TxtLogMod "Không tìm thấy install.wim!" "ERR"; $Form.Cursor="Default"; return }
+    if (!(Test-Path $Wim)) { Log $TxtLogMod "Không thấy install.wim/esd!" "ERR"; $Form.Cursor="Default"; return }
+
+    # Convert ESD if needed
+    if ($Wim -match ".esd") {
+        Log $TxtLogMod "ESD Detected. Converting..."
+        $NewWim = "$Global:ExtractDir\sources\install.wim"
+        Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$Wim`" /SourceIndex:1 /DestinationImageFile:`"$NewWim`" /Compress:max /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
+        Remove-Item $Wim -Force; $Wim = $NewWim
     }
 
     Log $TxtLogMod "Mounting WIM..."
+    Release-Locks
     $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$Wim`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow -PassThru
     
     if ($Proc.ExitCode -eq 0) {
         $LblInfo.Text="MOUNTED"; $LblInfo.ForeColor="Lime"; $BtnBuild.Enabled=$true
-        Log $TxtLogMod "Mount thành công!" "INFO"
-    } else {
-        Log $TxtLogMod "Mount thất bại (Code $($Proc.ExitCode))." "ERR"
-    }
+        Log $TxtLogMod "Mount OK!" "INFO"
+    } else { Log $TxtLogMod "Mount thất bại (Code $($Proc.ExitCode))." "ERR" }
     $Form.Cursor="Default"
 }
 
@@ -257,13 +284,15 @@ function Add-Folder {
     $FBD = New-Object System.Windows.Forms.FolderBrowserDialog
     if ($FBD.ShowDialog() -eq "OK") {
         Copy-Item $FBD.SelectedPath $Global:MountDir -Recurse -Force
-        Log $TxtLogMod "Đã chép Folder: $($FBD.SelectedPath)"
+        Log $TxtLogMod "Đã chép Folder."
+        Release-Locks # Quan trọng: Reset lock sau khi chọn folder
     }
 }
 function Add-Driver {
     $FBD = New-Object System.Windows.Forms.FolderBrowserDialog
     if ($FBD.ShowDialog() -eq "OK") {
-        Log $TxtLogMod "Đang nạp Driver..."
+        Release-Locks
+        Log $TxtLogMod "Nạp Driver..."
         Start-Process "dism" -ArgumentList "/Image:`"$Global:MountDir`" /Add-Driver /Driver:`"$($FBD.SelectedPath)`" /Recurse /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
         Log $TxtLogMod "Xong."
     }
@@ -272,7 +301,8 @@ function Add-DesktopFile {
     $O = New-Object System.Windows.Forms.OpenFileDialog
     if ($O.ShowDialog() -eq "OK") {
         Copy-Item $O.FileName "$Global:MountDir\Users\Public\Desktop" -Force
-        Log $TxtLogMod "Đã thêm file ra Desktop."
+        Log $TxtLogMod "Đã thêm file."
+        Release-Locks
     }
 }
 
@@ -281,21 +311,24 @@ $BtnBuild.Add_Click({
     $S = New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="ISO|*.iso"; $S.FileName="NewWin.iso"
     if ($S.ShowDialog() -eq "OK") {
         $Form.Cursor="WaitCursor"
-        Log $TxtLogMod "Unmounting..."
-        Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Commit /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
+        Log $TxtLogMod "Unmounting & Saving..."
         
-        Log $TxtLogMod "Building ISO..."
-        $Osc = "$ToolsDir\oscdimg.exe"
-        $Boot = "2#p0,e,b`"$Global:ExtractDir\boot\etfsboot.com`"#pEF,e,b`"$Global:ExtractDir\efi\microsoft\boot\efisys.bin`""
-        Start-Process $Osc -ArgumentList "-bootdata:$Boot -u2 -udfver102 `"$Global:ExtractDir`" `"$S.FileName`"" -Wait -NoNewWindow
-        
-        Log $TxtLogMod "Hoàn tất! File tại: $($S.FileName)" "INFO"
-        [System.Windows.Forms.MessageBox]::Show("Xong!"); Invoke-Item (Split-Path $S.FileName)
-        $GbAct.Enabled=$false; $BtnBuild.Enabled=$false; $Form.Cursor="Default"
+        # SỬ DỤNG SMART UNMOUNT
+        if (Smart-Unmount $true) {
+            Log $TxtLogMod "Building ISO..."
+            $Osc = "$ToolsDir\oscdimg.exe"
+            $Boot = "2#p0,e,b`"$Global:ExtractDir\boot\etfsboot.com`"#pEF,e,b`"$Global:ExtractDir\efi\microsoft\boot\efisys.bin`""
+            Start-Process $Osc -ArgumentList "-bootdata:$Boot -u2 -udfver102 `"$Global:ExtractDir`" `"$S.FileName`"" -Wait -NoNewWindow
+            
+            Log $TxtLogMod "Hoàn tất! File tại: $($S.FileName)" "INFO"
+            [System.Windows.Forms.MessageBox]::Show("Xong!"); Invoke-Item (Split-Path $S.FileName)
+            $GbAct.Enabled=$false; $BtnBuild.Enabled=$false
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Lỗi Unmount (Lock file). Hãy khởi động lại máy và thử Cleanup lại.", "Lỗi")
+        }
+        $Form.Cursor="Default"
     }
 })
 
-# Khởi tạo Workspace mặc định
 if ($CboDrives.Items.Count -gt 0) { Update-Workspace }
-
 $Form.ShowDialog() | Out-Null
