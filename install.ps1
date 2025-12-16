@@ -200,6 +200,7 @@ function Add-Btn ($Panel, $Txt, $Cmd) {
 $P1 = Add-Card "SYSTEM & MAINTENANCE" 15 20 315 400
 Add-Btn $P1 "ℹ️ CHECK INFO" { Load-Module "SystemInfo.ps1" }
 Add-Btn $P1 "🧹 CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
+Add-Btn $P1 "🚀 QUẢN LÍ ĐĨA" { Load-Module "DiskManager.ps1" }
 Add-Btn $P1 "🔍 SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
 Add-Btn $P1 "🚀 RAM BOOSTER" { Load-Module "RamBooster.ps1" }
 Add-Btn $P1 "🔑 ACTIVATION" { Load-Module "WinActivator.ps1" }
@@ -227,6 +228,7 @@ Add-Btn $P3 "⬇️ ISO TURBO" { Load-Module "ISODownloader.ps1" }
 Add-Btn $P3 "☁️ BACKUP PRO" { Load-Module "BackupCenter.ps1" }
 Add-Btn $P3 "☁️ Tạo USBBOOT PRO" { Load-Module "UsbBootMaker.ps1" }
 Add-Btn $P3 "🛒 WINGET APP" { Load-Module "AppStore.ps1" }
+#$P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
 
 # > LOAD JSON APPS
 try {
