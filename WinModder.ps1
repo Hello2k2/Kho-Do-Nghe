@@ -1,6 +1,6 @@
 <#
     WINDOWS MODDER STUDIO - PHAT TAN PC
-    Version: 3.1 (IE Ghostbuster: Fix edb.log + WebCache Lock)
+    Version: 3.2 (Notifications Killer: Fix WPNPRMRY.tmp Lock)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -29,12 +29,12 @@ function Log ($Box, $Msg, $Type="INFO") {
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT CHẶN IE & CACHE) ---
+# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT CHẶN NOTIFICATION) ---
 function Create-DismConfig {
     if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
     $ConfigPath = "$ToolsDir\WimScript.ini"
     
-    # DANH SÁCH "SÁT THỦ" DIỆT LỖI LOCK FILE
+    # DANH SÁCH EXCLUDE CỰC MẠNH
     $Content = @"
 [ExclusionList]
 \$ntfs.log
@@ -64,6 +64,9 @@ function Create-DismConfig {
 \Users\*\AppData\Local\Microsoft\Windows\History
 \Users\*\ntuser.dat.LOG*
 \Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG*
+\Users\*\AppData\Local\Microsoft\Windows\Notifications
+\Users\*\AppData\Local\Comms
+\Users\*\AppData\Local\Packages
 "@
     [System.IO.File]::WriteAllText($ConfigPath, $Content)
     return $ConfigPath
@@ -71,15 +74,15 @@ function Create-DismConfig {
 
 # --- HÀM KILL PROCESS ---
 function Kill-BackgroundApps {
-    $Apps = @("msedge", "chrome", "OneDrive", "Teams", "Skype", "SearchApp", "Cortana", "calculator", "photos", "iexplore")
+    $Apps = @("msedge", "chrome", "OneDrive", "Teams", "Skype", "SearchApp", "Cortana", "calculator", "photos", "iexplore", "NewsAndInterests")
     foreach ($App in $Apps) {
         try { Stop-Process -Name $App -Force -ErrorAction SilentlyContinue } catch {}
     }
 }
 
-# --- HÀM QUẢN LÝ DỊCH VỤ ---
+# --- HÀM QUẢN LÝ DỊCH VỤ (THÊM WPNSERVICE) ---
 function Toggle-Services ($State) {
-    $Services = @("wsearch", "sysmain", "cryptsvc", "wuauserv", "bits")
+    $Services = @("wsearch", "sysmain", "cryptsvc", "wuauserv", "bits", "wpnservice", "cbdhsvc")
     foreach ($Svc in $Services) {
         if ($State -eq "STOP") {
             if ((Get-Service $Svc).Status -eq "Running") { Stop-Service -Name $Svc -Force -ErrorAction SilentlyContinue }
@@ -120,7 +123,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V3.1 (IE FIX)"
+$Form.Text = "WINDOWS MODDER STUDIO V3.2 (NOTIFICATIONS FIX)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -156,7 +159,7 @@ $GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="CAPTURE WINDOWS"
 $LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu file WIM tại:"; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $GbCap.Controls.Add($LblC1)
 $TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,65"; $TxtCapOut.Size="650,25"; $TxtCapOut.Text="D:\PhatTan_Backup.wim"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="700,63"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
-$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Deep Clean)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
+$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Stop Notifications)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
 $TxtLogCap = New-Object System.Windows.Forms.TextBox; $TxtLogCap.Multiline=$true; $TxtLogCap.Location="30,180"; $TxtLogCap.Size="770,260"; $TxtLogCap.BackColor="Black"; $TxtLogCap.ForeColor="Lime"; $TxtLogCap.ScrollBars="Vertical"; $TxtLogCap.ReadOnly=$true; $TxtLogCap.Font="Consolas, 9"; $GbCap.Controls.Add($TxtLogCap)
 
 # --- TAB 2 ---
@@ -211,16 +214,16 @@ function Smart-Unmount ($Commit) {
     return $Success
 }
 
-# --- LOGIC CAPTURE (V3.1) ---
+# --- LOGIC CAPTURE (V3.2) ---
 $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
     Update-Workspace; Prepare-Dirs
     
-    # 1. TẠO CONFIG EXCLUDE (THÊM IE & WEBCACHE)
+    # 1. TẠO CONFIG EXCLUDE (THÊM NOTIFICATIONS)
     $ConfigFile = Create-DismConfig
-    Log $TxtLogCap "Đã cấu hình chặn IE/WebCache." "INFO"
+    Log $TxtLogCap "Đã cấu hình chặn Notifications." "INFO"
 
     $WimTarget = $TxtCapOut.Text
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
@@ -230,7 +233,7 @@ $BtnStartCap.Add_Click({
     Kill-BackgroundApps
     
     # 3. STOP SERVICES
-    Log $TxtLogCap "Dừng Services..." "WARN"
+    Log $TxtLogCap "Dừng Services (Gồm WpnService)..." "WARN"
     Toggle-Services "STOP"
     
     Log $TxtLogCap "Capturing C:..." "INFO"
