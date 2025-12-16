@@ -1,6 +1,7 @@
 <#
     WINDOWS MODDER STUDIO - PHAT TAN PC
-    Version: 3.2 (Notifications Killer: Fix WPNPRMRY.tmp Lock)
+    Version: 4.0 (VSS Edition: The Ultimate Live Capture Solution)
+    Technique: Volume Shadow Copy Service Snapshot -> Symbolic Link -> DISM
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -19,22 +20,28 @@ $ErrorActionPreference = "SilentlyContinue"
 # GLOBAL VARIABLES
 # =========================================================================================
 $ToolsDir = "$env:TEMP\PhatTan_Tools"
+$CurrentShadowID = $null
 
 # --- HÀM LOGGING ---
 function Log ($Box, $Msg, $Type="INFO") {
     $Time = [DateTime]::Now.ToString('HH:mm:ss')
+    $Color = "Lime"
+    if ($Type -eq "ERR") { $Color = "Red" }
+    if ($Type -eq "VSS") { $Color = "Cyan" }
+    
     $Box.AppendText("[$Time] [$Type] $Msg`r`n")
     $Box.ScrollToCaret()
     $StatusLbl.Text = "Status: $Msg"
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT CHẶN NOTIFICATION) ---
+# --- HÀM TẠO CONFIG (CHỈ CẦN LOẠI TRỪ RÁC, KHÔNG CẦN LO FILE LOCK NỮA) ---
 function Create-DismConfig {
     if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
     $ConfigPath = "$ToolsDir\WimScript.ini"
     
-    # DANH SÁCH EXCLUDE CỰC MẠNH
+    # VSS đã giải quyết vấn đề Lock file.
+    # File này giờ chỉ dùng để loại bỏ file RÁC cho nhẹ bản Win.
     $Content = @"
 [ExclusionList]
 \$ntfs.log
@@ -46,61 +53,117 @@ function Create-DismConfig {
 \$Recycle.Bin
 \Windows\CSC
 \DumpStack.log.tmp
-\DumpStack.log
 \Config.Msi
 \Windows\SoftwareDistribution
-\ProgramData\Microsoft\Search
-\Windows\System32\LogFiles
-\Windows\Logs
-\PerfLogs
-\ProgramData\Microsoft\Windows Defender
-\ProgramData\Microsoft\Windows Defender Advanced Threat Protection
-\Users\*\AppData\Local\Microsoft\Edge\User Data
-\Users\*\AppData\Local\Google\Chrome\User Data
 \Users\*\AppData\Local\Temp
-\Users\*\AppData\Local\Microsoft\Internet Explorer
 \Users\*\AppData\Local\Microsoft\Windows\INetCache
 \Users\*\AppData\Local\Microsoft\Windows\WebCache
-\Users\*\AppData\Local\Microsoft\Windows\History
-\Users\*\ntuser.dat.LOG*
-\Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG*
-\Users\*\AppData\Local\Microsoft\Windows\Notifications
-\Users\*\AppData\Local\Comms
-\Users\*\AppData\Local\Packages
 "@
     [System.IO.File]::WriteAllText($ConfigPath, $Content)
     return $ConfigPath
 }
 
-# --- HÀM KILL PROCESS ---
-function Kill-BackgroundApps {
-    $Apps = @("msedge", "chrome", "OneDrive", "Teams", "Skype", "SearchApp", "Cortana", "calculator", "photos", "iexplore", "NewsAndInterests")
-    foreach ($App in $Apps) {
-        try { Stop-Process -Name $App -Force -ErrorAction SilentlyContinue } catch {}
-    }
-}
+# =========================================================================================
+# VSS CORE FUNCTIONS (TRÁI TIM CỦA V4.0)
+# =========================================================================================
 
-# --- HÀM QUẢN LÝ DỊCH VỤ (THÊM WPNSERVICE) ---
-function Toggle-Services ($State) {
-    $Services = @("wsearch", "sysmain", "cryptsvc", "wuauserv", "bits", "wpnservice", "cbdhsvc")
-    foreach ($Svc in $Services) {
-        if ($State -eq "STOP") {
-            if ((Get-Service $Svc).Status -eq "Running") { Stop-Service -Name $Svc -Force -ErrorAction SilentlyContinue }
-        } else {
-            if ((Get-Service $Svc).Status -eq "Stopped") { Start-Service -Name $Svc -ErrorAction SilentlyContinue }
+function Create-ShadowCopy {
+    param($DriveLetter, $MountPoint, $Box)
+    
+    Log $Box "Khởi tạo Volume Shadow Copy (VSS) cho $DriveLetter..." "VSS"
+    
+    try {
+        # 1. Gọi WMI để tạo Shadow Copy
+        $WmiClass = [WMICLASS]"root\cimv2:Win32_ShadowCopy"
+        $Result = $WmiClass.Create($DriveLetter, "ClientAccessible")
+        
+        if ($Result.ReturnValue -ne 0) {
+            Log $Box "Lỗi tạo VSS. Mã lỗi WMI: $($Result.ReturnValue)" "ERR"
+            return $false
         }
+        
+        $Global:CurrentShadowID = $Result.ShadowID
+        Log $Box "VSS ID Created: $($Global:CurrentShadowID)" "VSS"
+        
+        # 2. Lấy đường dẫn thiết bị (Device Path) của Snapshot vừa tạo
+        # Định dạng: \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyX
+        $Snapshot = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $Global:CurrentShadowID }
+        $DevicePath = $Snapshot.DeviceObject
+        
+        if ([string]::IsNullOrEmpty($DevicePath)) {
+            Log $Box "Không tìm thấy Device Path của Snapshot." "ERR"
+            return $false
+        }
+        
+        Log $Box "Snapshot Device Path: $DevicePath" "VSS"
+        
+        # 3. Tạo Symbolic Link để DISM có thể đọc được
+        # DISM không đọc được đường dẫn \\?\, nên ta map nó vào thư mục C:\WinMod_Temp\ShadowMount
+        if (Test-Path $MountPoint) { Remove-Item $MountPoint -Force -Recurse -ErrorAction SilentlyContinue }
+        
+        # Dùng CMD mklink vì PowerShell New-Item đôi khi lỗi với Device Path
+        $CmdArgs = "/c mklink /d `"$MountPoint`" `"$DevicePath\`""
+        Start-Process "cmd.exe" -ArgumentList $CmdArgs -NoNewWindow -Wait
+        
+        if (Test-Path "$MountPoint\Windows") {
+            Log $Box "VSS Mapped thành công tại: $MountPoint" "VSS"
+            return $true
+        } else {
+            Log $Box "Lỗi Map VSS (Symlink failed)." "ERR"
+            return $false
+        }
+        
+    } catch {
+        Log $Box "VSS Exception: $($_.Exception.Message)" "ERR"
+        return $false
     }
 }
 
-# --- CÁC HÀM HỖ TRỢ ---
-function Grant-FullAccess ($Path) {
-    if (Test-Path $Path) { Start-Process "icacls" -ArgumentList "`"$Path`" /grant Everyone:F /T /C /Q" -Wait -NoNewWindow }
+function Cleanup-ShadowCopy {
+    param($MountPoint, $Box)
+    
+    Log $Box "Dọn dẹp VSS..." "VSS"
+    
+    # 1. Xóa Symlink
+    if (Test-Path $MountPoint) {
+        cmd /c rmdir "$MountPoint" # RMDIR an toàn hơn cho Symlink
+    }
+    
+    # 2. Xóa Shadow Copy trên hệ thống
+    if ($Global:CurrentShadowID) {
+        try {
+            $Shadow = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $Global:CurrentShadowID }
+            if ($Shadow) { $Shadow.Delete() }
+            Log $Box "Đã xóa Snapshot rác." "VSS"
+        } catch {}
+        $Global:CurrentShadowID = $null
+    }
 }
 
-function Release-Locks {
-    Set-Location "$env:TEMP"
-    [System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers()
+# =========================================================================================
+# STANDARD FUNCTIONS
+# =========================================================================================
+
+function Check-Tools {
+    $OscTarget = "$ToolsDir\oscdimg.exe"
+    if (Test-Path $OscTarget) { return $true }
+    Log $TxtLogMod "Checking Tools..."
+    try {
+        if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
+        $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
+        (New-Object System.Net.WebClient).DownloadFile($Url, $OscTarget)
+        if ((Get-Item $OscTarget).Length -gt 100kb) { return $true }
+    } catch {}
+    $Msg = "Thiếu 'oscdimg.exe'. Tự động tải ADK?"; if ([System.Windows.Forms.MessageBox]::Show($Msg, "Missing Tool", "YesNo") -eq "Yes") {
+        try {
+            $Installer = "$env:TEMP\adksetup.exe"; (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", $Installer)
+            Start-Process $Installer -ArgumentList "/quiet /norestart /features OptionId.DeploymentTools" -Wait; return $true
+        } catch { return $false }
+    }
+    return $false
 }
+
+function Grant-FullAccess ($Path) { if (Test-Path $Path) { Start-Process "icacls" -ArgumentList "`"$Path`" /grant Everyone:F /T /C /Q" -Wait -NoNewWindow } }
 
 function Update-Workspace {
     $SelDrive = $CboDrives.SelectedItem.ToString().Split(" ")[0]
@@ -109,6 +172,7 @@ function Update-Workspace {
     $Global:ExtractDir  = "$Global:WorkDir\Source"
     $Global:CaptureDir  = "$Global:WorkDir\Capture"
     $Global:ScratchDir  = "$Global:WorkDir\Scratch"
+    $Global:ShadowMount = "$Global:WorkDir\ShadowMount" # Thư mục mount VSS
     $LblWorkDir.Text = "Workspace: $Global:WorkDir"
 }
 
@@ -123,7 +187,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V3.2 (NOTIFICATIONS FIX)"
+$Form.Text = "WINDOWS MODDER STUDIO V4.0 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -131,38 +195,35 @@ $Form.ForeColor = "WhiteSmoke"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-# Header Panel
+# Header
 $PanelTop = New-Object System.Windows.Forms.Panel; $PanelTop.Dock="Top"; $PanelTop.Height=80; $PanelTop.BackColor=[System.Drawing.Color]::FromArgb(45,45,50); $Form.Controls.Add($PanelTop)
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "PHAT TAN PC - SYSTEM BUILDER"; $LblT.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold); $LblT.ForeColor = "Gold"; $LblT.AutoSize = $true; $LblT.Location = "20,10"; $PanelTop.Controls.Add($LblT)
 
 # Drive Selector
-$LblSel = New-Object System.Windows.Forms.Label; $LblSel.Text = "Chọn ổ Workspace (TRÁNH C nếu đầy, TRÁNH CD):"; $LblSel.Location = "20, 50"; $LblSel.AutoSize=$true; $PanelTop.Controls.Add($LblSel)
-$CboDrives = New-Object System.Windows.Forms.ComboBox; $CboDrives.Location = "350, 48"; $CboDrives.Size = "150, 25"; $CboDrives.DropDownStyle = "DropDownList"; $PanelTop.Controls.Add($CboDrives)
-$Drives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } 
-foreach ($D in $Drives) { $FreeSpace = [Math]::Round($D.FreeSpace / 1GB, 1); $CboDrives.Items.Add("$($D.DeviceID) (Free: $FreeSpace GB)") | Out-Null }
-if ($CboDrives.Items.Count -gt 0) { $CboDrives.SelectedIndex = 0 } 
-$CboDrives.Add_SelectedIndexChanged({ Update-Workspace })
-$LblWorkDir = New-Object System.Windows.Forms.Label; $LblWorkDir.Text = "..."; $LblWorkDir.Location = "520, 50"; $LblWorkDir.AutoSize=$true; $LblWorkDir.ForeColor="Lime"; $PanelTop.Controls.Add($LblWorkDir)
+$LblSel = New-Object System.Windows.Forms.Label; $LblSel.Text = "Chọn ổ Workspace (Nơi chứa file tạm):"; $LblSel.Location = "20, 50"; $LblSel.AutoSize=$true; $PanelTop.Controls.Add($LblSel)
+$CboDrives = New-Object System.Windows.Forms.ComboBox; $CboDrives.Location = "300, 48"; $CboDrives.Size = "150, 25"; $CboDrives.DropDownStyle = "DropDownList"; $PanelTop.Controls.Add($CboDrives)
+$Drives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }; foreach ($D in $Drives) { $CboDrives.Items.Add("$($D.DeviceID) (Free: $([Math]::Round($D.FreeSpace/1GB,1)) GB)") | Out-Null }
+if ($CboDrives.Items.Count -gt 0) { $CboDrives.SelectedIndex = 0 }; $CboDrives.Add_SelectedIndexChanged({ Update-Workspace })
+$LblWorkDir = New-Object System.Windows.Forms.Label; $LblWorkDir.Text = "..."; $LblWorkDir.Location = "470, 50"; $LblWorkDir.AutoSize=$true; $LblWorkDir.ForeColor="Lime"; $PanelTop.Controls.Add($LblWorkDir)
 
-# Status Strip
+# Status
 $StatusStrip = New-Object System.Windows.Forms.StatusStrip; $StatusStrip.BackColor="Black"
-$StatusLbl = New-Object System.Windows.Forms.ToolStripStatusLabel; $StatusLbl.Text = "Ready."; $StatusLbl.ForeColor="Cyan"; $StatusStrip.Items.Add($StatusLbl) | Out-Null
-$Form.Controls.Add($StatusStrip)
+$StatusLbl = New-Object System.Windows.Forms.ToolStripStatusLabel; $StatusLbl.Text = "Ready."; $StatusLbl.ForeColor="Cyan"; $StatusStrip.Items.Add($StatusLbl) | Out-Null; $Form.Controls.Add($StatusStrip)
 
 # Tabs
 $Tabs = New-Object System.Windows.Forms.TabControl; $Tabs.Location = "20,100"; $Tabs.Size = "895,550"; $Tabs.Appearance = "FlatButtons"; $Form.Controls.Add($Tabs)
 function Make-Tab ($T) { $P = New-Object System.Windows.Forms.TabPage; $P.Text = "  $T  "; $P.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Tabs.Controls.Add($P); return $P }
-$TabCap = Make-Tab "1. CAPTURE OS"; $TabMod = Make-Tab "2. MODDING ISO"
+$TabCap = Make-Tab "1. CAPTURE OS (VSS)"; $TabMod = Make-Tab "2. MODDING ISO"
 
-# --- TAB 1 ---
-$GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="CAPTURE WINDOWS"; $GbCap.Location="20,20"; $GbCap.Size="845,470"; $GbCap.ForeColor="Cyan"; $TabCap.Controls.Add($GbCap)
+# --- TAB 1: CAPTURE ---
+$GbCap = New-Object System.Windows.Forms.GroupBox; $GbCap.Text="CAPTURE WINDOWS (LIVE OS VIA VSS)"; $GbCap.Location="20,20"; $GbCap.Size="845,470"; $GbCap.ForeColor="Cyan"; $TabCap.Controls.Add($GbCap)
 $LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu file WIM tại:"; $LblC1.Location="30,40"; $LblC1.AutoSize=$true; $GbCap.Controls.Add($LblC1)
 $TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,65"; $TxtCapOut.Size="650,25"; $TxtCapOut.Text="D:\PhatTan_Backup.wim"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="700,63"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
-$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Stop Notifications)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
+$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Công nghệ VSS Snapshot)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
 $TxtLogCap = New-Object System.Windows.Forms.TextBox; $TxtLogCap.Multiline=$true; $TxtLogCap.Location="30,180"; $TxtLogCap.Size="770,260"; $TxtLogCap.BackColor="Black"; $TxtLogCap.ForeColor="Lime"; $TxtLogCap.ScrollBars="Vertical"; $TxtLogCap.ReadOnly=$true; $TxtLogCap.Font="Consolas, 9"; $GbCap.Controls.Add($TxtLogCap)
 
-# --- TAB 2 ---
+# --- TAB 2: MODDING ---
 $GbSrc = New-Object System.Windows.Forms.GroupBox; $GbSrc.Text="SOURCE ISO"; $GbSrc.Location="20,20"; $GbSrc.Size="845,80"; $GbSrc.ForeColor="Yellow"; $TabMod.Controls.Add($GbSrc)
 $TxtIsoSrc = New-Object System.Windows.Forms.TextBox; $TxtIsoSrc.Location="20,35"; $TxtIsoSrc.Size="650,25"; $GbSrc.Controls.Add($TxtIsoSrc)
 $BtnIsoSrc = New-Object System.Windows.Forms.Button; $BtnIsoSrc.Text="MỞ ISO"; $BtnIsoSrc.Location="690,33"; $BtnIsoSrc.Size="120,27"; $BtnIsoSrc.ForeColor="Black"; $GbSrc.Controls.Add($BtnIsoSrc)
@@ -176,126 +237,74 @@ $TxtLogMod = New-Object System.Windows.Forms.TextBox; $TxtLogMod.Multiline=$true
 $BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text="3. TẠO ISO MỚI (REBUILD)"; $BtnBuild.Location="20,420"; $BtnBuild.Size="845,60"; $BtnBuild.BackColor="Green"; $BtnBuild.ForeColor="White"; $BtnBuild.Font="Segoe UI, 14, Bold"; $BtnBuild.Enabled=$false; $TabMod.Controls.Add($BtnBuild)
 
 # =========================================================================================
-# CORE LOGIC
+# LOGIC CORE
 # =========================================================================================
 
-# --- TOOL CHECKER ---
-function Check-Tools {
-    $OscTarget = "$ToolsDir\oscdimg.exe"
-    if (Test-Path $OscTarget) { return $true }
-    Log $TxtLogMod "Checking Tools..."
-    try {
-        if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
-        $Url = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe"
-        (New-Object System.Net.WebClient).DownloadFile($Url, $OscTarget)
-        if ((Get-Item $OscTarget).Length -gt 100kb) { return $true }
-    } catch {}
-    $Msg = "Không tìm thấy 'oscdimg.exe'. Tự động tải ADK?"; if ([System.Windows.Forms.MessageBox]::Show($Msg, "Missing Tool", "YesNo") -eq "Yes") {
-        try {
-            $Installer = "$env:TEMP\adksetup.exe"; Log $TxtLogMod "Downloading ADK..."; (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2243390", $Installer)
-            Log $TxtLogMod "Installing ADK..."; Start-Process $Installer -ArgumentList "/quiet /norestart /features OptionId.DeploymentTools" -Wait; return $true
-        } catch { Log $TxtLogMod "Error: $($_.Exception.Message)" "ERR"; return $false }
-    }
-    return $false
-}
-
-# --- SMART UNMOUNT ---
-function Smart-Unmount ($Commit) {
-    Release-Locks; $Attempt = 1; $MaxRetry = 3; $Success = $false
-    do {
-        Log $TxtLogMod "Unmounting... ($Attempt)" "CMD"
-        $ArgsList = "/Unmount-Image /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`""
-        if ($Commit) { $ArgsList += " /Commit" } else { $ArgsList += " /Discard" }
-        $Proc = Start-Process "dism" -ArgumentList $ArgsList -Wait -NoNewWindow -PassThru
-        if ($Proc.ExitCode -eq 0) { $Success = $true; Log $TxtLogMod "Unmount OK!" "INFO" } 
-        else { Log $TxtLogMod "Retry 3s..." "WARN"; Start-Sleep -Seconds 3; Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow }
-        $Attempt++
-    } while (($Attempt -le $MaxRetry) -and ($Success -eq $false))
-    return $Success
-}
-
-# --- LOGIC CAPTURE (V3.2) ---
 $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 
+# --- CAPTURE LOGIC (VSS INTEGRATED) ---
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
     Update-Workspace; Prepare-Dirs
-    
-    # 1. TẠO CONFIG EXCLUDE (THÊM NOTIFICATIONS)
     $ConfigFile = Create-DismConfig
-    Log $TxtLogCap "Đã cấu hình chặn Notifications." "INFO"
-
     $WimTarget = $TxtCapOut.Text
+    
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # 2. KILL BACKGROUND APPS
-    Log $TxtLogCap "Đang tắt ứng dụng ngầm..." "WARN"
-    Kill-BackgroundApps
+    # BƯỚC 1: TẠO SHADOW COPY CỦA Ổ C:
+    # -----------------------------------------------------
+    $VssOk = Create-ShadowCopy "C:\" $Global:ShadowMount $TxtLogCap
     
-    # 3. STOP SERVICES
-    Log $TxtLogCap "Dừng Services (Gồm WpnService)..." "WARN"
-    Toggle-Services "STOP"
-    
-    Log $TxtLogCap "Capturing C:..." "INFO"
-    Release-Locks 
-
-    # 4. DISM CAPTURE
-    $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:C:\ /Name:`"MyWin`" /Compress:max /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`"" -Wait -NoNewWindow -PassThru
-    
-    # 5. RESTORE
-    Log $TxtLogCap "Khôi phục Services..." "INFO"
-    Toggle-Services "START"
-
-    if ($Proc.ExitCode -eq 0) { 
-        Log $TxtLogCap "THÀNH CÔNG!" "INFO"; [System.Windows.Forms.MessageBox]::Show("Capture xong!")
-    } else { 
-        Log $TxtLogCap "Vẫn lỗi (Code $($Proc.ExitCode)). Hãy khởi động lại máy." "ERR" 
+    if ($VssOk) {
+        # BƯỚC 2: CAPTURE TỪ SHADOW COPY (KHÔNG PHẢI Ổ C)
+        # -----------------------------------------------------
+        Log $TxtLogCap "Đang Capture từ Snapshot (Zero Lock Files)..." "INFO"
+        
+        $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:`"$Global:ShadowMount`" /Name:`"MyWin_VSS`" /Compress:max /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`"" -Wait -NoNewWindow -PassThru
+        
+        if ($Proc.ExitCode -eq 0) {
+            Log $TxtLogCap "THÀNH CÔNG! Đã tạo WIM sạch từ VSS." "INFO"
+            [System.Windows.Forms.MessageBox]::Show("Capture VSS Thành Công!")
+        } else {
+            Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode))." "ERR"
+        }
+        
+        # BƯỚC 3: DỌN DẸP VSS
+        # -----------------------------------------------------
+        Cleanup-ShadowCopy $Global:ShadowMount $TxtLogCap
     }
+    
     $BtnStartCap.Enabled=$true; $Form.Cursor="Default"
 })
 
-# --- MODDING LOGIC ---
+# --- MODDING LOGIC (GIỮ NGUYÊN) ---
 $BtnIsoSrc.Add_Click({ $O=New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO|*.iso"; if($O.ShowDialog()-eq"OK"){$TxtIsoSrc.Text=$O.FileName; $GbAct.Enabled=$true} })
 function Force-Cleanup {
-    Release-Locks; Log $TxtLogMod "Cleanup..."
-    Start-Process "dism" -ArgumentList "/Cleanup-Mountpoints" -Wait -NoNewWindow
     Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
-    if (Test-Path $Global:MountDir) { Smart-Unmount $false; Remove-Item $Global:MountDir -Recurse -Force -ErrorAction SilentlyContinue }
-    Log $TxtLogMod "Done."
+    Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Discard" -Wait -NoNewWindow
+    Remove-Item $Global:MountDir -Recurse -Force -ErrorAction SilentlyContinue
+    Log $TxtLogMod "Cleaned."
 }
 function Start-Mount {
-    $Iso = $TxtIsoSrc.Text; Update-Workspace; Prepare-Dirs; $Form.Cursor="WaitCursor"
-    Force-Cleanup; Ensure-Dir $Global:ExtractDir; Ensure-Dir $Global:MountDir; Grant-FullAccess $Global:MountDir
+    $Iso = $TxtIsoSrc.Text; Update-Workspace; Prepare-Dirs; $Form.Cursor="WaitCursor"; Force-Cleanup; Ensure-Dir $Global:ExtractDir; Ensure-Dir $Global:MountDir
     Log $TxtLogMod "Mounting ISO..."; Mount-DiskImage -ImagePath $Iso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
-    $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume
-    if (!$Vol) { Log $TxtLogMod "ISO Error." "ERR"; $Form.Cursor="Default"; return }
-    Log $TxtLogMod "Copying..."; Copy-Item "$($Vol.DriveLetter):\*" $Global:ExtractDir -Recurse -Force
+    $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume; if (!$Vol) { Log $TxtLogMod "ISO Error" "ERR"; $Form.Cursor="Default"; return }
+    Copy-Item "$($Vol.DriveLetter):\*" $Global:ExtractDir -Recurse -Force
     $Wim = "$Global:ExtractDir\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Global:ExtractDir\sources\install.esd" }
-    if (!(Test-Path $Wim)) { Log $TxtLogMod "No WIM/ESD!" "ERR"; $Form.Cursor="Default"; return }
-    if ($Wim -match ".esd") {
-        Log $TxtLogMod "ESD -> WIM..."; $NewWim = "$Global:ExtractDir\sources\install.wim"
-        Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$Wim`" /SourceIndex:1 /DestinationImageFile:`"$NewWim`" /Compress:max /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
-        Remove-Item $Wim -Force; $Wim = $NewWim
-    }
-    Log $TxtLogMod "Mounting WIM..."; Release-Locks
-    $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$Wim`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow -PassThru
-    if ($Proc.ExitCode -eq 0) { $LblInfo.Text="MOUNTED"; $LblInfo.ForeColor="Lime"; $BtnBuild.Enabled=$true; Log $TxtLogMod "OK!" "INFO" } 
-    else { Log $TxtLogMod "Fail ($($Proc.ExitCode))." "ERR" }
-    $Form.Cursor="Default"
+    Log $TxtLogMod "Mounting WIM..."; Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$Wim`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
+    $LblInfo.Text="MOUNTED"; $LblInfo.ForeColor="Lime"; $BtnBuild.Enabled=$true; Log $TxtLogMod "OK" "INFO"; $Form.Cursor="Default"
 }
-function Add-Folder { $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { Copy-Item $FBD.SelectedPath $Global:MountDir -Recurse -Force; Log $TxtLogMod "Copied."; Release-Locks } }
-function Add-Driver { $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { Release-Locks; Log $TxtLogMod "Adding Drivers..."; Start-Process "dism" -ArgumentList "/Image:`"$Global:MountDir`" /Add-Driver /Driver:`"$($FBD.SelectedPath)`" /Recurse /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow; Log $TxtLogMod "Done." } }
-function Add-DesktopFile { $O = New-Object System.Windows.Forms.OpenFileDialog; if ($O.ShowDialog() -eq "OK") { Copy-Item $O.FileName "$Global:MountDir\Users\Public\Desktop" -Force; Log $TxtLogMod "File Added."; Release-Locks } }
+function Add-Folder { $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { Copy-Item $FBD.SelectedPath $Global:MountDir -Recurse -Force; Log $TxtLogMod "Copied" } }
+function Add-Driver { $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { Log $TxtLogMod "Adding Drivers..."; Start-Process "dism" -ArgumentList "/Image:`"$Global:MountDir`" /Add-Driver /Driver:`"$($FBD.SelectedPath)`" /Recurse /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow; Log $TxtLogMod "Done" } }
+function Add-DesktopFile { $O = New-Object System.Windows.Forms.OpenFileDialog; if ($O.ShowDialog() -eq "OK") { Copy-Item $O.FileName "$Global:MountDir\Users\Public\Desktop" -Force; Log $TxtLogMod "Added" } }
 $BtnBuild.Add_Click({
     if (!(Check-Tools)) { return }; $S = New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="ISO|*.iso"; $S.FileName="NewWin.iso"
     if ($S.ShowDialog() -eq "OK") {
-        $Form.Cursor="WaitCursor"; Log $TxtLogMod "Unmounting..."
-        if (Smart-Unmount $true) {
-            Log $TxtLogMod "Building ISO..."; $Osc = "$ToolsDir\oscdimg.exe"; $Boot = "2#p0,e,b`"$Global:ExtractDir\boot\etfsboot.com`"#pEF,e,b`"$Global:ExtractDir\efi\microsoft\boot\efisys.bin`""
-            Start-Process $Osc -ArgumentList "-bootdata:$Boot -u2 -udfver102 `"$Global:ExtractDir`" `"$S.FileName`"" -Wait -NoNewWindow
-            Log $TxtLogMod "SUCCESS! File: $($S.FileName)" "INFO"; [System.Windows.Forms.MessageBox]::Show("Xong!"); Invoke-Item (Split-Path $S.FileName); $GbAct.Enabled=$false; $BtnBuild.Enabled=$false
-        } else { [System.Windows.Forms.MessageBox]::Show("Unmount Failed.", "Error") }
-        $Form.Cursor="Default"
+        $Form.Cursor="WaitCursor"; Log $TxtLogMod "Building..."
+        Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Commit /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
+        $Osc = "$ToolsDir\oscdimg.exe"; $Boot = "2#p0,e,b`"$Global:ExtractDir\boot\etfsboot.com`"#pEF,e,b`"$Global:ExtractDir\efi\microsoft\boot\efisys.bin`""
+        Start-Process $Osc -ArgumentList "-bootdata:$Boot -u2 -udfver102 `"$Global:ExtractDir`" `"$S.FileName`"" -Wait -NoNewWindow
+        [System.Windows.Forms.MessageBox]::Show("Done!"); Invoke-Item (Split-Path $S.FileName); $GbAct.Enabled=$false; $BtnBuild.Enabled=$false; $Form.Cursor="Default"
     }
 })
 if ($CboDrives.Items.Count -gt 0) { Update-Workspace }; $Form.ShowDialog() | Out-Null
