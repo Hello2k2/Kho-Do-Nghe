@@ -1,6 +1,6 @@
 <#
     WINDOWS MODDER STUDIO - PHAT TAN PC
-    Version: 2.8 (Live Capture Final: Auto Stop Services + Enhanced Exclusions)
+    Version: 2.9 (Live Capture Final: Defender Bypass + Enhanced Exclusions)
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -29,12 +29,13 @@ function Log ($Box, $Msg, $Type="INFO") {
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT MỚI) ---
+# --- HÀM TẠO FILE CẤU HÌNH LOẠI TRỪ (CẬP NHẬT: BYPASS DEFENDER) ---
 function Create-DismConfig {
     if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
     $ConfigPath = "$ToolsDir\WimScript.ini"
     
-    # Danh sách loại trừ mở rộng để tránh lỗi edb.jtx và các file lock khác
+    # DANH SÁCH LOẠI TRỪ "THÔNG MINH"
+    # Đã thêm Defender vào để tránh lỗi Lock file
     $Content = @"
 [ExclusionList]
 \$ntfs.log
@@ -53,14 +54,16 @@ function Create-DismConfig {
 \Windows\System32\LogFiles
 \Windows\Logs
 \PerfLogs
+\ProgramData\Microsoft\Windows Defender
+\ProgramData\Microsoft\Windows Defender Advanced Threat Protection
 "@
     [System.IO.File]::WriteAllText($ConfigPath, $Content)
     return $ConfigPath
 }
 
-# --- HÀM QUẢN LÝ DỊCH VỤ (FIX LỖI 0x80070020) ---
+# --- HÀM QUẢN LÝ DỊCH VỤ (CHỈ TẮT NHỮNG CÁI CẦN THIẾT) ---
 function Toggle-Services ($State) {
-    # Danh sách các dịch vụ hay khóa file
+    # Không tắt WinDefend vì sẽ bị từ chối truy cập, dùng ExclusionList hiệu quả hơn
     $Services = @("wsearch", "sysmain", "cryptsvc", "wuauserv", "bits")
     
     foreach ($Svc in $Services) {
@@ -69,7 +72,6 @@ function Toggle-Services ($State) {
                 Stop-Service -Name $Svc -Force -ErrorAction SilentlyContinue
             }
         } else {
-            # Chỉ bật lại những cái thiết yếu nếu cần (hoặc để Windows tự bật lại sau)
             if ((Get-Service $Svc).Status -eq "Stopped") {
                 Start-Service -Name $Svc -ErrorAction SilentlyContinue
             }
@@ -114,7 +116,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V2.8 (LIVE CAPTURE FINAL)"
+$Form.Text = "WINDOWS MODDER STUDIO V2.9 (DEFENDER BYPASS)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -162,7 +164,7 @@ $LblC1 = New-Object System.Windows.Forms.Label; $LblC1.Text="Lưu file WIM tại
 $TxtCapOut = New-Object System.Windows.Forms.TextBox; $TxtCapOut.Location="30,65"; $TxtCapOut.Size="650,25"; $TxtCapOut.Text="D:\PhatTan_Backup.wim"; $GbCap.Controls.Add($TxtCapOut)
 $BtnCapBrowse = New-Object System.Windows.Forms.Button; $BtnCapBrowse.Text="CHỌN..."; $BtnCapBrowse.Location="700,63"; $BtnCapBrowse.Size="100,27"; $BtnCapBrowse.ForeColor="Black"; $GbCap.Controls.Add($BtnCapBrowse)
 
-$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (An toàn & Tự động)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
+$BtnStartCap = New-Object System.Windows.Forms.Button; $BtnStartCap.Text="BẮT ĐẦU CAPTURE (Hỗ trợ Live OS)"; $BtnStartCap.Location="30,110"; $BtnStartCap.Size="770,50"; $BtnStartCap.BackColor="OrangeRed"; $BtnStartCap.ForeColor="White"; $BtnStartCap.Font="Segoe UI, 11, Bold"; $GbCap.Controls.Add($BtnStartCap)
 
 $TxtLogCap = New-Object System.Windows.Forms.TextBox; $TxtLogCap.Multiline=$true; $TxtLogCap.Location="30,180"; $TxtLogCap.Size="770,260"; $TxtLogCap.BackColor="Black"; $TxtLogCap.ForeColor="Lime"; $TxtLogCap.ScrollBars="Vertical"; $TxtLogCap.ReadOnly=$true; $TxtLogCap.Font="Consolas, 9"; $GbCap.Controls.Add($TxtLogCap)
 
@@ -186,7 +188,7 @@ $TxtLogMod = New-Object System.Windows.Forms.TextBox; $TxtLogMod.Multiline=$true
 $BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text="3. TẠO ISO MỚI (REBUILD)"; $BtnBuild.Location="20,420"; $BtnBuild.Size="845,60"; $BtnBuild.BackColor="Green"; $BtnBuild.ForeColor="White"; $BtnBuild.Font="Segoe UI, 14, Bold"; $BtnBuild.Enabled=$false; $TabMod.Controls.Add($BtnBuild)
 
 # =========================================================================================
-# LOGIC CORE (V2.8)
+# LOGIC CORE (V2.9 - DEFENDER FIX)
 # =========================================================================================
 
 # --- TOOL CHECKER ---
@@ -238,21 +240,21 @@ function Smart-Unmount ($Commit) {
     return $Success
 }
 
-# --- LOGIC CAPTURE (V2.8 FIXED) ---
+# --- LOGIC CAPTURE (V2.9 FIXED) ---
 $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
     Update-Workspace; Prepare-Dirs
     
-    # 1. TẠO FILE CẤU HÌNH LOẠI TRỪ (MẠNH HƠN)
+    # 1. TẠO FILE CẤU HÌNH LOẠI TRỪ (BAO GỒM DEFENDER)
     $ConfigFile = Create-DismConfig
-    Log $TxtLogCap "Đã tạo file cấu hình: $ConfigFile" "INFO"
+    Log $TxtLogCap "Đã tạo cấu hình ExclusionList (Bypass Defender): $ConfigFile" "INFO"
 
     $WimTarget = $TxtCapOut.Text
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # 2. TẮT SERVICES GÂY LOCK (QUAN TRỌNG)
+    # 2. TẮT SERVICES PHỤ (Không tắt Defender vì khó tắt)
     Log $TxtLogCap "Đang tắt Windows Search & SysMain..." "WARN"
     Toggle-Services "STOP"
     
@@ -268,7 +270,7 @@ $BtnStartCap.Add_Click({
 
     if ($Proc.ExitCode -eq 0) { 
         Log $TxtLogCap "Capture THÀNH CÔNG!" "INFO"
-        [System.Windows.Forms.MessageBox]::Show("Capture xong!")
+        [System.Windows.Forms.MessageBox]::Show("Capture xong! File WIM đã sẵn sàng.")
     } else { 
         Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode)). Xem log chi tiết." "ERR" 
     }
