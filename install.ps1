@@ -192,7 +192,7 @@ function Load-Module ($ScriptName) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V11.7 (AUTO FIX TEMP)"
+$Form.Text = "PHAT TAN PC TOOLKIT V11.8 (AUTO FIX TEMP)"
 $Form.Size = New-Object System.Drawing.Size(1050, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false; $Form.Opacity = 0
