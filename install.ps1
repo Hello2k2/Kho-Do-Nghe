@@ -33,31 +33,32 @@ $Global:DarkMode = $true
 # Hàm tạo icon từ mã Hex để tránh lỗi ô vuông khi lưu file utf-8 no bom
 function Get-Icon { param([int]$Code) return [char]::ConvertFromUtf32($Code) }
 
+# Bảng icon "Nồi đồng cối đá" - Máy nào cũng hiện được
 $I = @{
-    Info      = Get-Icon 0x2139  # ℹ️
-    Broom     = Get-Icon 0x1F9F9 # 🧹
-    Rocket    = Get-Icon 0x1F680 # 🚀
-    Search    = Get-Icon 0x1F50D # 🔍
-    Disk      = Get-Icon 0x1F4BE # 💾
-    Globe     = Get-Icon 0x1F310 # 🌐
-    Refresh   = Get-Icon 0x1F504 # 🔄
-    Shield    = Get-Icon 0x1F6E1 # 🛡️
-    Lock      = Get-Icon 0x1F512 # 🔒
-    Ban       = Get-Icon 0x1F6AB # 🚫
-    Fire      = Get-Icon 0x1F525 # 🔥
-    CD        = Get-Icon 0x1F4BF # 💿
-    Office    = Get-Icon 0x1F3E2 # 🏢
-    Tools     = Get-Icon 0x1F6E0 # 🛠️
-    Box       = Get-Icon 0x1F4E6 # 📦
-    Robot     = Get-Icon 0x1F916 # 🤖
-    Bag       = Get-Icon 0x1F6CD # 🛍️
-    Down      = Get-Icon 0x2B07  # ⬇️
-    Cloud     = Get-Icon 0x2601  # ☁️
-    Cart      = Get-Icon 0x1F6D2 # 🛒
-    Zap       = Get-Icon 0x26A1  # ⚡
-    Coffee    = Get-Icon 0x2615  # ☕
-    Moon      = Get-Icon 0x1F319 # 🌙
-    Sun       = Get-Icon 0x2600  # ☀
+    Info      = [char]0x2139  # ℹ (Info)
+    Broom     = [char]0x267B  # ♻ (Thay chổi bằng Recycle - Tái chế)
+    Rocket    = [char]0x25B6  # ▶ (Thay tên lửa bằng Mũi tên)
+    Search    = [char]0x1F50D # 🔍 (Kính lúp - Khá an toàn)
+    Disk      = [char]0x1F4BE # 💾 (Đĩa mềm)
+    Globe     = [char]0x1F310 # 🌐 (Quả địa cầu)
+    Refresh   = [char]0x21BB  # ↻ (Mũi tên xoay)
+    Shield    = [char]0x26E8  # ⛨ (Cái khiên đơn giản)
+    Lock      = [char]0x1F512 # 🔒 (Cái khóa)
+    Ban       = [char]0x26D4  # ⛔ (Biển cấm)
+    Fire      = [char]0x26A1  # ⚡ (Tia sét - Thay cho lửa)
+    CD        = [char]0x1F4BF # 💿 (Đĩa CD)
+    Office    = [char]0x270E  # ✎ (Cây bút - Thay cho tòa nhà)
+    Tools     = [char]0x2692  # ⚒ (Búa và kìm)
+    Box       = [char]0x1F4E6 # 📦 (Cái hộp)
+    Robot     = [char]0x2699  # ⚙ (Bánh răng - Thay cho Robot)
+    Bag       = [char]0x1F6CD # 🛍 (Túi xách)
+    Down      = [char]0x2B07  # ⬇ (Mũi tên xuống)
+    Cloud     = [char]0x2601  # ☁ (Đám mây)
+    Cart      = [char]0x1F6D2 # 🛒 (Xe đẩy)
+    Zap       = [char]0x26A1  # ⚡ (Tia sét)
+    Coffee    = [char]0x2615  # ☕ (Cà phê)
+    Moon      = [char]0x263E  # ☾ (Trăng khuyết)
+    Sun       = [char]0x2600  # ☀ (Mặt trời)
 }
 $Theme = @{
     Dark = @{
