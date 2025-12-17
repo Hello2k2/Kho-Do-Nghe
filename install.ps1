@@ -29,7 +29,36 @@ if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force 
 
 # --- 3. THEME ENGINE ---
 $Global:DarkMode = $true 
+# --- FIX ICON CHO LINUX/WINDOWS ---
+# Hàm tạo icon từ mã Hex để tránh lỗi ô vuông khi lưu file utf-8 no bom
+function Get-Icon { param([int]$Code) return [char]::ConvertFromUtf32($Code) }
 
+$I = @{
+    Info      = Get-Icon 0x2139  # ℹ️
+    Broom     = Get-Icon 0x1F9F9 # 🧹
+    Rocket    = Get-Icon 0x1F680 # 🚀
+    Search    = Get-Icon 0x1F50D # 🔍
+    Disk      = Get-Icon 0x1F4BE # 💾
+    Globe     = Get-Icon 0x1F310 # 🌐
+    Refresh   = Get-Icon 0x1F504 # 🔄
+    Shield    = Get-Icon 0x1F6E1 # 🛡️
+    Lock      = Get-Icon 0x1F512 # 🔒
+    Ban       = Get-Icon 0x1F6AB # 🚫
+    Fire      = Get-Icon 0x1F525 # 🔥
+    CD        = Get-Icon 0x1F4BF # 💿
+    Office    = Get-Icon 0x1F3E2 # 🏢
+    Tools     = Get-Icon 0x1F6E0 # 🛠️
+    Box       = Get-Icon 0x1F4E6 # 📦
+    Robot     = Get-Icon 0x1F916 # 🤖
+    Bag       = Get-Icon 0x1F6CD # 🛍️
+    Down      = Get-Icon 0x2B07  # ⬇️
+    Cloud     = Get-Icon 0x2601  # ☁️
+    Cart      = Get-Icon 0x1F6D2 # 🛒
+    Zap       = Get-Icon 0x26A1  # ⚡
+    Coffee    = Get-Icon 0x2615  # ☕
+    Moon      = Get-Icon 0x1F319 # 🌙
+    Sun       = Get-Icon 0x2600  # ☀
+}
 $Theme = @{
     Dark = @{
         Back      = [System.Drawing.Color]::FromArgb(30, 30, 30)
@@ -197,37 +226,38 @@ function Add-Btn ($Panel, $Txt, $Cmd) {
 }
 
 # --- CỘT 1: SYSTEM & MAINTENANCE ---
+# --- CỘT 1: SYSTEM & MAINTENANCE ---
 $P1 = Add-Card "SYSTEM & MAINTENANCE" 15 20 315 400
-Add-Btn $P1 "ℹ️ CHECK INFO" { Load-Module "SystemInfo.ps1" }
-Add-Btn $P1 "🧹 CLEANER PRO" { Load-Module "SystemCleaner.ps1" }
-Add-Btn $P1 "🚀 QUẢN LÍ ĐĨA" { Load-Module "DiskManager.ps1" }
-Add-Btn $P1 "🔍 SYSTEM SCAN" { Load-Module "SystemScan.ps1" }
-Add-Btn $P1 "🚀 RAM BOOSTER" { Load-Module "RamBooster.ps1" }
-Add-Btn $P1 "🔑 ACTIVATION" { Load-Module "WinActivator.ps1" }
-Add-Btn $P1 "💾 HDD RECOVERY" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
-Add-Btn $P1 "🚀 DEBLOATER (GỠ RÁC)" { Load-Module "Debloater.ps1" }
+Add-Btn $P1 "$($I.Info) CHECK INFO"      { Load-Module "SystemInfo.ps1" }
+Add-Btn $P1 "$($I.Broom) CLEANER PRO"    { Load-Module "SystemCleaner.ps1" }
+Add-Btn $P1 "$($I.Rocket) QUẢN LÍ ĐĨA"   { Load-Module "DiskManager.ps1" }
+Add-Btn $P1 "$($I.Search) SYSTEM SCAN"   { Load-Module "SystemScan.ps1" }
+Add-Btn $P1 "$($I.Rocket) RAM BOOSTER"   { Load-Module "RamBooster.ps1" }
+Add-Btn $P1 "$($I.Zap) ACTIVATION"       { Load-Module "WinActivator.ps1" }
+Add-Btn $P1 "$($I.Disk) HDD RECOVERY"    { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+Add-Btn $P1 "$($I.Rocket) DEBLOATER (GỠ RÁC)" { Load-Module "Debloater.ps1" }
 
 # --- CỘT 2: SECURITY & NETWORK ---
 $P2 = Add-Card "SECURITY & NETWORK" 340 20 315 400
-Add-Btn $P2 "🌐 DNS MASTER" { Load-Module "NetworkMaster.ps1" }
-Add-Btn $P2 "🔄 WIN UPDATE" { Load-Module "WinUpdatePro.ps1" }
-Add-Btn $P2 "🛡️ DEFENDER" { Load-Module "DefenderMgr.ps1" }
-Add-Btn $P2 "🔒 BITLOCKER" { Load-Module "BitLockerMgr.ps1" }
-Add-Btn $P2 "🚫 BLOCK WEB" { Load-Module "BrowserPrivacy.ps1" }
-Add-Btn $P2 "🔥 FIREWALL OFF" { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
+Add-Btn $P2 "$($I.Globe) DNS MASTER"     { Load-Module "NetworkMaster.ps1" }
+Add-Btn $P2 "$($I.Refresh) WIN UPDATE"   { Load-Module "WinUpdatePro.ps1" }
+Add-Btn $P2 "$($I.Shield) DEFENDER"      { Load-Module "DefenderMgr.ps1" }
+Add-Btn $P2 "$($I.Lock) BITLOCKER"       { Load-Module "BitLockerMgr.ps1" }
+Add-Btn $P2 "$($I.Ban) BLOCK WEB"        { Load-Module "BrowserPrivacy.ps1" }
+Add-Btn $P2 "$($I.Fire) FIREWALL OFF"    { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
 
 # --- CỘT 3: DEPLOYMENT & TOOLS ---
 $P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
-Add-Btn $P3 "💿 INSTALL WIN" { Load-Module "WinInstall.ps1" }
-Add-Btn $P3 "🏢 OFFICE TOOL" { Load-Module "OfficeInstaller.ps1" }
-Add-Btn $P3 "🛠️ WIN MODDER" { Load-Module "WinModder.ps1" }
-Add-Btn $P3 "📦 AIO BUILDER" { Load-Module "WinAIOBuilder.ps1" }
-Add-Btn $P3 "🤖 GEMINI AI" { Load-Module "GeminiAI.ps1" }
-Add-Btn $P3 "🛍️ LTSC STORE" { Load-Module "StoreInstaller.ps1" }
-Add-Btn $P3 "⬇️ ISO TURBO" { Load-Module "ISODownloader.ps1" }
-Add-Btn $P3 "☁️ BACKUP PRO" { Load-Module "BackupCenter.ps1" }
-Add-Btn $P3 "☁️ Tạo USBBOOT PRO" { Load-Module "UsbBootMaker.ps1" }
-Add-Btn $P3 "🛒 WINGET APP" { Load-Module "AppStore.ps1" }
+Add-Btn $P3 "$($I.CD) INSTALL WIN"       { Load-Module "WinInstall.ps1" }
+Add-Btn $P3 "$($I.Office) OFFICE TOOL"   { Load-Module "OfficeInstaller.ps1" }
+Add-Btn $P3 "$($I.Tools) WIN MODDER"     { Load-Module "WinModder.ps1" }
+Add-Btn $P3 "$($I.Box) AIO BUILDER"      { Load-Module "WinAIOBuilder.ps1" }
+Add-Btn $P3 "$($I.Robot) GEMINI AI"      { Load-Module "GeminiAI.ps1" }
+Add-Btn $P3 "$($I.Bag) LTSC STORE"       { Load-Module "StoreInstaller.ps1" }
+Add-Btn $P3 "$($I.Down) ISO TURBO"       { Load-Module "ISODownloader.ps1" }
+Add-Btn $P3 "$($I.Cloud) BACKUP PRO"     { Load-Module "BackupCenter.ps1" }
+Add-Btn $P3 "$($I.Cloud) Tạo USBBOOT PRO"{ Load-Module "UsbBootMaker.ps1" }
+Add-Btn $P3 "$($I.Cart) WINGET APP"      { Load-Module "AppStore.ps1" }
 #$P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
 
 # > LOAD JSON APPS
