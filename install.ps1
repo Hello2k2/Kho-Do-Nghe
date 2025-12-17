@@ -227,38 +227,37 @@ function Add-Btn ($Panel, $Txt, $Cmd) {
 }
 
 # --- CỘT 1: SYSTEM & MAINTENANCE ---
-# --- CỘT 1: SYSTEM & MAINTENANCE ---
 $P1 = Add-Card "SYSTEM & MAINTENANCE" 15 20 315 400
-Add-Btn $P1 "$($I.Info) CHECK INFO"      { Load-Module "SystemInfo.ps1" }
-Add-Btn $P1 "$($I.Broom) CLEANER PRO"    { Load-Module "SystemCleaner.ps1" }
-Add-Btn $P1 "$($I.Rocket) QUẢN LÍ ĐĨA"   { Load-Module "DiskManager.ps1" }
-Add-Btn $P1 "$($I.Search) SYSTEM SCAN"   { Load-Module "SystemScan.ps1" }
-Add-Btn $P1 "$($I.Rocket) RAM BOOSTER"   { Load-Module "RamBooster.ps1" }
-Add-Btn $P1 "$($I.Zap) ACTIVATION"       { Load-Module "WinActivator.ps1" }
-Add-Btn $P1 "$($I.Disk) HDD RECOVERY"    { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
-Add-Btn $P1 "$($I.Rocket) DEBLOATER (GỠ RÁC)" { Load-Module "Debloater.ps1" }
+Add-Btn $P1 "ℹ CHECK INFO"          { Load-Module "SystemInfo.ps1" }
+Add-Btn $P1 "♻ CLEANER PRO"         { Load-Module "SystemCleaner.ps1" }
+Add-Btn $P1 "💾 QUẢN LÍ ĐĨA"        { Load-Module "DiskManager.ps1" }
+Add-Btn $P1 "🔍 SYSTEM SCAN"        { Load-Module "SystemScan.ps1" }
+Add-Btn $P1 "⚡ RAM BOOSTER"         { Load-Module "RamBooster.ps1" }
+Add-Btn $P1 "🗝 ACTIVATION"          { Load-Module "WinActivator.ps1" }
+Add-Btn $P1 "🚑 HDD RECOVERY"       { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+Add-Btn $P1 "🗑 DEBLOATER"          { Load-Module "Debloater.ps1" }
 
-# --- CỘT 2: SECURITY & NETWORK ---
+# --- [EDIT HERE] CỘT 2: SECURITY (Đã thay bằng Icon an toàn) ---
 $P2 = Add-Card "SECURITY & NETWORK" 340 20 315 400
-Add-Btn $P2 "$($I.Globe) DNS MASTER"     { Load-Module "NetworkMaster.ps1" }
-Add-Btn $P2 "$($I.Refresh) WIN UPDATE"   { Load-Module "WinUpdatePro.ps1" }
-Add-Btn $P2 "$($I.Shield) DEFENDER"      { Load-Module "DefenderMgr.ps1" }
-Add-Btn $P2 "$($I.Lock) BITLOCKER"       { Load-Module "BitLockerMgr.ps1" }
-Add-Btn $P2 "$($I.Ban) BLOCK WEB"        { Load-Module "BrowserPrivacy.ps1" }
-Add-Btn $P2 "$($I.Fire) FIREWALL OFF"    { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
+Add-Btn $P2 "🌐 DNS MASTER"         { Load-Module "NetworkMaster.ps1" }
+Add-Btn $P2 "↻ WIN UPDATE"          { Load-Module "WinUpdatePro.ps1" }
+Add-Btn $P2 "🛡 DEFENDER"           { Load-Module "DefenderMgr.ps1" }
+Add-Btn $P2 "🔒 BITLOCKER"          { Load-Module "BitLockerMgr.ps1" }
+Add-Btn $P2 "⛔ BLOCK WEB"          { Load-Module "BrowserPrivacy.ps1" }
+Add-Btn $P2 "🔥 FIREWALL OFF"       { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Firewall OFF") }
 
-# --- CỘT 3: DEPLOYMENT & TOOLS ---
+# --- [EDIT HERE] CỘT 3: TOOLS (Đã thay bằng Icon an toàn) ---
 $P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
-Add-Btn $P3 "$($I.CD) INSTALL WIN"       { Load-Module "WinInstall.ps1" }
-Add-Btn $P3 "$($I.Office) OFFICE TOOL"   { Load-Module "OfficeInstaller.ps1" }
-Add-Btn $P3 "$($I.Tools) WIN MODDER"     { Load-Module "WinModder.ps1" }
-Add-Btn $P3 "$($I.Box) AIO BUILDER"      { Load-Module "WinAIOBuilder.ps1" }
-Add-Btn $P3 "$($I.Robot) GEMINI AI"      { Load-Module "GeminiAI.ps1" }
-Add-Btn $P3 "$($I.Bag) LTSC STORE"       { Load-Module "StoreInstaller.ps1" }
-Add-Btn $P3 "$($I.Down) ISO TURBO"       { Load-Module "ISODownloader.ps1" }
-Add-Btn $P3 "$($I.Cloud) BACKUP PRO"     { Load-Module "BackupCenter.ps1" }
-Add-Btn $P3 "$($I.Cloud) Tạo USBBOOT PRO"{ Load-Module "UsbBootMaker.ps1" }
-Add-Btn $P3 "$($I.Cart) WINGET APP"      { Load-Module "AppStore.ps1" }
+Add-Btn $P3 "💿 INSTALL WIN"        { Load-Module "WinInstall.ps1" }
+Add-Btn $P3 "📝 OFFICE TOOL"        { Load-Module "OfficeInstaller.ps1" }
+Add-Btn $P3 "🔧 WIN MODDER"         { Load-Module "WinModder.ps1" }
+Add-Btn $P3 "📦 AIO BUILDER"        { Load-Module "WinAIOBuilder.ps1" }
+Add-Btn $P3 "🤖 GEMINI AI"          { Load-Module "GeminiAI.ps1" }
+Add-Btn $P3 "👜 LTSC STORE"         { Load-Module "StoreInstaller.ps1" }
+Add-Btn $P3 "📥 ISO TURBO"          { Load-Module "ISODownloader.ps1" }
+Add-Btn $P3 "☁ BACKUP PRO"          { Load-Module "BackupCenter.ps1" }
+Add-Btn $P3 "⚡ USBBOOT PRO"         { Load-Module "UsbBootMaker.ps1" }
+Add-Btn $P3 "🛒 WINGET APP"         { Load-Module "AppStore.ps1" }
 #$P3 = Add-Card "DEPLOYMENT & AI TOOLS" 665 20 315 400
 
 # > LOAD JSON APPS
