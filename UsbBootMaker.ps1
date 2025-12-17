@@ -57,7 +57,7 @@ function Get-DriveLetterByLabel ($Label) {
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "USB BOOT MAKER PRO - GLIM EDITION"
+$Form.Text = "USB BOOT MAKER PRO v1.0 - GLIM EDITION"
 $Form.Size = New-Object System.Drawing.Size(800, 650)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm
