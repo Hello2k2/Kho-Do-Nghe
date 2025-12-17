@@ -200,7 +200,7 @@ $BtnStart.Add_Click({
 
     # 2. DiskPart (Auto Letter)
     Log-Msg "Dang phan vung (DiskPart)..."
-    $Cmd = "select disk $DiskID`nclean`ncreate partition primary size=4096`nformat fs=fat32 quick label=`"GLIM_BOOT`"`nactive`nassign`ncreate partition primary`nformat fs=ntfs quick label=`"GLIM_DATA`"`nassign`nexit"
+    $Cmd = "select disk $DiskID`nclean`ncreate partition primary size=512`nformat fs=fat32 quick label=`"GLIM_BOOT`"`nactive`nassign`ncreate partition primary`nformat fs=ntfs quick label=`"GLIM_DATA`"`nassign`nexit"
     Run-DiskPartScript $Cmd
     
     Log-Msg "Doi Windows nhan o dia (5s)..."; Start-Sleep -Seconds 5
