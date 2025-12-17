@@ -40,7 +40,7 @@
     "link": "IDM.MMT.WINDOWS.TECH.exe",
     "filename": "IDM.exe",
     "type": "Portable",
-    "irm": "iex (irm is.gd/IDMFIX)"
+    "irm": "iex(irm is.gd/idm_reset)"
   },
   {
     "tab": "Internet & Office",
