@@ -14,7 +14,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # --- CẤU HÌNH ---
-$Global:LocalJson = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/bootkits.json"
+$Global:LocalJson = "https://github.com/Hello2k2/Kho-Do-Nghe/blob/main/bootkits.json"
 $Global:TempDir = "$env:TEMP\UsbBootMaker"
 if (!(Test-Path $Global:TempDir)) { New-Item -ItemType Directory -Path $Global:TempDir -Force | Out-Null }
 
