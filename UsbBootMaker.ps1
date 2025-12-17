@@ -1,12 +1,12 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (LITE COMPATIBLE EDITION)
+    USB BOOT MAKER - PHAT TAN PC (LITE COMPATIBLE EDITION - FIX BOOT DETECT)
     Features: 
     - Engine: Dual-Mode (Get-Disk Modern + WMI Legacy Fallback for Win Lite)
     - Auto Fetch BootKits Config from GitHub (JSON)
     - Auto Dual-Partition (UEFI/Legacy Hybrid)
     - Support GLIM/Grub2/WinPE Boot Kits
     - Safe DiskPart Wrapper
-    - NO Hardcoded Drive Letters (Auto Detect)
+    - NO Hardcoded Drive Letters (Auto Detect with Strong Fallback)
     - Responsive Dock Layout
     - Dark Titanium UI
 #>
@@ -45,18 +45,31 @@ function Run-DiskPartScript ($ScriptContent) {
     return $P.ExitCode
 }
 
+# --- HAM DO TIM O DIA (UPDATE: MANH ME HON) ---
 function Get-DriveLetterByLabel ($Label) {
-    try {
-        Get-Disk | Update-Disk -ErrorAction SilentlyContinue
-        $Vol = Get-Volume | Where-Object { $_.FileSystemLabel -eq $Label } | Select-Object -First 1
-        if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
-    } catch {
-        # Fallback cho Win Lite khong co Get-Volume
+    # Thu 1: Get-Volume (Modern)
+    if (Get-Command "Get-Volume" -ErrorAction SilentlyContinue) {
         try {
-            $WmiVol = Get-WmiObject Win32_Volume | Where-Object { $_.Label -eq $Label } | Select-Object -First 1
-            if ($WmiVol.DriveLetter) { return $WmiVol.DriveLetter }
+            Get-Disk | Update-Disk -ErrorAction SilentlyContinue # Refresh cache
+            $Vol = Get-Volume | Where-Object { $_.FileSystemLabel -eq $Label } | Select-Object -First 1
+            if ($Vol -and $Vol.DriveLetter) { return "$($Vol.DriveLetter):" }
         } catch {}
     }
+
+    # Thu 2: WMI (Legacy - Win32_Volume)
+    try {
+        $WmiVol = Get-WmiObject -Class Win32_Volume -Filter "Label = '$Label'" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($WmiVol -and $WmiVol.DriveLetter) { return $WmiVol.DriveLetter }
+    } catch {}
+
+    # Thu 3: WMI (Legacy - Win32_LogicalDisk) - Quet tat ca o
+    try {
+        $Disks = Get-WmiObject Win32_LogicalDisk
+        foreach ($D in $Disks) {
+            if ($D.VolumeName -eq $Label) { return $D.DeviceID }
+        }
+    } catch {}
+
     return $null
 }
 
@@ -107,53 +120,38 @@ $PnlBottom.BringToFront(); $PnlHead.BringToFront(); $GbUSB.BringToFront(); $Spac
 
 # --- LOGIC ---
 
-# --- HAM LOAD USB (FIX WIN LITE) ---
 function Load-UsbList {
     $CbUSB.Items.Clear()
     $UseWMI = $false
 
-    # CACH 1: Modern API (Get-Disk)
     if (Get-Command "Get-Disk" -ErrorAction SilentlyContinue) {
         try {
             $Disks = @(Get-Disk -ErrorAction Stop | Where-Object { $_.BusType -eq "USB" -or $_.MediaType -eq "Removable" })
-            if ($Disks.Count -eq 0) { throw "Empty" } # Neu khong thay gi, thu WMI
-            
+            if ($Disks.Count -eq 0) { throw "Empty" }
             foreach ($D in $Disks) {
                 $SizeGB = [Math]::Round($D.Size / 1GB, 1)
                 $Name = if ($D.FriendlyName) { $D.FriendlyName } else { "Unknown Device" }
                 $CbUSB.Items.Add("Disk $($D.Number): $Name ($SizeGB GB)")
             }
             Log-Msg "Da quet USB (Engine: Modern Get-Disk)."
-        } catch {
-            Log-Msg "Get-Disk loi hoac khong tim thay USB. Chuyen sang WMI..."
-            $UseWMI = $true
-        }
-    } else {
-        Log-Msg "Win Lite khong co Get-Disk. Dung WMI..."
-        $UseWMI = $true
-    }
+        } catch { $UseWMI = $true }
+    } else { $UseWMI = $true }
 
-    # CACH 2: Legacy WMI (Win32_DiskDrive) - Cho Win Lite
     if ($UseWMI) {
+        Log-Msg "Dung WMI de quet USB..."
         try {
             $Disks = @(Get-WmiObject Win32_DiskDrive | Where-Object { $_.InterfaceType -eq "USB" -or $_.MediaType -match "Removable" })
-            
             if ($Disks.Count -gt 0) {
                 foreach ($D in $Disks) {
-                    # WMI size la Bytes, Model la ten, Index la so thu tu
                     $SizeGB = [Math]::Round($D.Size / 1GB, 1)
                     $CbUSB.Items.Add("Disk $($D.Index): $($D.Model) ($SizeGB GB)")
                 }
                 Log-Msg "Da quet USB (Engine: WMI Legacy)."
             } else {
-                Log-Msg "Khong tim thay USB nao (Ca Get-Disk lan WMI)."
-                $CbUSB.Items.Add("Khong tim thay USB!")
+                Log-Msg "Khong tim thay USB nao!"; $CbUSB.Items.Add("Khong tim thay USB!")
             }
-        } catch {
-            Log-Msg "WMI Failed: $($_.Exception.Message)"
-        }
+        } catch { Log-Msg "WMI Failed: $($_.Exception.Message)" }
     }
-    
     if ($CbUSB.Items.Count -gt 0) { $CbUSB.SelectedIndex = 0 }
 }
 
@@ -164,7 +162,6 @@ function Load-Kits {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
         $Json = Invoke-RestMethod -Uri "$($Global:JsonUrl)?t=$Ts" -Headers @{"User-Agent"="PS";"Cache-Control"="no-cache"} -ErrorAction Stop
-        
         if ($Json) { foreach ($Item in $Json) { if ($Item.Name) { $CbKit.Items.Add($Item.Name); $Global:KitData=$Json } } }
         if ($CbKit.Items.Count -gt 0) { $CbKit.SelectedIndex = 0; Log-Msg "Da tai ($($CbKit.Items.Count) phien ban)." }
     } catch {
@@ -203,11 +200,18 @@ $BtnStart.Add_Click({
     $Cmd = "select disk $DiskID`nclean`ncreate partition primary size=512`nformat fs=fat32 quick label=`"GLIM_BOOT`"`nactive`nassign`ncreate partition primary`nformat fs=ntfs quick label=`"GLIM_DATA`"`nassign`nexit"
     Run-DiskPartScript $Cmd
     
-    Log-Msg "Doi Windows nhan o dia (5s)..."; Start-Sleep -Seconds 5
+    Log-Msg "Doi Windows nhan dien o dia (10s)..."
+    Start-Sleep -Seconds 10 # Tăng thời gian chờ lên 10s cho chắc cú
     
-    $BootDrv = Get-DriveLetterByLabel "GLIM_BOOT"
-    $DataDrv = Get-DriveLetterByLabel "GLIM_DATA"
-    if (!$BootDrv) { Log-Msg "LOI: Khong tim thay phan vung BOOT!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    # Retry Loop (Thử dò 3 lần nếu chưa thấy)
+    for ($i=1; $i -le 3; $i++) {
+        $BootDrv = Get-DriveLetterByLabel "GLIM_BOOT"
+        $DataDrv = Get-DriveLetterByLabel "GLIM_DATA"
+        if ($BootDrv) { break }
+        Log-Msg "Dang thu do tim lai (Lan $i)..."; Start-Sleep -Seconds 3
+    }
+
+    if (!$BootDrv) { Log-Msg "LOI: Khong tim thay phan vung BOOT! Hay thu rut USB ra cam lai."; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     Log-Msg "Boot: $BootDrv | Data: $DataDrv"
 
     # 3. Extract
@@ -226,5 +230,5 @@ $BtnStart.Add_Click({
 
 $BtnRefresh.Add_Click({ Load-UsbList; Load-Kits })
 
-$Form.Add_Load({ Load-UsbList; Load-Kits; Log-Msg "Ready. Win Lite Compatible Mode." })
+$Form.Add_Load({ Load-UsbList; Load-Kits; Log-Msg "Ready. Win Lite Compatible Mode (Fix Boot Detect)." })
 [System.Windows.Forms.Application]::Run($Form)
