@@ -1,13 +1,12 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (FINAL STABLE)
+    USB BOOT MAKER - PHAT TAN PC (ONLINE EDITION)
     Features: 
-    - Fix JSON Parsing Error (String vs Object)
-    - Auto Fetch BootKits Config from GitHub
+    - Auto Fetch BootKits Config from GitHub (JSON)
     - Auto Dual-Partition (UEFI/Legacy Hybrid)
     - Support GLIM/Grub2/WinPE Boot Kits
     - Safe DiskPart Wrapper
     - NO Hardcoded Drive Letters (Auto Detect)
-    - Responsive Dock Layout
+    - Responsive Dock Layout (No broken UI)
     - Dark Titanium UI
 #>
 
@@ -16,7 +15,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # --- CẤU HÌNH ---
-# Link JSON (Phai la link Raw)
+# Link Raw JSON (Lưu ý: Dùng link raw để tool đọc được dữ liệu)
 $Global:JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/bootkits.json"
 $Global:TempDir = "$env:TEMP\UsbBootMaker"
 if (!(Test-Path $Global:TempDir)) { New-Item -ItemType Directory -Path $Global:TempDir -Force | Out-Null }
@@ -55,50 +54,54 @@ function Get-DriveLetterByLabel ($Label) {
     return $null
 }
 
-# --- GUI INIT ---
+# --- GUI INIT (RESPONSIVE LAYOUT) ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "USB BOOT MAKER PRO v1.0 - GLIM EDITION"
+$Form.Text = "USB BOOT MAKER PRO - GLIM EDITION"
 $Form.Size = New-Object System.Drawing.Size(800, 650)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm
 $Form.ForeColor = $Theme.TextMain
 $Form.Padding = New-Object System.Windows.Forms.Padding(20)
 
+# Fonts
 $F_Head = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
 $F_Norm = New-Object System.Drawing.Font("Segoe UI", 10)
 $F_Code = New-Object System.Drawing.Font("Consolas", 9)
 
-# 1. BOTTOM
+# --- 1. BOTTOM PANEL ---
 $PnlBottom = New-Object System.Windows.Forms.Panel; $PnlBottom.Height = 80; $PnlBottom.Dock = "Bottom"; $PnlBottom.Padding = New-Object System.Windows.Forms.Padding(100, 20, 100, 10)
 $Form.Controls.Add($PnlBottom)
 $BtnStart = New-Object System.Windows.Forms.Button; $BtnStart.Text = "🚀 KHOI TAO USB BOOT NGAY"; $BtnStart.Dock = "Fill"; $BtnStart.Font = $F_Head; $BtnStart.BackColor = $Theme.Warn; $BtnStart.ForeColor = "White"; $BtnStart.FlatStyle = "Flat"
 $PnlBottom.Controls.Add($BtnStart)
 
-# 2. HEADER
+# --- 2. HEADER ---
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 70; $PnlHead.Dock = "Top"; $Form.Controls.Add($PnlHead)
 $LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text = "Auto Dual-Partition (UEFI/Legacy Hybrid) - Auto Detect Letter"; $LblSub.Dock = "Top"; $LblSub.Height = 25; $LblSub.Font = $F_Norm; $LblSub.ForeColor = "Gray"; $PnlHead.Controls.Add($LblSub)
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ USB BOOT CREATOR (GLIM MULTIBOOT)"; $LblTitle.Dock = "Top"; $LblTitle.Height = 35; $LblTitle.Font = $F_Head; $LblTitle.ForeColor = $Theme.Accent; $PnlHead.Controls.Add($LblTitle)
 
-# 3. USB GROUP
+# --- 3. USB GROUP ---
 $GbUSB = New-Object System.Windows.Forms.GroupBox; $GbUSB.Text = "1. CHON THIET BI USB (CANH BAO: SE XOA SACH DU LIEU!)"; $GbUSB.Height = 80; $GbUSB.Dock = "Top"; $GbUSB.ForeColor = $Theme.Warn; $GbUSB.Padding = New-Object System.Windows.Forms.Padding(10, 30, 10, 15); $Form.Controls.Add($GbUSB)
 $BtnRefresh = New-Object System.Windows.Forms.Button; $BtnRefresh.Text = "🔄 LAM MOI"; $BtnRefresh.Width = 120; $BtnRefresh.Dock = "Right"; $BtnRefresh.BackColor = $Theme.BgPanel; $BtnRefresh.ForeColor = "White"; $GbUSB.Controls.Add($BtnRefresh)
 $PnlSep1 = New-Object System.Windows.Forms.Panel; $PnlSep1.Width=10; $PnlSep1.Dock="Right"; $GbUSB.Controls.Add($PnlSep1)
 $CbUSB = New-Object System.Windows.Forms.ComboBox; $CbUSB.Dock = "Fill"; $CbUSB.Font = $F_Norm; $CbUSB.BackColor = $Theme.BgPanel; $CbUSB.ForeColor = "White"; $CbUSB.DropDownStyle = "DropDownList"; $GbUSB.Controls.Add($CbUSB); $CbUSB.BringToFront()
 
+# Spacer
 $Spacer1 = New-Object System.Windows.Forms.Panel; $Spacer1.Height=20; $Spacer1.Dock="Top"; $Form.Controls.Add($Spacer1)
 
-# 4. KIT GROUP
+# --- 4. KIT GROUP ---
 $GbKit = New-Object System.Windows.Forms.GroupBox; $GbKit.Text = "2. CHON PHIEN BAN BOOT (LOAD TU GITHUB)"; $GbKit.Height = 80; $GbKit.Dock = "Top"; $GbKit.ForeColor = $Theme.Accent; $GbKit.Padding = New-Object System.Windows.Forms.Padding(10, 30, 10, 15); $Form.Controls.Add($GbKit)
 $CbKit = New-Object System.Windows.Forms.ComboBox; $CbKit.Dock = "Fill"; $CbKit.Font = $F_Norm; $CbKit.BackColor = $Theme.BgPanel; $CbKit.ForeColor = "White"; $CbKit.DropDownStyle = "DropDownList"; $GbKit.Controls.Add($CbKit)
 
+# Spacer
 $Spacer2 = New-Object System.Windows.Forms.Panel; $Spacer2.Height=20; $Spacer2.Dock="Top"; $Form.Controls.Add($Spacer2)
 
-# 5. LOG
+# --- 5. LOG ---
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline = $true; $TxtLog.ScrollBars = "Vertical"; $TxtLog.Dock = "Fill"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.Font = $F_Code; $TxtLog.ReadOnly = $true; $Form.Controls.Add($TxtLog)
 
+# Z-Order Fix
 $PnlBottom.BringToFront(); $PnlHead.BringToFront(); $GbUSB.BringToFront(); $Spacer1.BringToFront(); $GbKit.BringToFront(); $Spacer2.BringToFront(); $TxtLog.BringToFront()
 
-# --- LOGIC (FIXED) ---
+# --- LOGIC ---
 
 function Load-UsbList {
     $CbUSB.Items.Clear()
@@ -110,11 +113,14 @@ function Load-UsbList {
                 $Name = if ($D.FriendlyName) { $D.FriendlyName } else { "Unknown Device" }
                 $CbUSB.Items.Add("Disk $($D.Number): $Name ($SizeGB GB)")
             }
-        } else { $CbUSB.Items.Add("Khong tim thay USB nao!") }
+        } else {
+            $CbUSB.Items.Add("Khong tim thay USB nao!")
+        }
         if ($CbUSB.Items.Count -gt 0) { $CbUSB.SelectedIndex = 0 }
     } catch { Log-Msg "Loi lay danh sach USB: $($_.Exception.Message)" }
 }
 
+# --- FIX: LOAD KITS DÙNG LOGIC TỪ INSTALL.PS1 ---
 function Load-Kits {
     $CbKit.Items.Clear()
     Log-Msg "Dang tai danh sach Boot Kit tu GitHub..."
@@ -122,26 +128,18 @@ function Load-Kits {
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         
-        # FIX: Dung WebRequest de lay raw string, sau do moi ConvertFrom-Json
-        # De phong truong hop GitHub tra ve text/plain thay vi application/json
-        $Response = Invoke-WebRequest -Uri $Global:JsonUrl -UseBasicParsing
+        # 1. Tao URL chong cache (giong install.ps1)
+        $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
+        $Url = "$($Global:JsonUrl)?t=$Ts"
         
-        # Ep kieu UTF-8 de khong loi font
-        $ContentUtf8 = [System.Text.Encoding]::UTF8.GetString($Response.Content)
+        # 2. Tai JSON (Invoke-RestMethod tu chuyen JSON -> Object)
+        $Json = Invoke-RestMethod -Uri $Url -Headers @{"User-Agent"="PS";"Cache-Control"="no-cache"} -ErrorAction Stop
         
-        # Chuyen doi JSON String -> Object
-        $Json = $ContentUtf8 | ConvertFrom-Json
         $Global:KitData = $Json
         
         if ($Json) {
-            # Kiem tra xem la Mang (Array) hay Object don le
-            $Items = if ($Json -is [System.Array]) { $Json } else { @($Json) }
-            
-            foreach ($Item in $Items) {
-                # FIX: Them kiem tra $Item.Name de tranh loi null
-                if ($Item.Name) { 
-                    $CbKit.Items.Add($Item.Name) 
-                }
+            foreach ($Item in $Json) { 
+                if ($Item.Name) { $CbKit.Items.Add($Item.Name) }
             }
         }
         
@@ -149,7 +147,7 @@ function Load-Kits {
             $CbKit.SelectedIndex = 0 
             Log-Msg "Da tai thanh cong ($($CbKit.Items.Count) phien ban)."
         } else {
-            throw "Khong tim thay du lieu hop le trong JSON."
+            throw "Khong co du lieu trong JSON"
         }
     } catch {
         Log-Msg "LOI LOAD JSON: $($_.Exception.Message)"
@@ -174,26 +172,17 @@ $BtnStart.Add_Click({
     else { [System.Windows.Forms.MessageBox]::Show("Chon USB truoc!", "Loi"); return }
 
     $SelKitName = $CbKit.SelectedItem
-    
-    # Handle Demo Mode or Real Mode
-    $KitObj = $null
-    if ($Global:KitData) {
-        $Items = if ($Global:KitData -is [System.Array]) { $Global:KitData } else { @($Global:KitData) }
-        $KitObj = $Items | Where-Object { $_.Name -eq $SelKitName } | Select-Object -First 1
-    }
-
-    if (!$KitObj -and $SelKitName -notmatch "Demo") { [System.Windows.Forms.MessageBox]::Show("Chon Boot Kit hop le!", "Loi"); return }
+    $KitObj = $Global:KitData | Where-Object { $_.Name -eq $SelKitName } | Select-Object -First 1
+    if (!$KitObj) { [System.Windows.Forms.MessageBox]::Show("Chon Boot Kit hop le!", "Loi"); return }
 
     if ([System.Windows.Forms.MessageBox]::Show("CANH BAO: XOA SACH DISK $DiskID?`n`nTiep tuc?", "Warning", "YesNo", "Warning") -ne "Yes") { return }
 
     $BtnStart.Enabled = $false; $Form.Cursor = "WaitCursor"
     
     # 1. Download
-    if ($KitObj) {
-        $ZipPath = "$Global:TempDir\$($KitObj.FileName)"
-        if (!(Test-Path $ZipPath)) {
-            if (!(Download-File $KitObj.Url $ZipPath)) { $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
-        }
+    $ZipPath = "$Global:TempDir\$($KitObj.FileName)"
+    if (!(Test-Path $ZipPath)) {
+        if (!(Download-File $KitObj.Url $ZipPath)) { $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     }
 
     # 2. DiskPart (Auto Letter)
@@ -208,17 +197,13 @@ $BtnStart.Add_Click({
     if (!$BootDrv) { Log-Msg "LOI: Khong tim thay phan vung BOOT!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     Log-Msg "Boot: $BootDrv | Data: $DataDrv"
 
-    # 3. Extract (Only if KitObj exists)
-    if ($KitObj) {
-        Log-Msg "Dang giai nen vao $BootDrv..."
-        try {
-            Get-ChildItem "$BootDrv\" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-            Expand-Archive -Path $ZipPath -DestinationPath "$BootDrv\" -Force
-            Log-Msg "Giai nen hoan tat."
-        } catch { Log-Msg "LOI GIAI NEN: $($_.Exception.Message)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
-    } else {
-        Log-Msg "Che do Demo: Da format xong USB nhung chua chep file."
-    }
+    # 3. Extract
+    Log-Msg "Dang giai nen vao $BootDrv..."
+    try {
+        Get-ChildItem "$BootDrv\" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $ZipPath -DestinationPath "$BootDrv\" -Force
+        Log-Msg "Giai nen hoan tat."
+    } catch { Log-Msg "LOI GIAI NEN: $($_.Exception.Message)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
 
     Log-Msg "=== XONG! ==="; Log-Msg "GLIM_DATA ($DataDrv): Chep ISO vao day."
     [System.Windows.Forms.MessageBox]::Show("Thanh Cong!", "Success")
