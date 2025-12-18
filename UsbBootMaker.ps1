@@ -1,247 +1,282 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (CYBER UI EDITION)
-    Features: 
-    - UI: Responsive Grid Layout (TableLayoutPanel), Neon Borders, Modern Cards
-    - Core: Dual-Engine (Get-Disk/WMI), Auto ISO Folders, Custom Partitioning
+    USB BOOT MAKER - PHAT TAN PC (FINAL FIX UNALLOCATED DATA)
+    Fix: Tách quy trình DiskPart làm 2 bước để đảm bảo phân vùng Data được tạo thành công.
+    UI: Thêm Scrollbar cho màn hình nhỏ.
 #>
 
-# 1. SETUP & ENCODING
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-# 2. CONFIG
+# 2. CẤU HÌNH
 $Global:JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/bootkits.json"
 $Global:TempDir = "$env:TEMP\UsbBootMaker"
 if (!(Test-Path $Global:TempDir)) { New-Item -ItemType Directory -Path $Global:TempDir -Force | Out-Null }
 
-# 3. THEME (CYBER DARK)
+# 3. GIAO DIỆN (THEME)
 $Theme = @{
     BgForm   = [System.Drawing.Color]::FromArgb(20, 20, 25)
     Card     = [System.Drawing.Color]::FromArgb(35, 35, 40)
     Text     = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    Muted    = [System.Drawing.Color]::FromArgb(150, 150, 150)
-    Cyan     = [System.Drawing.Color]::FromArgb(0, 255, 255) # Neon Glow
-    Red      = [System.Drawing.Color]::FromArgb(255, 50, 80)
+    Cyan     = [System.Drawing.Color]::FromArgb(0, 255, 255)
     InputBg  = [System.Drawing.Color]::FromArgb(50, 50, 55)
+    Warn     = [System.Drawing.Color]::FromArgb(255, 50, 80)
 }
 
-# --- HELPER GUI ---
+# --- HÀM HỖ TRỢ ---
 function Add-GlowBorder ($Panel) {
-    $Panel.Add_Paint({
-        param($s, $e)
-        $Pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(0, 255, 255), 1) # Cyan Border
-        $Rect = $s.ClientRectangle; $Rect.Width-=1; $Rect.Height-=1
-        $e.Graphics.DrawRectangle($Pen, $Rect)
-        $Pen.Dispose()
+    $Panel.Add_Paint({ param($s,$e) 
+        $p = New-Object System.Drawing.Pen([System.Drawing.Color]::Cyan, 1)
+        $r = $s.ClientRectangle; $r.Width-=1; $r.Height-=1
+        $e.Graphics.DrawRectangle($p, $r)
+        $p.Dispose() 
     })
 }
 
-# --- FORM INIT ---
+function Log-Msg ($M) { 
+    $TxtLog.Text += "[$(Get-Date -F HH:mm:ss)] $M`r`n"
+    $TxtLog.SelectionStart = $TxtLog.Text.Length
+    $TxtLog.ScrollToCaret()
+    [System.Windows.Forms.Application]::DoEvents() 
+}
+
+# --- KHỞI TẠO FORM ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "USB BOOT MAKER - PHÁT TẤN PC (CYBER EDITION)"
-$Form.Size = New-Object System.Drawing.Size(900, 700)
+$Form.Text = "USB BOOT MAKER - PHÁT TẤN PC (FIX DATA)"
+$Form.Size = New-Object System.Drawing.Size(900, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm
 $Form.ForeColor = $Theme.Text
-$Form.Padding = New-Object System.Windows.Forms.Padding(15)
+$Form.AutoScroll = $true # <--- THÊM THANH TRƯỢT CHO FORM
 
 $F_Title = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
-$F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $F_Norm  = New-Object System.Drawing.Font("Segoe UI", 10)
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9)
 
-# --- LAYOUT CHÍNH (VERTICAL STACK) ---
-# Dùng TableLayoutPanel để chia dòng, đảm bảo không cái nào đè cái nào
-$MainLayout = New-Object System.Windows.Forms.TableLayoutPanel
-$MainLayout.Dock = "Fill"
-$MainLayout.ColumnCount = 1
-$MainLayout.RowCount = 5
-# Tỷ lệ chiều cao các dòng: Header(Auto), USB(Auto), Kit(Auto), Settings(Auto), Log(Fill)
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) 
-$Form.Controls.Add($MainLayout)
+# CONTAINER CHÍNH (Để chứa các thành phần cho gọn)
+$MainContainer = New-Object System.Windows.Forms.TableLayoutPanel
+$MainContainer.Dock = "Top" # Dock Top để thanh trượt hoạt động đúng
+$MainContainer.AutoSize = $true
+$MainContainer.ColumnCount = 1
+$MainContainer.Padding = New-Object System.Windows.Forms.Padding(15)
+$Form.Controls.Add($MainContainer)
 
-# --- 1. HEADER TITLE ---
+# 1. HEADER
 $PnlTitle = New-Object System.Windows.Forms.Panel; $PnlTitle.Height = 50; $PnlTitle.Dock="Top"; $PnlTitle.Margin="0,0,0,10"
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ USB BOOT MAKER ULTIMATE"; $LblTitle.Font = $F_Title; $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location="10,10"
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ USB BOOT CREATOR ULTIMATE"; $LblTitle.Font = $F_Title; $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true
 $PnlTitle.Controls.Add($LblTitle)
-$MainLayout.Controls.Add($PnlTitle, 0, 0)
+$MainContainer.Controls.Add($PnlTitle)
 
-# --- FUNCTION TẠO CARD (PANEL) ---
-function New-CardPanel ($Title) {
+# HÀM TẠO CARD
+function New-Card ($Title) { 
     $P = New-Object System.Windows.Forms.Panel
     $P.BackColor = $Theme.Card
     $P.Padding = New-Object System.Windows.Forms.Padding(10)
     $P.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 15)
     $P.Dock = "Top"
-    $P.AutoSize = $true # Quan trọng: Tự giãn theo nội dung bên trong
+    $P.AutoSize = $true
     Add-GlowBorder $P
-    
-    $L = New-Object System.Windows.Forms.Label; $L.Text = $Title; $L.Font = $F_Bold; $L.ForeColor = $Theme.Muted; $L.Dock = "Top"; $L.Height = 25
+    $L = New-Object System.Windows.Forms.Label; $L.Text = $Title; $L.Font = $F_Norm; $L.ForeColor = "Gray"; $L.Dock = "Top"; $L.Height = 25
     $P.Controls.Add($L)
-    return $P
+    return $P 
 }
 
-# --- 2. CARD: CHỌN USB ---
-$CardUSB = New-CardPanel "1. CHỌN THIẾT BỊ USB (SẼ FORMAT)"
-$LayoutUSB = New-Object System.Windows.Forms.TableLayoutPanel; $LayoutUSB.Dock="Top"; $LayoutUSB.Height=40; $LayoutUSB.ColumnCount=2
-$LayoutUSB.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 80)))
-$LayoutUSB.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 20)))
-
+# 2. CHỌN USB
+$CardUSB = New-Card "1. CHỌN THIẾT BỊ USB"
+$LayUSB = New-Object System.Windows.Forms.TableLayoutPanel; $LayUSB.Dock="Top"; $LayUSB.Height=40; $LayUSB.ColumnCount=2
+$LayUSB.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 80)))
 $CbUSB = New-Object System.Windows.Forms.ComboBox; $CbUSB.Dock="Fill"; $CbUSB.Font=$F_Norm; $CbUSB.BackColor=$Theme.InputBg; $CbUSB.ForeColor="White"; $CbUSB.DropDownStyle="DropDownList"
-$BtnRef = New-Object System.Windows.Forms.Button; $BtnRef.Text="🔄 LÀM MỚI"; $BtnRef.Dock="Fill"; $BtnRef.BackColor=$Theme.InputBg; $BtnRef.ForeColor="White"; $BtnRef.FlatStyle="Flat"
+$BtnRef = New-Object System.Windows.Forms.Button; $BtnRef.Text="REFRESH"; $BtnRef.Dock="Fill"; $BtnRef.BackColor=$Theme.InputBg; $BtnRef.ForeColor="White"; $BtnRef.FlatStyle="Flat"
+$LayUSB.Controls.Add($CbUSB,0,0); $LayUSB.Controls.Add($BtnRef,1,0)
+$CardUSB.Controls.Add($LayUSB)
+$MainContainer.Controls.Add($CardUSB)
 
-$LayoutUSB.Controls.Add($CbUSB, 0, 0); $LayoutUSB.Controls.Add($BtnRef, 1, 0)
-$CardUSB.Controls.Add($LayoutUSB)
-$MainLayout.Controls.Add($CardUSB, 0, 1)
-
-# --- 3. CARD: CHỌN BOOT KIT ---
-$CardKit = New-CardPanel "2. CHỌN PHIÊN BẢN BOOT (TỪ GITHUB)"
+# 3. CHỌN KIT
+$CardKit = New-Card "2. CHỌN BOOT KIT"
 $CbKit = New-Object System.Windows.Forms.ComboBox; $CbKit.Dock="Top"; $CbKit.Font=$F_Norm; $CbKit.BackColor=$Theme.InputBg; $CbKit.ForeColor="White"; $CbKit.DropDownStyle="DropDownList"
 $CardKit.Controls.Add($CbKit)
-$MainLayout.Controls.Add($CardKit, 0, 2)
+$MainContainer.Controls.Add($CardKit)
 
-# --- 4. CARD: CẤU HÌNH (GRID LAYOUT - KHÔNG BAO GIỜ LỖI) ---
-$CardSet = New-Object System.Windows.Forms.Panel; $CardSet.BackColor=$Theme.Card; $CardSet.Padding="10,10,10,10"; $CardSet.Dock="Top"; $CardSet.Height=160; Add-GlowBorder $CardSet
-$LblSet = New-Object System.Windows.Forms.Label; $LblSet.Text="3. TÙY CHỈNH NÂNG CAO"; $LblSet.Font=$F_Bold; $LblSet.ForeColor=$Theme.Muted; $LblSet.Dock="Top"; $LblSet.Height=25
-$CardSet.Controls.Add($LblSet)
-
-# Grid 2 dòng 3 cột cho Setting
-$GridSet = New-Object System.Windows.Forms.TableLayoutPanel; $GridSet.Dock="Fill"; $GridSet.ColumnCount=3; $GridSet.RowCount=2
+# 4. CẤU HÌNH
+$CardSet = New-Card "3. CẤU HÌNH PHÂN VÙNG (QUAN TRỌNG)"
+$GridSet = New-Object System.Windows.Forms.TableLayoutPanel; $GridSet.Dock="Top"; $GridSet.Height=140; $GridSet.ColumnCount=3; $GridSet.RowCount=2
 $GridSet.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33)))
 $GridSet.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33)))
 $GridSet.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33)))
 
-function Add-Input ($Label, $Control, $Row, $Col) {
-    $P = New-Object System.Windows.Forms.Panel; $P.Dock="Fill"; $P.Padding="5,5,5,5"
+function Add-Input ($Label, $Ctrl, $R, $C) { 
+    $P = New-Object System.Windows.Forms.Panel; $P.Dock="Fill"; $P.Padding=New-Object System.Windows.Forms.Padding(5)
     $L = New-Object System.Windows.Forms.Label; $L.Text=$Label; $L.Dock="Top"; $L.Height=20; $L.ForeColor="Silver"
-    $Control.Dock="Top"; $Control.Font=$F_Norm; $Control.BackColor=$Theme.InputBg; $Control.ForeColor="White"
-    $P.Controls.Add($Control); $P.Controls.Add($L)
-    $GridSet.Controls.Add($P, $Col, $Row)
+    $Ctrl.Dock="Top"; $Ctrl.Font=$F_Norm; $Ctrl.BackColor=$Theme.InputBg; $Ctrl.ForeColor="White"
+    $P.Controls.Add($Ctrl); $P.Controls.Add($L)
+    $GridSet.Controls.Add($P, $C, $R) 
 }
 
-# Row 1
-$CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy+UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex=0; $CbStyle.DropDownStyle="DropDownList"
+$CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR", "GPT")); $CbStyle.SelectedIndex=0; $CbStyle.DropDownStyle="DropDownList"
 Add-Input "Kiểu Partition:" $CbStyle 0 0
 
 $NumSize = New-Object System.Windows.Forms.NumericUpDown; $NumSize.Minimum=100; $NumSize.Maximum=8192; $NumSize.Value=512
-Add-Input "Dung lượng Boot (MB):" $NumSize 0 1
+Add-Input "Size Boot (MB):" $NumSize 0 1
 
 $TxtBoot = New-Object System.Windows.Forms.TextBox; $TxtBoot.Text="GLIM_BOOT"
 Add-Input "Nhãn Boot:" $TxtBoot 0 2
 
-# Row 2
 $CbFS = New-Object System.Windows.Forms.ComboBox; $CbFS.Items.AddRange(@("NTFS", "exFAT", "FAT32")); $CbFS.SelectedIndex=0; $CbFS.DropDownStyle="DropDownList"
 Add-Input "Định dạng Data:" $CbFS 1 0
 
 $TxtData = New-Object System.Windows.Forms.TextBox; $TxtData.Text="GLIM_DATA"
 Add-Input "Nhãn Data:" $TxtData 1 1
 
-# Empty Slot Row 2 Col 2 (Optional)
-
 $CardSet.Controls.Add($GridSet)
-$MainLayout.Controls.Add($CardSet, 0, 3)
+$MainContainer.Controls.Add($CardSet)
 
-# --- 5. LOG AREA & START BUTTON ---
-$PnlLog = New-Object System.Windows.Forms.Panel; $PnlLog.Dock="Fill"; $PnlLog.Padding="0,15,0,0"
+# 5. LOG (LOG nằm dưới cùng container)
+$PnlLog = New-Object System.Windows.Forms.Panel; $PnlLog.Height=200; $PnlLog.Dock="Top"; $PnlLog.Margin="0,10,0,0"
 $TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline=$true; $TxtLog.Dock="Fill"; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.Font=$F_Code; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"
 $PnlLog.Controls.Add($TxtLog)
-$MainLayout.Controls.Add($PnlLog, 0, 4)
+$MainContainer.Controls.Add($PnlLog)
 
-# Footer Button (Dock Bottom của Form chính)
-$BtnStart = New-Object System.Windows.Forms.Button
-$BtnStart.Text = "🚀 BẮT ĐẦU TẠO USB"
-$BtnStart.Font = $F_Title
-$BtnStart.BackColor = $Theme.Cyan
-$BtnStart.ForeColor = "Black" # Chữ đen trên nền Cyan cho nổi
-$BtnStart.FlatStyle = "Flat"
-$BtnStart.Dock = "Bottom"
-$BtnStart.Height = 60
-$BtnStart.Cursor = "Hand"
-$Form.Controls.Add($BtnStart)
+# 6. START BUTTON (Dock Bottom của Form chính, không nằm trong Container cuộn)
+$PnlFooter = New-Object System.Windows.Forms.Panel; $PnlFooter.Dock="Bottom"; $PnlFooter.Height=60; $PnlFooter.Padding=New-Object System.Windows.Forms.Padding(100, 10, 100, 10)
+$BtnStart = New-Object System.Windows.Forms.Button; $BtnStart.Text="🚀 BẮT ĐẦU TẠO USB"; $BtnStart.Font=$F_Title; $BtnStart.BackColor=$Theme.Cyan; $BtnStart.ForeColor="Black"; $BtnStart.FlatStyle="Flat"; $BtnStart.Dock="Fill"
+$PnlFooter.Controls.Add($BtnStart)
+$Form.Controls.Add($PnlFooter) # Add vào Form để luôn hiện
 
-# --- LOGIC CODE (GIỮ NGUYÊN CORE CŨ) ---
+# --- LOGIC XỬ LÝ (FIXED PARTITION) ---
 
-function Log-Msg ($Msg) { $TxtLog.Text += "[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n"; $TxtLog.SelectionStart = $TxtLog.Text.Length; $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
+function Get-DL ($Label) {
+    # Ưu tiên: WMI Volume (Chính xác nhất sau khi DiskPart)
+    try { 
+        $w = Get-WmiObject Win32_Volume -Filter "Label='$Label'" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($w.DriveLetter) { return $w.DriveLetter } 
+    } catch {}
 
-function Get-DriveLetterByLabel ($Label) {
-    if (Get-Command "Get-Volume" -ErrorAction SilentlyContinue) {
-        try { Get-Disk | Update-Disk -ErrorAction SilentlyContinue; $Vol = Get-Volume | Where { $_.FileSystemLabel -eq $Label } | Select -First 1; if ($Vol.DriveLetter) { return "$($Vol.DriveLetter):" } } catch {}
-    }
-    try { $W = Get-WmiObject Win32_Volume -Filter "Label = '$Label'" -EA 0 | Select -First 1; if($W.DriveLetter){return $W.DriveLetter} } catch {}
-    try { $D = Get-WmiObject Win32_LogicalDisk; foreach($i in $D){if($i.VolumeName -eq $Label){return $i.DeviceID}} } catch {}
+    # Dự phòng: LogicalDisk
+    try { 
+        $d = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.VolumeName -eq $Label } | Select-Object -First 1
+        if ($d.DeviceID) { return $d.DeviceID }
+    } catch {}
+    
     return $null
 }
 
-function Run-DP ($Script) { $F="$Global:TempDir\dp.txt"; [IO.File]::WriteAllText($F, $Script); Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow }
-
-function Load-UsbList {
-    $CbUSB.Items.Clear(); $UseWMI=$false
-    if (Get-Command "Get-Disk" -EA 0) {
-        try {
-            $Ds = @(Get-Disk -EA Stop | Where { $_.BusType -eq "USB" -or $_.MediaType -eq "Removable" })
-            if($Ds.Count -eq 0){throw}; foreach($D in $Ds){ $CbUSB.Items.Add("Disk $($D.Number): $($D.FriendlyName) ($([Math]::Round($D.Size/1GB,1)) GB)") }
-        } catch { $UseWMI=$true }
-    } else { $UseWMI=$true }
-    if($UseWMI){ try{$Ds=@(Get-WmiObject Win32_DiskDrive | Where{$_.InterfaceType -eq "USB"}); foreach($D in $Ds){ $CbUSB.Items.Add("Disk $($D.Index): $($D.Model)") }}catch{} }
-    if($CbUSB.Items.Count -gt 0){$CbUSB.SelectedIndex=0}else{$CbUSB.Items.Add("No USB Found"); $CbUSB.SelectedIndex=0}
+function Run-DP ($Script) { 
+    $f = "$Global:TempDir\dp.txt"
+    [IO.File]::WriteAllText($f, $Script)
+    $p = Start-Process "diskpart" "/s `"$f`"" -Wait -NoNewWindow -PassThru
+    return $p.ExitCode
 }
 
-function Load-Kits {
+# LOGIC LOAD USB (DUAL MODE)
+function Load-U {
+    $CbUSB.Items.Clear(); $useWMI = $false
+    # Cách 1: Get-Disk (Nhanh)
+    if (Get-Command "Get-Disk" -ErrorAction SilentlyContinue) {
+        try {
+            $ds = @(Get-Disk -ErrorAction Stop | Where-Object { $_.BusType -eq "USB" -or $_.MediaType -eq "Removable" })
+            if ($ds.Count -eq 0) { throw }
+            foreach ($d in $ds) { 
+                $size = [Math]::Round($d.Size / 1GB, 1)
+                $CbUSB.Items.Add("Disk $($d.Number): $($d.FriendlyName) ($size GB)") 
+            }
+        } catch { $useWMI = $true }
+    } else { $useWMI = $true }
+
+    # Cách 2: WMI (Dành cho Win Lite)
+    if ($useWMI) {
+        try {
+            $ds = @(Get-WmiObject Win32_DiskDrive | Where-Object { $_.InterfaceType -eq "USB" -or $_.MediaType -match "Removable" })
+            foreach ($d in $ds) { 
+                $size = [Math]::Round($d.Size / 1GB, 1)
+                $CbUSB.Items.Add("Disk $($d.Index): $($d.Model) ($size GB)") 
+            }
+        } catch {}
+    }
+    if ($CbUSB.Items.Count -gt 0) { $CbUSB.SelectedIndex=0 } else { $CbUSB.Items.Add("Không tìm thấy USB"); $CbUSB.SelectedIndex=0 }
+}
+
+function Load-K {
     $CbKit.Items.Clear(); Log-Msg "Đang tải danh sách Boot Kit..."
-    try {
+    try { 
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $Json = Invoke-RestMethod -Uri "$($Global:JsonUrl)?t=$(Get-Date -UFormat %s)" -Headers @{"Cache-Control"="no-cache"} -ErrorAction Stop
-        if ($Json) { foreach ($I in $Json) { if($I.Name){$CbKit.Items.Add($I.Name); $Global:KitData=$Json} } }
+        $j = Invoke-RestMethod -Uri "$($Global:JsonUrl)?t=$(Get-Date -UFormat %s)" -Headers @{"Cache-Control"="no-cache"} -ErrorAction Stop
+        if ($j) { foreach ($i in $j) { if($i.Name) { $CbKit.Items.Add($i.Name); $Global:KitData=$j } } }
         if ($CbKit.Items.Count -gt 0) { $CbKit.SelectedIndex=0; Log-Msg "Đã tải xong." }
-    } catch { $CbKit.Items.Add("Chế độ Demo (Mất mạng)"); $CbKit.SelectedIndex=0; Log-Msg "Lỗi tải JSON." }
+    } catch { 
+        $CbKit.Items.Add("Chế độ Demo (Offline)"); $CbKit.SelectedIndex=0; Log-Msg "Lỗi tải Config." 
+    }
 }
 
 $BtnStart.Add_Click({
-    if ($CbUSB.SelectedItem -match "Disk (\d+)") { $DiskID = $Matches[1] } else { return }
-    $Kit = $Global:KitData | Where {$_.Name -eq $CbKit.SelectedItem} | Select -First 1
-    if (!$Kit) { return }
-    if ([System.Windows.Forms.MessageBox]::Show("XÓA SẠCH DỮ LIỆU DISK $DiskID?","CẢNH BÁO","YesNo","Warning") -ne "Yes") { return }
+    if ($CbUSB.SelectedItem -match "Disk (\d+)") { $ID = $Matches[1] } else { return }
+    $K = $Global:KitData | Where-Object { $_.Name -eq $CbKit.SelectedItem } | Select-Object -First 1
+    if (!$K) { return }
+    if ([System.Windows.Forms.MessageBox]::Show("XÓA SẠCH DỮ LIỆU TRÊN DISK $ID?`n`nToàn bộ dữ liệu sẽ mất vĩnh viễn!","CẢNH BÁO","YesNo","Warning") -ne "Yes") { return }
 
     $BtnStart.Enabled=$false; $Form.Cursor="WaitCursor"
+
+    # 1. TẢI FILE ZIP
+    $Zip = "$Global:TempDir\$($K.FileName)"
+    if (!(Test-Path $Zip)) { 
+        Log-Msg "Đang tải Boot Kit..."
+        try { (New-Object Net.WebClient).DownloadFile($K.Url, $Zip) } 
+        catch { Log-Msg "Lỗi tải file!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return } 
+    }
+
+    # 2. DISKPART (FIX LỖI UNALLOCATED)
+    $St = if ($CbStyle.SelectedIndex -eq 0) { "mbr" } else { "gpt" }
+    $Sz = $NumSize.Value
+    $BL = $TxtBoot.Text
+    $DL = $TxtData.Text
+    $FS = $CbFS.SelectedItem
+
+    Log-Msg "Đang xử lý phân vùng... (Bước 1: Boot)"
     
-    # 1. Download
-    $ZipPath = "$Global:TempDir\$($Kit.FileName)"
-    if (!(Test-Path $ZipPath)) {
-        Log-Msg "Đang tải: $($Kit.FileName)..."
-        try { (New-Object Net.WebClient).DownloadFile($Kit.Url, $ZipPath) } catch { Log-Msg "Lỗi tải file!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    # Bước 1: Clean và tạo Boot trước
+    $Cmd1 = "select disk $ID`nclean`nconvert $St`nrescan"
+    $Cmd1 += "`ncreate partition primary size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign"
+    Run-DP $Cmd1
+    
+    Start-Sleep -Seconds 3 # Nghỉ để Windows nhận Boot Partition
+    Log-Msg "Đang xử lý phân vùng... (Bước 2: Data)"
+
+    # Bước 2: Tạo Data với phần còn lại (Fix lỗi Unallocated)
+    $Cmd2 = "select disk $ID`nrescan`ncreate partition primary`nformat fs=$FS quick label=`"$DL`"`nassign`nexit"
+    Run-DP $Cmd2
+    
+    Log-Msg "Đợi Windows nhận diện ổ đĩa (10s)..."
+    Start-Sleep -Seconds 10
+
+    # 3. TÌM Ổ ĐĨA
+    for ($i=1; $i -le 5; $i++) { 
+        $B = Get-DL $BL
+        $D = Get-DL $DL
+        if ($B -and $D) { break }
+        Log-Msg "Đang dò tìm... (Lần $i)"; Start-Sleep -Seconds 3 
     }
 
-    # 2. DiskPart
-    $Style = if($CbStyle.SelectedIndex -eq 0){"mbr"}else{"gpt"}; $Size=$NumSize.Value; $BL=$TxtBoot.Text; $DL=$TxtData.Text; $FS=$CbFS.SelectedItem
-    Log-Msg "Đang Format: $Style | Boot: $Size MB..."
-    $Cmd="sel disk $DiskID`nclean`nconvert $Style`ncreate part pri size=$Size`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit"
-    Run-DP $Cmd
-    Log-Msg "Đang đợi Windows (10s)..."; Start-Sleep 10
+    if (!$B) { Log-Msg "Lỗi: Không tìm thấy ổ Boot ($BL)!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    Log-Msg "Đã tìm thấy: Boot ($B) | Data ($D)"
 
-    # 3. Detect
-    for($i=1;$i -le 3;$i++){ $BDrv=Get-DriveLetterByLabel $BL; $DDrv=Get-DriveLetterByLabel $DL; if($BDrv){break}; Start-Sleep 3 }
-    if(!$BDrv){ Log-Msg "Lỗi tìm ổ Boot!"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    # 4. GIẢI NÉN
+    Log-Msg "Đang giải nén Boot Kit vào $B..."
+    try { Expand-Archive -Path $Zip -DestinationPath "$B\" -Force } catch { Log-Msg "Lỗi giải nén: $($_.Exception.Message)" }
 
-    # 4. Extract
-    Log-Msg "Đang giải nén vào $BDrv..."
-    try { Expand-Archive -Path $ZipPath -DestinationPath "$BDrv\" -Force } catch {}
-
-    # 5. Folders
-    if($DDrv){
-        Log-Msg "Tạo thư mục ISO trên $DDrv..."
-        @("iso\windows","iso\linux","iso\android","iso\utilities","iso\dos") | ForEach { New-Item -ItemType Directory -Path "$DDrv\$_" -Force | Out-Null }
+    # 5. TẠO FOLDER ISO
+    if ($D) {
+        Log-Msg "Đang tạo thư mục ISO trên $D..."
+        $Folders = @("iso\windows", "iso\linux", "iso\android", "iso\utilities", "iso\dos")
+        foreach ($f in $Folders) { New-Item -ItemType Directory -Path "$D\$f" -Force | Out-Null }
+        Set-Content "$D\HUONG_DAN.txt" "Chép file ISO vào các thư mục trong 'iso' để boot nhé!"
+    } else {
+        Log-Msg "Cảnh báo: Không tìm thấy ổ Data ($DL) để tạo thư mục ISO."
     }
 
-    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("Xong!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
-    if($DDrv){ Invoke-Item "$DDrv\iso" }
+    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("Thành công!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    if ($D) { Invoke-Item "$D\iso" }
 })
 
-$BtnRef.Add_Click({ Load-UsbList; Load-Kits })
-$Form.Add_Load({ Load-UsbList; Load-Kits; Log-Msg "Sẵn sàng." })
+$BtnRef.Add_Click({ Load-U; Load-K })
+$Form.Add_Load({ Load-U; Load-K; Log-Msg "Sẵn sàng." })
 [System.Windows.Forms.Application]::Run($Form)
