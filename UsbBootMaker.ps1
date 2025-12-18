@@ -94,7 +94,7 @@ $MainLayout.RowCount = 5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Header
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # USB
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Kit
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Settings
+$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 200))) # Settings (Cao cố định để cuộn)
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) # Log
 $Form.Controls.Add($MainLayout)
 
@@ -126,13 +126,13 @@ $CbKit = New-Object System.Windows.Forms.ComboBox; $CbKit.Dock="Top"; $CbKit.Fon
 $CardKit.Controls.Add($CbKit); $MainLayout.Controls.Add($CardKit, 0, 2)
 
 # 4. CẤU HÌNH (CÓ THANH CUỘN)
-$CardSet = New-Object System.Windows.Forms.GroupBox; $CardSet.Text="3. TÙY CHỈNH NÂNG CAO"; $CardSet.Height=160; $CardSet.Dock="Top"; $CardSet.ForeColor=[System.Drawing.Color]::Gold; $CardSet.Padding="5,20,5,5"
+$CardSet = New-Object System.Windows.Forms.GroupBox; $CardSet.Text="3. TÙY CHỈNH NÂNG CAO (KÉO XUỐNG ĐỂ XEM THÊM)"; $CardSet.Dock="Fill"; $CardSet.ForeColor=[System.Drawing.Color]::Gold; $CardSet.Padding="5,20,5,5"
 # Tạo Panel cuộn bên trong GroupBox
 $PnlScrollSet = New-Object System.Windows.Forms.Panel; $PnlScrollSet.Dock="Fill"; $PnlScrollSet.AutoScroll=$true
 $CardSet.Controls.Add($PnlScrollSet)
 
 # Grid bên trong Panel cuộn
-$GridSet = New-Object System.Windows.Forms.TableLayoutPanel; $GridSet.Dock="Top"; $GridSet.AutoSize=$true; $GridSet.ColumnCount=3; $GridSet.RowCount=2
+$GridSet = New-Object System.Windows.Forms.TableLayoutPanel; $GridSet.Dock="Top"; $GridSet.AutoSize=$true; $GridSet.ColumnCount=3; $GridSet.RowCount=3 # Tăng số dòng lên
 $GridSet.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33)))
 $GridSet.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33)))
 $GridSet.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33)))
@@ -145,6 +145,7 @@ function Add-Setting ($L, $C, $R, $Cl) {
     $P.Controls.Add($C); $P.Controls.Add($Lb); $GridSet.Controls.Add($P, $Cl, $R)
 }
 
+# Hàng 1
 $CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy+UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex=0; $CbStyle.DropDownStyle="DropDownList"
 Add-Setting "Kiểu Partition:" $CbStyle 0 0
 
@@ -154,11 +155,16 @@ Add-Setting "Dung lượng Boot (MB):" $NumSize 0 1
 $TxtBoot = New-Object System.Windows.Forms.TextBox; $TxtBoot.Text="GLIM_BOOT"
 Add-Setting "Nhãn Boot:" $TxtBoot 0 2
 
+# Hàng 2
 $CbFS = New-Object System.Windows.Forms.ComboBox; $CbFS.Items.AddRange(@("NTFS", "exFAT", "FAT32")); $CbFS.SelectedIndex=0; $CbFS.DropDownStyle="DropDownList"
 Add-Setting "Định dạng Data:" $CbFS 1 0
 
 $TxtData = New-Object System.Windows.Forms.TextBox; $TxtData.Text="GLIM_DATA"
 Add-Setting "Nhãn Data:" $TxtData 1 1
+
+# (Demo) Hàng 3: Thêm nút giả để test thanh cuộn
+$LblDemo = New-Object System.Windows.Forms.Label; $LblDemo.Text="[Vùng mở rộng...]"; $LblDemo.ForeColor="Gray"
+Add-Setting "Thông tin thêm:" $LblDemo 1 2
 
 $MainLayout.Controls.Add($CardSet, 0, 3)
 
@@ -217,23 +223,25 @@ $BtnStart.Add_Click({
         if (!(Download-File $Kit.Url $ZipPath)) { $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     }
 
-    # 2. DISKPART (FIXED LOGIC)
+    # 2. DISKPART (FIX LOGIC UNALLOCATED)
     $Style = if($CbStyle.SelectedIndex -eq 0){"mbr"}else{"gpt"}; $Size=$NumSize.Value; $BL=$TxtBoot.Text; $DL=$TxtData.Text; $FS=$CbFS.SelectedItem
     Log-Msg "Đang Format: $Style | Boot: $Size MB | Data: $FS"
     
-    # Kịch bản DiskPart CHUẨN:
-    # 1. Clean & Convert
-    # 2. Tạo Boot -> Format -> Active -> Assign
-    # 3. Tạo Data (KHÔNG set size -> Lấy hết phần còn lại) -> Format -> Assign
+    # Script DiskPart mới (Chậm nhưng chắc):
+    # - Clean xong Rescan để win nhận diện lại ổ trống
+    # - Tạo Boot -> Format
+    # - Tạo Data (Không set size để lấy hết) -> Select partition 2 -> Format
     $Cmd = @"
 select disk $DiskID
 clean
 convert $Style
+rescan
 create partition primary size=$Size
 format fs=fat32 quick label="$BL"
 active
 assign
 create partition primary
+select partition 2
 format fs=$FS quick label="$DL"
 assign
 exit
