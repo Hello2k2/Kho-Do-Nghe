@@ -1,141 +1,197 @@
+# ISODownloader_v2.1_Turbo.ps1
+# PHAT TAN PC - ISO DOWNLOADER EXTREME V2.1 (TURBO NATIVE ENGINE)
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # --- CẤU HÌNH ---
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list.json"
 
-# Tối ưu kết nối
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-[System.Net.ServicePointManager]::DefaultConnectionLimit = 1000
+# --- TỐI ƯU KẾT NỐI (CONNECTION BOOST MAX) ---
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+[System.Net.ServicePointManager]::DefaultConnectionLimit = 512 # Mở max cổng kết nối
 [System.Net.ServicePointManager]::Expect100Continue = $false
+[System.Net.ServicePointManager]::UseNagleAlgorithm = $false 
+[System.Net.ServicePointManager]::CheckCertificateRevocationList = $false # Bỏ qua check thu hồi chứng chỉ cho nhanh
+
+# --- CHECK ARIA2 ---
+function Get-Aria2Path {
+    $List = @(".\aria2c.exe", "$PSScriptRoot\aria2c.exe", "aria2c.exe")
+    foreach ($Path in $List) {
+        if (Get-Command $Path -ErrorAction SilentlyContinue) { return (Get-Command $Path).Source }
+    }
+    return $null
+}
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ISO DOWNLOADER EXTREME - PHAT TAN PC (CUSTOM THREADS)"
-$Form.Size = New-Object System.Drawing.Size(700, 520) # Cao hơn chút
+$Form.Text = "ISO DOWNLOADER EXTREME V2.1 - PHAT TAN PC"
+$Form.Size = New-Object System.Drawing.Size(720, 520)
 $Form.StartPosition = "CenterScreen"
-$Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+$Form.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 30) # Màu tối hơn chút cho ngầu
 $Form.ForeColor = "White"
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 $Global:IsoData = @()
 
+# -- FONT SETUP --
+$FontTitle = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+$FontNormal = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+$FontBold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$FontBigBtn = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+
 # Header
-$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (ENGINE DA LUONG)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.Font="Segoe UI, 12, Bold"; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
+$Lbl = New-Object System.Windows.Forms.Label
+$Lbl.Text = "KHO TAI NGUYEN (TURBO ENGINE)"
+$Lbl.AutoSize = $true
+$Lbl.Location = "20,15"
+$Lbl.Font = $FontTitle
+$Lbl.ForeColor = "Cyan"
+$Form.Controls.Add($Lbl)
 
-# Filter
-$GbFilter = New-Object System.Windows.Forms.GroupBox; $GbFilter.Text="Bo Loc & Cau Hinh"; $GbFilter.Location="20,50"; $GbFilter.Size="640,80"; $GbFilter.ForeColor="Yellow"; $Form.Controls.Add($GbFilter)
+# Aria2 Status
+$LblAria = New-Object System.Windows.Forms.Label
+$AriaPath = Get-Aria2Path
+if ($AriaPath) { 
+    $LblAria.Text = "[ARIA2: ON]" 
+    $LblAria.ForeColor = "Lime"
+} else { 
+    $LblAria.Text = "[NATIVE TURBO: ON]" 
+    $LblAria.ForeColor = "Orange"
+}
+$LblAria.Location = "520,20"; $LblAria.AutoSize=$true; $LblAria.Font=$FontBold
+$Form.Controls.Add($LblAria)
 
-$CbType = New-Object System.Windows.Forms.ComboBox; $CbType.Location="20,30"; $CbType.Size="130,30"; $CbType.DropDownStyle="DropDownList"; $GbFilter.Controls.Add($CbType)
-$CbBit = New-Object System.Windows.Forms.ComboBox; $CbBit.Location="160,30"; $CbBit.Size="80,30"; $CbBit.DropDownStyle="DropDownList"; $CbBit.Items.AddRange(@("All", "x64", "x86", "arm64")); $CbBit.SelectedIndex=0; $GbFilter.Controls.Add($CbBit)
+# Filter Box
+$GbFilter = New-Object System.Windows.Forms.GroupBox
+$GbFilter.Text = "Bo Loc & Cau Hinh"
+$GbFilter.Location = "20,60"
+$GbFilter.Size = "660,80"
+$GbFilter.ForeColor = "Yellow"
+$GbFilter.Font = $FontBold
+$Form.Controls.Add($GbFilter)
 
-# --- THREAD SELECTOR (MỚI) ---
-$LblThread = New-Object System.Windows.Forms.Label; $LblThread.Text="So Luong:"; $LblThread.Location="260,33"; $LblThread.AutoSize=$true; $GbFilter.Controls.Add($LblThread)
-$CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location="320,30"; $CbThread.Size="60,30"; $CbThread.DropDownStyle="DropDownList"
-$CbThread.Items.AddRange(@("1", "4", "8", "16", "32")); $CbThread.SelectedItem="8"; $GbFilter.Controls.Add($CbThread)
+# Combos
+$CbType = New-Object System.Windows.Forms.ComboBox
+$CbType.Location = "20,30"; $CbType.Size = "150,30"; $CbType.DropDownStyle = "DropDownList"; $CbType.Font = $FontNormal
+$GbFilter.Controls.Add($CbType)
 
-$BtnLoad = New-Object System.Windows.Forms.Button; $BtnLoad.Text="LAM MOI"; $BtnLoad.Location="500,25"; $BtnLoad.Size="120,35"; $BtnLoad.BackColor="DimGray"; $BtnLoad.ForeColor="White"; $GbFilter.Controls.Add($BtnLoad)
+$CbBit = New-Object System.Windows.Forms.ComboBox
+$CbBit.Location = "180,30"; $CbBit.Size = "100,30"; $CbBit.DropDownStyle = "DropDownList"; $CbBit.Font = $FontNormal
+$CbBit.Items.AddRange(@("All", "x64", "x86", "arm64")); $CbBit.SelectedIndex = 0
+$GbFilter.Controls.Add($CbBit)
 
-# List
-$LblRes = New-Object System.Windows.Forms.Label; $LblRes.Text="Chon File:"; $LblRes.Location="20,140"; $LblRes.AutoSize=$true; $Form.Controls.Add($LblRes)
-$CbResult = New-Object System.Windows.Forms.ComboBox; $CbResult.Location="20,165"; $CbResult.Size="640,35"; $CbResult.Font="Segoe UI, 11"; $CbResult.DropDownStyle="DropDownList"; $Form.Controls.Add($CbResult)
+# Threads
+$LblThread = New-Object System.Windows.Forms.Label; $LblThread.Text = "Luong:"; $LblThread.Location = "300,33"; $LblThread.AutoSize = $true; $LblThread.Font = $FontNormal
+$GbFilter.Controls.Add($LblThread)
+
+$CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location = "360,30"; $CbThread.Size = "60,30"; $CbThread.DropDownStyle = "DropDownList"; $CbThread.Font = $FontNormal
+$CbThread.Items.AddRange(@("4", "8", "16", "32")); $CbThread.SelectedItem = "16" 
+$GbFilter.Controls.Add($CbThread)
+
+# Refresh
+$BtnLoad = New-Object System.Windows.Forms.Button; $BtnLoad.Text = "REFRESH"; $BtnLoad.Location = "520,25"; $BtnLoad.Size = "120,35"; $BtnLoad.BackColor = "DimGray"; $BtnLoad.ForeColor = "White"; $BtnLoad.Font = $FontBold
+$GbFilter.Controls.Add($BtnLoad)
+
+# Result
+$LblRes = New-Object System.Windows.Forms.Label; $LblRes.Text = "Danh sach File:"; $LblRes.Location = "20,150"; $LblRes.AutoSize = $true; $LblRes.Font = $FontNormal; $Form.Controls.Add($LblRes)
+$CbResult = New-Object System.Windows.Forms.ComboBox; $CbResult.Location = "20,175"; $CbResult.Size = "660,35"; $CbResult.Font = New-Object System.Drawing.Font("Consolas", 11); $CbResult.DropDownStyle = "DropDownList"; $Form.Controls.Add($CbResult)
 
 # Progress
-$Bar = New-Object System.Windows.Forms.ProgressBar; $Bar.Location="20,260"; $Bar.Size="640,30"; $Form.Controls.Add($Bar)
-$Status = New-Object System.Windows.Forms.Label; $Status.Text="San sang."; $Status.AutoSize=$true; $Status.Location="20,230"; $Status.ForeColor="Lime"; $Form.Controls.Add($Status)
+$Bar = New-Object System.Windows.Forms.ProgressBar; $Bar.Location = "20,270"; $Bar.Size = "660,30"; $Form.Controls.Add($Bar)
+$Status = New-Object System.Windows.Forms.Label; $Status.Text = "San sang."; $Status.AutoSize = $true; $Status.Location = "20,240"; $Status.ForeColor = "Lime"; $Status.Font = $FontNormal; $Form.Controls.Add($Status)
 
-# Button
-$BtnDown = New-Object System.Windows.Forms.Button; $BtnDown.Text="BAT DAU TAI NGAY"; $BtnDown.Font="Segoe UI, 12, Bold"; $BtnDown.Location="180,320"; $BtnDown.Size="340,50"; $BtnDown.BackColor="LimeGreen"; $BtnDown.ForeColor="Black"; $BtnDown.FlatStyle="Flat"; $BtnDown.Enabled=$false; $Form.Controls.Add($BtnDown)
+# Download Button
+$BtnDown = New-Object System.Windows.Forms.Button
+$BtnDown.Text = "KHOI DONG TURBO DOWNLOAD"
+$BtnDown.Font = $FontBigBtn
+$BtnDown.Location = "180,330"
+$BtnDown.Size = "340,60"
+$BtnDown.BackColor = "LimeGreen"
+$BtnDown.ForeColor = "Black"
+$BtnDown.FlatStyle = "Flat"
+$BtnDown.Enabled = $false
+$Form.Controls.Add($BtnDown)
 
-# --- WORKER SCRIPT BLOCK ---
-# --- 1. SCRIPT BLOCK: THÊM CƠ CHẾ KIỂM TRA SERVER (ANTI-CORRUPTION) ---
+# --- WORKER SCRIPT BLOCK (UPGRADED NATIVE ENGINE) ---
 $ScriptBlock = {
     param($Url, $Start, $End, $Path)
     try {
         $Req = [System.Net.HttpWebRequest]::Create($Url)
         $Req.Method = "GET"
-        $Req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        # Yêu cầu tải từ byte Start đến byte End
+        $Req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         $Req.AddRange([long]$Start, [long]$End) 
+        $Req.Timeout = 60000 
+        $Req.ReadWriteTimeout = 60000
+        $Req.ServicePoint.ConnectionLimit = 100
+        # GIỮ KẾT NỐI ĐỂ TĂNG TỐC (Tránh Handshake lại)
+        $Req.UnsafeAuthenticatedConnectionSharing = $true 
+        $Req.KeepAlive = $true
+
         $Resp = $Req.GetResponse()
         
-        # --- FIX QUAN TRỌNG: KIỂM TRA STATUS CODE ---
-        # Nếu server trả về 200 OK (Full File) thay vì 206 Partial Content (File cắt nhỏ)
-        # Nghĩa là server không hỗ trợ đa luồng hoặc đang bị chặn.
-        # Ta phải dừng ngay, nếu không file sẽ bị hỏng dữ liệu.
-        if ($Resp.StatusCode -eq [System.Net.HttpStatusCode]::OK) {
-             if ($Start -gt 0) {
-                 $Resp.Close()
-                 return "LOI: Server tu choi chia nho file (Tra ve 200 OK). Hay giam So Luong luong!"
-             }
+        if ($Resp.StatusCode -eq [System.Net.HttpStatusCode]::OK -and $Start -gt 0) {
+             $Resp.Close(); return "LOI: Server khong ho tro Resume (Tra ve 200 OK)."
         }
-        # ---------------------------------------------
 
         $Stream = $Resp.GetResponseStream()
-        $Buffer = New-Object byte[] 32768 
-        $Fs = [System.IO.File]::Create($Path)
         
-        # Giới hạn chỉ ghi đúng dung lượng được yêu cầu (tránh ghi thừa)
+        # --- NÂNG BUFFER LÊN 256KB (Tối ưu cho mạng nhanh) ---
+        $BufferSize = 262144 # 256 KB
+        $Buffer = New-Object byte[] $BufferSize
+        
+        # Dùng FileStream với WriteThrough để ghi thẳng xuống đĩa
+        $Fs = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, $BufferSize)
+        
         $MaxBytes = ($End - $Start) + 1
         $TotalWritten = 0
 
         while (($Read = $Stream.Read($Buffer, 0, $Buffer.Length)) -gt 0) {
-            # Nếu server lỡ gửi thừa, ta cắt bỏ phần thừa
-            if (($TotalWritten + $Read) -gt $MaxBytes) {
-                 $Read = $MaxBytes - $TotalWritten
-            }
-            
+            if (($TotalWritten + $Read) -gt $MaxBytes) { $Read = $MaxBytes - $TotalWritten }
             $Fs.Write($Buffer, 0, $Read)
             $TotalWritten += $Read
-            
             if ($TotalWritten -ge $MaxBytes) { break }
         }
         $Fs.Close(); $Stream.Close(); $Resp.Close()
     } catch { return $_.Exception.Message }
 }
 
-# --- 2. FUNCTION CHÍNH: FIX TRÀN RAM & DỌN DẸP ---
-function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
-    $Status.Text = "Dang khoi tao ket noi ($ThreadCount Luong)..."
+# --- FUNCTION: NATIVE DOWNLOAD (TURBO MODE) ---
+function Start-NativeDownload ($Url, $DestPath, $ThreadCount) {
+    $Status.Text = "KHOI DONG TURBO ENGINE ($ThreadCount Luong)..."
     [System.Windows.Forms.Application]::DoEvents()
 
-    # Lay kich thuoc file
     try {
         $ReqHead = [System.Net.HttpWebRequest]::Create($Url)
-        $ReqHead.Method = "HEAD"
-        $ReqHead.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        $ReqHead.Method = "HEAD"; $ReqHead.UserAgent = "Mozilla/5.0"
         $RespHead = $ReqHead.GetResponse()
         $TotalSize = $RespHead.ContentLength
         $RespHead.Close()
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi ket noi Server: $($_.Exception.Message)", "Error"); return }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi Server: $($_.Exception.Message)", "Error"); return }
 
-    if ($TotalSize -lt 10MB) { $Threads = 1 } else { $Threads = [int]$ThreadCount }
-    $PartSize = [Math]::Floor($TotalSize / $Threads)
+    # Tự động điều chỉnh luồng nếu file nhỏ
+    if ($TotalSize -lt 50MB) { $Threads = 1 } else { $Threads = [int]$ThreadCount }
     
+    $PartSize = [Math]::Floor($TotalSize / $Threads)
     $Pool = [runspacefactory]::CreateRunspacePool(1, $Threads)
     $Pool.Open()
     $PowerShells = @(); $Handles = @()
 
-    $Status.Text = "Dang chia file thanh $Threads phan..."
+    $Status.Text = "Dang tai xuong (Turbo Mode ON)..."
     
-    # Khoi tao cac luong
     for ($i = 0; $i -lt $Threads; $i++) {
         $Start = $i * $PartSize
         $End = ($i + 1) * $PartSize - 1
         if ($i -eq $Threads - 1) { $End = $TotalSize - 1 }
         
         $PartPath = "$DestPath.part$i"
-        
-        $Ps = [powershell]::Create()
-        $Ps.RunspacePool = $Pool
+        $Ps = [powershell]::Create(); $Ps.RunspacePool = $Pool
         $Ps.AddScript($ScriptBlock).AddArgument($Url).AddArgument($Start).AddArgument($End).AddArgument($PartPath) | Out-Null
-        
-        $PowerShells += $Ps
-        $Handles += $Ps.BeginInvoke()
+        $PowerShells += $Ps; $Handles += $Ps.BeginInvoke()
     }
 
-    # Vong lap theo doi
+    # Monitor Loop
     $IsDone = $false
     while (-not $IsDone) {
         $Downloaded = 0; $Completed = 0
@@ -145,16 +201,17 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
             $P = "$DestPath.part$i"
             if (Test-Path $P) { try { $Info = Get-Item $P; $Downloaded += $Info.Length } catch {} }
             
-            if ($Handles[$i].IsCompleted) {
-                $Completed++
-                # Check loi tu thread
-                try { $Res = $PowerShells[$i].EndInvoke($Handles[$i]); if ($Res -match "LOI|Error") { $ErrorMsg = $Res } } catch {}
+            if ($Handles[$i].IsCompleted) { 
+                $Completed++ 
+                try { 
+                    $Res = $PowerShells[$i].EndInvoke($Handles[$i])
+                    if ($Res -match "LOI") { $ErrorMsg = $Res }
+                } catch {}
             }
         }
 
-        # Nếu có lỗi (VD: Server từ chối chia nhỏ), dừng ngay lập tức
         if ($ErrorMsg) {
-             $Status.Text = "DA XAY RA LOI: $ErrorMsg"
+             $Status.Text = "LOI: $ErrorMsg"
              foreach ($Ps in $PowerShells) { $Ps.Dispose() }; $Pool.Close(); $Pool.Dispose()
              [System.Windows.Forms.MessageBox]::Show($ErrorMsg, "Loi Download", "OK", "Error")
              return
@@ -164,58 +221,80 @@ function Start-TurboDownload ($Url, $DestPath, $ThreadCount) {
             $Percent = [Math]::Min(100, [Math]::Round(($Downloaded / $TotalSize) * 100))
             $Bar.Value = $Percent
             $MB = [Math]::Round($Downloaded / 1MB, 2); $TotalMB = [Math]::Round($TotalSize / 1MB, 2)
-            $Status.Text = "Downloading ($Threads Threads)... $Percent% ($MB MB / $TotalMB MB)"
+            $Status.Text = "Downloading... $Percent% ($MB MB / $TotalMB MB)"
         }
         
         if ($Completed -eq $Threads) { $IsDone = $true }
         [System.Windows.Forms.Application]::DoEvents()
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 200 # Giảm delay để update mượt hơn
     }
 
-    # Don dep tien trinh (Fix File Locking)
-    $Status.Text = "Dang don dep tien trinh..."
-    foreach ($Ps in $PowerShells) { $Ps.Dispose() }
-    $Pool.Close(); $Pool.Dispose(); [GC]::Collect()
+    # CLEANUP
+    $Status.Text = "Don dep Threads..."
+    foreach ($Ps in $PowerShells) { $Ps.Dispose() }; $Pool.Close(); $Pool.Dispose(); [GC]::Collect()
 
-    # Ghep file (Fix Tran RAM)
-    $Status.Text = "Dang ghep noi (Merging)..."
+    # MERGE FILE (TỐI ƯU HÓA TỐC ĐỘ GHI)
+    $Status.Text = "Dang ghep file (Merge)..."
     [System.Windows.Forms.Application]::DoEvents()
-    
+
     try {
-        $OutStream = [System.IO.File]::Create($DestPath)
+        # Dùng Buffer 1MB cho việc gộp file để max tốc độ HDD/SSD
+        $MergeBuffer = New-Object byte[] 1048576 # 1MB
+        $OutStream = New-Object System.IO.FileStream($DestPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, 1048576)
+
         for ($i = 0; $i -lt $Threads; $i++) {
             $PartPath = "$DestPath.part$i"
             if (Test-Path $PartPath) {
                 $InStream = [System.IO.File]::OpenRead($PartPath)
-                $InStream.CopyTo($OutStream)
+                
+                # Copy thủ công với Buffer lớn
+                while (($Read = $InStream.Read($MergeBuffer, 0, $MergeBuffer.Length)) -gt 0) {
+                    $OutStream.Write($MergeBuffer, 0, $Read)
+                }
+                
                 $InStream.Close(); $InStream.Dispose()
                 Remove-Item $PartPath -Force -ErrorAction SilentlyContinue
+                
+                $MergePercent = [Math]::Round((($i + 1) / $Threads) * 100)
+                $Status.Text = "Dang ghep file... $MergePercent%"
+                [System.Windows.Forms.Application]::DoEvents()
             }
-            # Update Status
-            $MergePercent = [Math]::Round((($i + 1) / $Threads) * 100)
-            $Status.Text = "Dang ghep noi... $MergePercent%"
-            [System.Windows.Forms.Application]::DoEvents()
         }
         $OutStream.Close(); $OutStream.Dispose()
         
-        $Status.Text = "HOAN TAT! File: $DestPath"; $Bar.Value = 100
+        $Status.Text = "HOAN TAT! (TURBO DOWNLOAD COMPLETED)"; $Bar.Value = 100
         [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!", "Phat Tan PC")
         Invoke-Item (Split-Path $DestPath)
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("Loi khi ghep file: $($_.Exception.Message)", "Error")
+    } catch { [System.Windows.Forms.MessageBox]::Show("Loi ghep file: $($_.Exception.Message)", "Error") }
+}
+
+# --- FUNCTION: ARIA2 DOWNLOAD ---
+function Start-AriaDownload ($Url, $DestPath, $ThreadCount, $ExePath) {
+    $Dir = Split-Path $DestPath
+    $FileName = Split-Path $DestPath -Leaf
+    $ArgsList = "-x$ThreadCount -s$ThreadCount -k1M --file-allocation=none -d `"$Dir`" -o `"$FileName`" `"$Url`""
+    
+    $Status.Text = "ARIA2 DANG CHAY..."
+    $Bar.Value = 100
+    Start-Process -FilePath $ExePath -ArgumentList $ArgsList -Wait
+    
+    if (Test-Path $DestPath) {
+        $Status.Text = "HOAN TAT (ARIA2)!"
+        [System.Windows.Forms.MessageBox]::Show("Aria2 da tai xong!", "Success")
+        Invoke-Item $Dir
+    } else {
+        $Status.Text = "ARIA2 THAT BAI HOAC BI HUY."
     }
 }
-# --- HANDLERS (FIXED TRIM URL) ---
+
+# --- HANDLERS ---
 function Load-JsonData {
-    $Status.Text = "Dang tai danh sach tu Github..."
+    $Status.Text = "Dang lay du lieu..."
     $Form.Cursor = "WaitCursor"
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     try {
         $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-        $Headers = @{ "User-Agent" = "Mozilla/5.0"; "Cache-Control" = "no-cache" }
-        # FIX HOSTNAME ERROR HERE
         $CleanUrl = "$($JsonUrl.Trim())?t=$Ts"
-        $JsonContent = Invoke-RestMethod -Uri $CleanUrl -Headers $Headers -ErrorAction Stop
+        $JsonContent = Invoke-RestMethod -Uri $CleanUrl -ErrorAction Stop
         $Global:IsoData = $JsonContent
         
         $CbType.Items.Clear(); $CbType.Items.Add("All")
@@ -223,9 +302,9 @@ function Load-JsonData {
         foreach ($t in $Types) { $CbType.Items.Add($t) }
         $CbType.SelectedIndex = 0
         Filter-List
-        $Status.Text = "San sang. ($($Global:IsoData.Count) muc)"
+        $Status.Text = "Da tai xong danh sach ($($Global:IsoData.Count) file)."
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("Loi tai JSON: $($_.Exception.Message)", "Error")
+        [System.Windows.Forms.MessageBox]::Show("Loi JSON: $($_.Exception.Message)", "Error")
     }
     $Form.Cursor = "Default"
 }
@@ -250,9 +329,7 @@ $BtnDown.Add_Click({
     if (!$Item) { return }
     
     $FName = "Download.iso"
-    if ($Item.link -match "/([^/]+\.iso)$") { $FName = $Matches[1] }
-    elseif ($Item.link -match "/([^/]+\.img)$") { $FName = $Matches[1] }
-    elseif ($Item.link -match "/([^/]+\.exe)$") { $FName = $Matches[1] }
+    if ($Item.link -match "/([^/]+\.(iso|img|exe|zip|rar))$") { $FName = $Matches[1] }
     
     $Save = New-Object System.Windows.Forms.SaveFileDialog
     $Save.FileName = $FName; $Save.Filter = "All Files|*.*"
@@ -260,7 +337,14 @@ $BtnDown.Add_Click({
     if ($Save.ShowDialog() -eq "OK") {
         $Threads = $CbThread.SelectedItem
         $BtnDown.Enabled = $false; $CbResult.Enabled = $false
-        Start-TurboDownload $Item.link $Save.FileName $Threads
+        
+        $AriaExe = Get-Aria2Path
+        if ($AriaExe) {
+            Start-AriaDownload $Item.link $Save.FileName $Threads $AriaExe
+        } else {
+            Start-NativeDownload $Item.link $Save.FileName $Threads
+        }
+        
         $BtnDown.Enabled = $true; $CbResult.Enabled = $true
     }
 })
