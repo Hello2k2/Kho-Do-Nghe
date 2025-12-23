@@ -1,7 +1,7 @@
 <#
-    TOOL CUU HO MAY TINH - PHAT TAN PC
+    TOOL CUU HO MAY TINH - PHAT TAN PC (MODERN UI EDITION)
     Author:  Phat Tan
-    Version: 12.3 (Vietnamese Material UI)
+    Version: 12.0 (Professional UI Overhaul)
     Github:  https://github.com/Hello2k2/Kho-Do-Nghe
 #>
 
@@ -16,283 +16,322 @@ Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
-# Cấu hình đường dẫn
 $BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
 $RawUrl  = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/"
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.json"
 $TempDir = "$env:TEMP\PhatTan_Tool"
 
-# Fix TLS & Folder Temp
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+# Tao folder
 if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+# Fix TLS
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
 
-# --- 3. THEME ENGINE (MATERIAL DARK) ---
-$Colors = @{
-    Back      = [System.Drawing.Color]::FromArgb(32, 33, 36)       # Xám đen lì (Google Dark)
-    Card      = [System.Drawing.Color]::FromArgb(48, 49, 52)       # Card nổi nhẹ
-    Text      = [System.Drawing.Color]::FromArgb(232, 234, 237)    # Trắng dịu
-    Accent    = [System.Drawing.Color]::FromArgb(138, 180, 248)    # Xanh dương pastel (Điểm nhấn)
-    BtnBack   = [System.Drawing.Color]::FromArgb(60, 64, 67)       # Nền nút
-    BtnHover  = [System.Drawing.Color]::FromArgb(80, 84, 87)       # Nền nút khi hover
-    Green     = [System.Drawing.Color]::FromArgb(129, 201, 149)    # Xanh lá dịu
-    Red       = [System.Drawing.Color]::FromArgb(242, 139, 130)    # Đỏ dịu
+# --- 3. MODERN THEME ENGINE (COLOR PALETTE) ---
+$Global:DarkMode = $true 
+
+$Theme = @{
+    Dark = @{
+        FormBack    = [System.Drawing.Color]::FromArgb(32, 33, 36)      # Màu nền chính tối
+        SideBar     = [System.Drawing.Color]::FromArgb(25, 25, 25)      # Màu menu trái
+        PanelBack   = [System.Drawing.Color]::FromArgb(45, 45, 48)      # Màu nền thẻ
+        TextMain    = [System.Drawing.Color]::FromArgb(240, 240, 240)   # Chữ trắng
+        TextDim     = [System.Drawing.Color]::FromArgb(160, 160, 160)   # Chữ xám
+        Accent      = [System.Drawing.Color]::FromArgb(0, 120, 215)     # Xanh Win 10
+        ButtonBack  = [System.Drawing.Color]::FromArgb(60, 60, 60)      # Nền nút
+        ButtonHover = [System.Drawing.Color]::FromArgb(80, 80, 80)
+        Success     = [System.Drawing.Color]::FromArgb(40, 167, 69)     # Màu xanh lá (Nút cài)
+        Warning     = [System.Drawing.Color]::FromArgb(255, 193, 7)
+    }
+    Light = @{
+        FormBack    = [System.Drawing.Color]::FromArgb(243, 243, 243)
+        SideBar     = [System.Drawing.Color]::FromArgb(255, 255, 255)
+        PanelBack   = [System.Drawing.Color]::FromArgb(255, 255, 255)
+        TextMain    = [System.Drawing.Color]::FromArgb(30, 30, 30)
+        TextDim     = [System.Drawing.Color]::FromArgb(100, 100, 100)
+        Accent      = [System.Drawing.Color]::FromArgb(0, 120, 215)
+        ButtonBack  = [System.Drawing.Color]::FromArgb(230, 230, 230)
+        ButtonHover = [System.Drawing.Color]::FromArgb(210, 210, 210)
+        Success     = [System.Drawing.Color]::FromArgb(40, 167, 69)
+        Warning     = [System.Drawing.Color]::FromArgb(255, 193, 7)
+    }
 }
 
-# --- 4. CORE LOGIC ---
+# --- 4. CORE FUNCTIONS (LOGIC GIỮ NGUYÊN) ---
+function Set-Status($Text) { $LblStatus.Text = " ➤ $Text"; $Form.Refresh() }
+
 function Tai-Va-Chay {
     param ($Link, $Name, $Type)
-    $StatusLabel.Text = ">> Đang tải: $Name ..."
-    $Form.Refresh()
+    Set-Status "Đang tải: $Name..."
     if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
     if ($Link -notmatch "^http") { $Link = "$BaseUrl$Link" }
     $Dest = "$TempDir\$Name"
     try {
         (New-Object System.Net.WebClient).DownloadFile($Link, $Dest)
         if (Test-Path $Dest) {
-            $StatusLabel.Text = ">> Đang chạy: $Name ..."
-            if ($Type -eq "Msi") { Start-Process "msiexec.exe" "/i `"$Dest`" /quiet /norestart" -Wait } else { Start-Process $Dest -Wait }
-            $StatusLabel.Text = ">> Hoàn tất: $Name"
+            Set-Status "Đang chạy: $Name..."
+            if ($Type -eq "Msi") { Start-Process "msiexec.exe" "/i `"$Dest`" /quiet /norestart" -Wait }
+            else { Start-Process $Dest -Wait }
+            Set-Status "Hoàn tất: $Name"
         }
-    } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi tải file!", "Error"); $StatusLabel.Text = "!! LỖI !!" }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi tải file: $Name", "Error"); Set-Status "Lỗi: $Name" }
 }
 
 function Load-Module ($ScriptName) {
-    $StatusLabel.Text = ">> Đang mở Module: $ScriptName ..."
-    $Form.Refresh()
+    Set-Status "Đang tải Module: $ScriptName..."
     if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
     $LocalPath = "$TempDir\$ScriptName"
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Url = "$RawUrl$ScriptName" + "?t=$Ts"
     try {
-        $Web = New-Object System.Net.WebClient; $Web.Encoding = [System.Text.Encoding]::UTF8
-        $Web.DownloadString($Url) | Out-File -FilePath $LocalPath -Encoding UTF8
-        if (Test-Path $LocalPath) { Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`"" }
-        $StatusLabel.Text = ">> Module sẵn sàng: $ScriptName"
-    } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi tải Module!", "Lỗi Kết Nối"); $StatusLabel.Text = "!! MẤT KẾT NỐI !!" }
+        $WebClient = New-Object System.Net.WebClient; $WebClient.Encoding = [System.Text.Encoding]::UTF8
+        $Content = $WebClient.DownloadString($Url)
+        [System.IO.File]::WriteAllText($LocalPath, $Content)
+        if (Test-Path $LocalPath) { 
+            Set-Status "Đang thực thi: $ScriptName..."
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$LocalPath`"" 
+            Set-Status "Module đã chạy xong."
+        }
+    } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi tải Module: $ScriptName", "Lỗi Kết Nối"); Set-Status "Lỗi kết nối." }
 }
 
-# --- 5. GUI BUILDER ---
-
+# --- 5. GUI CONSTRUCTION (MODERN LAYOUT) ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V12.3"
-$Form.Size = New-Object System.Drawing.Size(1050, 720) # Kích thước chuẩn
+$Form.Text = "PHAT TAN PC TOOLKIT - PROFESSIONAL EDITION"
+$Form.Size = New-Object System.Drawing.Size(1100, 700)
 $Form.StartPosition = "CenterScreen"
-$Form.FormBorderStyle = "FixedSingle"
-$Form.MaximizeBox = $false
-$Form.BackColor = $Colors.Back
-$Form.ForeColor = $Colors.Text
+$Form.FormBorderStyle = "Sizable" # Cho phép resize
+$Form.MinimumSize = New-Object System.Drawing.Size(1000, 650)
 
-# --- HEADER ---
-$PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size = "1050, 70"; $PnlHeader.Dock = "Top"; $PnlHeader.BackColor = [System.Drawing.Color]::Transparent
-$Form.Controls.Add($PnlHeader)
+# --- FONT ---
+$FontTitle = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$FontHead  = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$FontNorm  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+$FontIcon  = New-Object System.Drawing.Font("Segoe UI Symbol", 14) # Font cho icon unicode
 
-$LblLogo = New-Object System.Windows.Forms.Label
-$LblLogo.Text = "PHAT TAN PC"
-$LblLogo.Font = New-Object System.Drawing.Font("Segoe UI", 24, [System.Drawing.FontStyle]::Bold)
-$LblLogo.ForeColor = $Colors.Accent
-$LblLogo.AutoSize = $true
-$LblLogo.Location = "20, 10"
-$PnlHeader.Controls.Add($LblLogo)
+# --- MAIN CONTAINERS ---
+# Sidebar (Left)
+$PnlSide = New-Object System.Windows.Forms.Panel; $PnlSide.Dock = "Left"; $PnlSide.Width = 240; $Form.Controls.Add($PnlSide)
 
-$LblSub = New-Object System.Windows.Forms.Label
-$LblSub.Text = "Bộ Công Cụ Cứu Hộ Máy Tính Chuyên Nghiệp"
-$LblSub.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Italic)
-$LblSub.ForeColor = "Gray"
-$LblSub.AutoSize = $true
-$LblSub.Location = "25, 48"
-$PnlHeader.Controls.Add($LblSub)
+# Content (Right)
+$PnlContent = New-Object System.Windows.Forms.Panel; $PnlContent.Dock = "Fill"; $Form.Controls.Add($PnlContent)
 
-# --- TABS ---
-$TabControl = New-Object System.Windows.Forms.TabControl
-$TabControl.Location = "15, 80"
-$TabControl.Size = "1005, 520"
-$TabControl.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
-$TabControl.Appearance = "FlatButtons"
-$TabControl.SizeMode = "Fixed"
-$TabControl.ItemSize = New-Object System.Drawing.Size(180, 40)
-$Form.Controls.Add($TabControl)
+# Status Bar (Bottom of Content)
+$PnlStatus = New-Object System.Windows.Forms.Panel; $PnlStatus.Dock = "Bottom"; $PnlStatus.Height = 30; $PnlContent.Controls.Add($PnlStatus)
+$LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text = " ➤ Sẵn sàng phục vụ."; $LblStatus.Dock="Fill"; $LblStatus.TextAlign="MiddleLeft"; $LblStatus.Font=$FontNorm; $PnlStatus.Controls.Add($LblStatus)
 
-# > TAB 1: CÔNG CỤ
-$AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text = "🔧 CÔNG CỤ HỆ THỐNG"; $AdvTab.BackColor = $Colors.Back; $TabControl.Controls.Add($AdvTab)
+# Header (Top of Content)
+$PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Dock = "Top"; $PnlHeader.Height = 70; $PnlContent.Controls.Add($PnlHeader)
 
-# GRID LAYOUT (3 CỘT)
-$Grid = New-Object System.Windows.Forms.TableLayoutPanel
-$Grid.Dock = "Fill"
-$Grid.ColumnCount = 3
-$Grid.RowCount = 1
-$Grid.Padding = New-Object System.Windows.Forms.Padding(5)
-$Grid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null
-$Grid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null
-$Grid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null
-$AdvTab.Controls.Add($Grid)
+# Title in Header
+$LblAppTitle = New-Object System.Windows.Forms.Label; $LblAppTitle.Text = "DASHBOARD"; $LblAppTitle.AutoSize=$true; $LblAppTitle.Location="20, 20"; $LblAppTitle.Font=$FontTitle; $PnlHeader.Controls.Add($LblAppTitle)
 
-# FUNCTION VẼ CARD
-function New-GroupCard ($Title, $ColIndex) {
-    $Panel = New-Object System.Windows.Forms.Panel
-    $Panel.Dock = "Fill"
-    $Panel.Margin = New-Object System.Windows.Forms.Padding(8)
-    $Panel.Padding = New-Object System.Windows.Forms.Padding(1, 45, 1, 1) # Chừa chỗ cho Title
-    $Panel.BackColor = $Colors.Card # Màu nền Card
-    
-    # Title
-    $Lbl = New-Object System.Windows.Forms.Label
-    $Lbl.Text = $Title.ToUpper()
-    $Lbl.Dock = "Top"
-    $Lbl.Height = 40
-    $Lbl.TextAlign = "MiddleCenter"
-    $Lbl.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-    $Lbl.ForeColor = $Colors.Accent
-    $Panel.Controls.Add($Lbl)
+# Theme Toggle
+$BtnTheme = New-Object System.Windows.Forms.Button; $BtnTheme.Size="100,35"; $BtnTheme.Location="720, 20"; $BtnTheme.FlatStyle="Flat"; $BtnTheme.Anchor="Top, Right"
+$BtnTheme.Add_Click({ $Global:DarkMode = -not $Global:DarkMode; Apply-Theme })
+$PnlHeader.Controls.Add($BtnTheme)
 
-    # Container
-    $Flow = New-Object System.Windows.Forms.FlowLayoutPanel
-    $Flow.Dock = "Fill"
-    $Flow.FlowDirection = "TopDown"
-    $Flow.WrapContents = $false
-    $Flow.AutoScroll = $true 
-    $Flow.Padding = New-Object System.Windows.Forms.Padding(10, 0, 0, 0) # Padding trái để nút không sát lề
-    
-    # Auto Resize Button Width
-    $Flow.Add_SizeChanged({ foreach($c in $Flow.Controls){ $c.Width = $Flow.Width - 25 } })
-    
-    $Panel.Controls.Add($Flow)
-    $Grid.Controls.Add($Panel, $ColIndex, 0)
-    return $Flow
-}
-
-function Add-Btn ($Parent, $Text, $Cmd, $Icon) {
+# --- HELPER: CREATE MODERN BUTTON ---
+function Add-ModernBtn {
+    param($Parent, $Text, $Icon, $Cmd, $ColorType="Normal")
     $Btn = New-Object System.Windows.Forms.Button
-    $Btn.Text = "  $Icon  $Text" 
-    $Btn.Height = 48 # Chiều cao vừa phải
-    $Btn.Width = 280 
-    $Btn.FlatStyle = "Flat"
-    $Btn.FlatAppearance.BorderSize = 0
-    $Btn.BackColor = $Colors.BtnBack
-    $Btn.ForeColor = $Colors.Text
-    $Btn.TextAlign = "MiddleLeft"
-    $Btn.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $Btn.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
+    $Btn.Text = "  $Icon  $Text"
+    $Btn.Size = New-Object System.Drawing.Size(180, 50) # Nút to hơn
+    $Btn.Margin = New-Object System.Windows.Forms.Padding(5)
+    $Btn.FlatStyle = "Flat"; $Btn.FlatAppearance.BorderSize = 0
+    $Btn.Font = $FontNorm; $Btn.TextAlign = "MiddleLeft"
     $Btn.Cursor = "Hand"
+    $Btn.Tag = $ColorType # Lưu loại màu để theme xử lý
+    $Btn.Add_Click($Cmd)
     
-    # Hiệu ứng Hover (Đổi màu + Thụt vào)
+    # Hiệu ứng Hover đơn giản
     $Btn.Add_MouseEnter({ 
-        $this.BackColor = $Colors.BtnHover
-        $this.ForeColor = $Colors.Accent
-        $this.Padding = New-Object System.Windows.Forms.Padding(10,0,0,0) 
+        $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
+        $this.BackColor = $T.ButtonHover
     })
     $Btn.Add_MouseLeave({ 
-        $this.BackColor = $Colors.BtnBack
-        $this.ForeColor = $Colors.Text
-        $this.Padding = New-Object System.Windows.Forms.Padding(0,0,0,0)
+        $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
+        if ($this.Tag -eq "Success") { $this.BackColor = $T.Success } else { $this.BackColor = $T.ButtonBack }
     })
-    $Btn.Add_Click($Cmd)
+    
     $Parent.Controls.Add($Btn)
+    return $Btn
 }
 
-# --- CỘT 1: HỆ THỐNG ---
-$G1 = New-GroupCard "HỆ THỐNG & BẢO TRÌ" 0
-Add-Btn $G1 "Kiểm Tra Cấu Hình"     { Load-Module "SystemInfo.ps1" } "ℹ"
-Add-Btn $G1 "Dọn Rác Sạch Sẽ"       { Load-Module "SystemCleaner.ps1" } "♻"
-Add-Btn $G1 "Quản Lý Ổ Đĩa"         { Load-Module "DiskManager.ps1" } "💾"
-Add-Btn $G1 "Quét Lỗi Toàn Diện"    { Load-Module "SystemScan.ps1" } "🔍"
-Add-Btn $G1 "Giải Phóng RAM"        { Load-Module "RamBooster.ps1" } "⚡"
-Add-Btn $G1 "Kích Hoạt Windows"     { Load-Module "WinActivator.ps1" } "🗝"
-Add-Btn $G1 "Cứu Dữ Liệu (DiskGenius)" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" } "🚑"
-Add-Btn $G1 "Gỡ App Rác (Debloat)"  { Load-Module "Debloater.ps1" } "🗑"
+# --- HELPER: CONTENT PAGES ---
+$Pages = @{}
+function Create-Page ($ID, $Title) {
+    $P = New-Object System.Windows.Forms.FlowLayoutPanel
+    $P.Dock = "Fill"; $P.AutoScroll = $true; $P.Padding = "20,20,20,20"; $P.Visible = $false
+    $PnlContent.Controls.Add($P); $P.BringToFront()
+    $Pages[$ID] = @{ Panel=$P; Title=$Title }
+    return $P
+}
 
-# --- CỘT 2: BẢO MẬT ---
-$G2 = New-GroupCard "BẢO MẬT & MẠNG" 1
-Add-Btn $G2 "Đổi DNS Siêu Tốc"      { Load-Module "NetworkMaster.ps1" } "🌐"
-Add-Btn $G2 "Quản Lý Update Win"    { Load-Module "WinUpdatePro.ps1" } "↻"
-Add-Btn $G2 "Bật/Tắt Diệt Virus"    { Load-Module "DefenderMgr.ps1" } "🛡"
-Add-Btn $G2 "Khóa Ổ Cứng (BitLocker)" { Load-Module "BitLockerMgr.ps1" } "🔒"
-Add-Btn $G2 "Chặn Web Độc/QC"       { Load-Module "BrowserPrivacy.ps1" } "⛔"
-Add-Btn $G2 "Tắt Tường Lửa (Game)"  { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Đã Tắt Firewall!") } "🔥"
+function Switch-Page ($ID) {
+    foreach ($k in $Pages.Keys) { $Pages[$k].Panel.Visible = $false }
+    $Pages[$ID].Panel.Visible = $true
+    $LblAppTitle.Text = $Pages[$ID].Title.ToUpper()
+}
 
-# --- CỘT 3: CÀI ĐẶT ---
-$G3 = New-GroupCard "CÀI ĐẶT & TIỆN ÍCH" 2
-Add-Btn $G3 "Tải ISO Win/Office"    { Load-Module "ISODownloader.ps1" } "📥"
-Add-Btn $G3 "Cài Win Tự Động"       { Load-Module "WinInstall.ps1" } "💿"
-Add-Btn $G3 "Cài Office Bản Quyền"  { Load-Module "OfficeInstaller.ps1" } "📝"
-Add-Btn $G3 "Tối Ưu Hóa Windows"    { Load-Module "WinModder.ps1" } "🚀"
-Add-Btn $G3 "Đóng Gói ISO (AIO)"    { Load-Module "WinAIOBuilder.ps1" } "📦"
-Add-Btn $G3 "Trợ Lý AI (Hỏi Đáp)"   { Load-Module "GeminiAI.ps1" } "🤖"
-Add-Btn $G3 "Cài Lại Microsoft Store" { Load-Module "StoreInstaller.ps1" } "👜"
-Add-Btn $G3 "Tạo USB Boot Cứu Hộ"   { Load-Module "UsbBootMaker.ps1" } "⚡"
+# --- SIDEBAR MENU ITEMS ---
+function Add-MenuBtn ($Text, $Icon, $TargetID) {
+    $Btn = New-Object System.Windows.Forms.Button
+    $Btn.Text = "   $Icon   $Text"; $Btn.Dock = "Top"; $Btn.Height = 55; $Btn.FlatStyle = "Flat"; $Btn.FlatAppearance.BorderSize = 0
+    $Btn.Font = $FontHead; $Btn.TextAlign = "MiddleLeft"; $Btn.Cursor = "Hand"
+    $Btn.Add_Click({ Switch-Page $TargetID })
+    $PnlSide.Controls.Add($Btn); $Btn.SendToBack() # Đẩy xuống dưới để cái đầu tiên lên trên
+    return $Btn
+}
 
-# > TAB 2: KHO PHẦN MỀM
-$SoftTab = New-Object System.Windows.Forms.TabPage; $SoftTab.Text = "📦 KHO PHẦN MỀM"; $SoftTab.BackColor = $Colors.Back; $TabControl.Controls.Add($SoftTab)
-$SoftFlow = New-Object System.Windows.Forms.FlowLayoutPanel; $SoftFlow.Dock="Fill"; $SoftFlow.AutoScroll=$true; $SoftFlow.Padding="20,20,20,20"; $SoftTab.Controls.Add($SoftFlow)
+# --- LOGO AREA ---
+$PnlLogo = New-Object System.Windows.Forms.Panel; $PnlLogo.Dock="Top"; $PnlLogo.Height=100; $PnlSide.Controls.Add($PnlLogo)
+$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text="PHAT TAN`nPC TOOLS"; $LblLogo.Dock="Fill"; $LblLogo.TextAlign="MiddleCenter"; $LblLogo.Font=$FontTitle; $PnlLogo.Controls.Add($LblLogo)
 
+# --- TẠO CÁC TRANG (PAGES) ---
+# 1. SYSTEM
+$PageSys = Create-Page "SYS" "Bảo Trì Hệ Thống"
+Add-ModernBtn $PageSys "Check Info" "ℹ" { Load-Module "SystemInfo.ps1" }
+Add-ModernBtn $PageSys "Dọn Rác Pro" "♻" { Load-Module "SystemCleaner.ps1" }
+Add-ModernBtn $PageSys "Quản Lý Đĩa" "💾" { Load-Module "DiskManager.ps1" }
+Add-ModernBtn $PageSys "Quét Hệ Thống" "🔍" { Load-Module "SystemScan.ps1" }
+Add-ModernBtn $PageSys "Ram Booster" "⚡" { Load-Module "RamBooster.ps1" }
+Add-ModernBtn $PageSys "Kích Hoạt Win" "🗝" { Load-Module "WinActivator.ps1" }
+Add-ModernBtn $PageSys "Cứu Hộ HDD" "🚑" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }
+Add-ModernBtn $PageSys "Gỡ App Rác" "🗑" { Load-Module "Debloater.ps1" }
+
+# 2. NETWORK & SECURITY
+$PageNet = Create-Page "NET" "Mạng & Bảo Mật"
+Add-ModernBtn $PageNet "DNS Master" "🌐" { Load-Module "NetworkMaster.ps1" }
+Add-ModernBtn $PageNet "Win Update" "↻" { Load-Module "WinUpdatePro.ps1" }
+Add-ModernBtn $PageNet "Defender Mgr" "🛡" { Load-Module "DefenderMgr.ps1" }
+Add-ModernBtn $PageNet "BitLocker" "🔒" { Load-Module "BitLockerMgr.ps1" }
+Add-ModernBtn $PageNet "Chặn Web Độc" "⛔" { Load-Module "BrowserPrivacy.ps1" }
+Add-ModernBtn $PageNet "Tắt Firewall" "🔥" { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Đã Tắt Tường Lửa!") }
+
+# 3. TOOLS & DEPLOY
+$PageTool = Create-Page "TOOL" "Công Cụ & Cài Đặt"
+Add-ModernBtn $PageTool "Cài Windows" "💿" { Load-Module "WinInstall.ps1" }
+Add-ModernBtn $PageTool "Cài Office" "📝" { Load-Module "OfficeInstaller.ps1" }
+Add-ModernBtn $PageTool "Mod Windows" "🔧" { Load-Module "WinModder.ps1" }
+Add-ModernBtn $PageTool "Tạo Bộ Cài AIO" "📦" { Load-Module "WinAIOBuilder.ps1" }
+Add-ModernBtn $PageTool "Trợ lý AI" "🤖" { Load-Module "GeminiAI.ps1" }
+Add-ModernBtn $PageTool "LTSC Store" "👜" { Load-Module "StoreInstaller.ps1" }
+Add-ModernBtn $PageTool "Tải ISO Nhanh" "📥" { Load-Module "ISODownloader.ps1" }
+Add-ModernBtn $PageTool "Backup Data" "☁" { Load-Module "BackupCenter.ps1" }
+Add-ModernBtn $PageTool "Tạo USB Boot" "⚡" { Load-Module "UsbBootMaker.ps1" }
+
+# 4. APP STORE (Dynamically Loaded)
+$PageApp = Create-Page "APP" "Kho Phần Mềm (Auto Install)"
+# Tạo Panel chứa Checkbox
+$AppFlow = New-Object System.Windows.Forms.FlowLayoutPanel; $AppFlow.AutoSize=$true; $AppFlow.Width=800; $AppFlow.FlowDirection="TopDown"; $PageApp.Controls.Add($AppFlow)
+# Tạo Panel chứa nút hành động
+$AppActionPnl = New-Object System.Windows.Forms.FlowLayoutPanel; $AppActionPnl.AutoSize=$true; $AppActionPnl.Width=800; $PageApp.Controls.Add($AppActionPnl)
+
+# Nút hành động cho App
+$BtnAppInstall = Add-ModernBtn $AppActionPnl "CÀI ĐẶT ĐÃ CHỌN" "🚀" $null "Success"
+$BtnAppInstall.Width = 250
+$BtnAppInstall.Add_Click({
+    $BtnAppInstall.Enabled=$false; $BtnAppInstall.Text="ĐANG XỬ LÝ..."
+    foreach($C in $AppFlow.Controls){
+        if($C -is [System.Windows.Forms.CheckBox] -and $C.Checked){
+            $I = $C.Tag
+            if($I.type -eq "Script"){ iex $I.irm } else { Tai-Va-Chay $I.link $I.filename $I.type; if($I.irm){ iex $I.irm } }
+            $C.Checked=$false
+        }
+    }
+    [System.Windows.Forms.MessageBox]::Show("Đã Xong!", "Info"); $BtnAppInstall.Text="  🚀  CÀI ĐẶT ĐÃ CHỌN"; $BtnAppInstall.Enabled=$true
+})
+
+# Load Json Apps
 try {
     $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $Data = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts" -Headers @{"User-Agent"="PS";"Cache-Control"="no-cache"} -ErrorAction Stop
     $JsonTabs = $Data | Select -Expand tab -Unique
     foreach ($T in $JsonTabs) {
-        $Grp = New-Object System.Windows.Forms.GroupBox; $Grp.Text = "  " + $T.ToUpper() + "  "; $Grp.Width = 950; $Grp.Height = 10; $Grp.AutoSize = $true; $Grp.ForeColor = $Colors.Accent; $Grp.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-        $InFlow = New-Object System.Windows.Forms.FlowLayoutPanel; $InFlow.Dock="Fill"; $InFlow.AutoSize=$true; $Grp.Controls.Add($InFlow)
+        $Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text=$T; $Lbl.Font=$FontHead; $Lbl.AutoSize=$true; $Lbl.ForeColor=[System.Drawing.Color]::Gray; $Lbl.Margin="0,15,0,5"; $AppFlow.Controls.Add($Lbl)
         $Apps = $Data | Where {$_.tab -eq $T}
         foreach ($A in $Apps) {
-            $Chk = New-Object System.Windows.Forms.CheckBox; $Chk.Text=$A.name; $Chk.Tag=$A; $Chk.AutoSize=$true; $Chk.Margin="10,5,30,10"; $Chk.Font="Segoe UI", 10; $Chk.ForeColor="White"; $InFlow.Controls.Add($Chk)
+            $Chk = New-Object System.Windows.Forms.CheckBox; $Chk.Text=$A.name; $Chk.Tag=$A; $Chk.AutoSize=$true; $Chk.Font=$FontNorm; $Chk.Margin="20,2,0,2"; $AppFlow.Controls.Add($Chk)
         }
-        $SoftFlow.Controls.Add($Grp)
     }
-} catch { $LblErr = New-Object System.Windows.Forms.Label; $LblErr.Text = "Không kết nối được máy chủ!"; $LblErr.AutoSize=$true; $LblErr.ForeColor="Red"; $SoftFlow.Controls.Add($LblErr) }
+} catch { $LblErr = New-Object System.Windows.Forms.Label; $LblErr.Text="Không tải được danh sách App."; $AppFlow.Controls.Add($LblErr) }
 
-# --- FOOTER ---
-$PnlFooter = New-Object System.Windows.Forms.Panel; $PnlFooter.Size = "1050, 80"; $PnlFooter.Dock = "Bottom"; $PnlFooter.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25)
-$Form.Controls.Add($PnlFooter)
-
-# Nút Cài đặt (Giữa)
-$BtnInstall = New-Object System.Windows.Forms.Button
-$BtnInstall.Text = "TIẾN HÀNH CÀI ĐẶT"
-$BtnInstall.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-$BtnInstall.Size = "300, 50"
-$BtnInstall.Location = "375, 15" # Căn giữa chuẩn (1050/2 - 300/2)
-$BtnInstall.BackColor = $Colors.Accent
-$BtnInstall.ForeColor = "Black" # Chữ đen trên nền xanh sáng cho dễ đọc
-$BtnInstall.FlatStyle = "Flat"
-$BtnInstall.Cursor = "Hand"
-$BtnInstall.Add_Click({
-    $BtnInstall.Enabled=$false; $BtnInstall.Text="ĐANG XỬ LÝ..."
-    foreach($C in $SoftFlow.Controls){ foreach($I in $C.Controls){ foreach($K in $I.Controls){
-        if($K -is [System.Windows.Forms.CheckBox] -and $K.Checked){
-            $Obj = $K.Tag
-            if($Obj.type -eq "Script"){ iex $Obj.irm } else { Tai-Va-Chay $Obj.link $Obj.filename $Obj.type; if($Obj.irm){ iex $Obj.irm } }
-            $K.Checked=$false
-        }
-    }}}
-    [System.Windows.Forms.MessageBox]::Show("Đã hoàn tất cài đặt!", "Thông báo"); $BtnInstall.Text="TIẾN HÀNH CÀI ĐẶT"; $BtnInstall.Enabled=$true
-})
-$PnlFooter.Controls.Add($BtnInstall)
-
-# Nút Credits (Trái)
-$BtnCredit = New-Object System.Windows.Forms.Button; $BtnCredit.Text="ℹ Tác Giả"; $BtnCredit.Location="20, 20"; $BtnCredit.Size="100, 40"; $BtnCredit.BackColor=$Colors.BtnBack; $BtnCredit.ForeColor="White"; $BtnCredit.FlatStyle="Flat"
-$BtnCredit.Add_Click({
-    [System.Windows.Forms.MessageBox]::Show("PHAT TAN PC TOOLKIT`nPhiên bản: 12.3`nPhát triển bởi: Phat Tan PC`nLiên hệ: 0823.883.028", "Thông tin tác giả")
-})
-$PnlFooter.Controls.Add($BtnCredit)
-
-# Nút Donate (Phải)
-$BtnDonate = New-Object System.Windows.Forms.Button; $BtnDonate.Text="☕ Donate"; $BtnDonate.Location="910, 20"; $BtnDonate.Size="100, 40"; $BtnDonate.BackColor=$Colors.BtnBack; $BtnDonate.ForeColor="Gold"; $BtnDonate.FlatStyle="Flat"
-$BtnDonate.Add_Click({ 
+# 5. INFO & DONATE
+$PageInfo = Create-Page "INFO" "Thông Tin & Donate"
+$TxtInfo = "PHAT TAN PC TOOLKIT`nPhiên bản: 12.0 UI Remastered`n`nCredits:`n- MMT (Ma Minh Toan)`n- Massgrave.dev`n- Community Modules`n`nLiên hệ: 0823.883.028"
+$LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text=$TxtInfo; $LblInfo.AutoSize=$true; $LblInfo.Font=$FontNorm; $PageInfo.Controls.Add($LblInfo)
+Add-ModernBtn $PageInfo "Mở QR Donate" "☕" {
     $D=New-Object System.Windows.Forms.Form;$D.Size="400,500";$D.StartPosition="CenterScreen";$P=New-Object System.Windows.Forms.PictureBox;$P.Dock="Fill";$P.SizeMode="Zoom"
     try{$P.Load("https://img.vietqr.io/image/970436-1055835227-print.png?addInfo=Donate%20PhatTanPC&accountName=DANG%20LAM%20TAN%20PHAT")}catch{};$D.Controls.Add($P);$D.ShowDialog() 
+}
+
+# --- BUILD MENU (Thêm nút vào Sidebar) ---
+# Lưu ý: Add ngược từ dưới lên do Dock=Top
+Add-MenuBtn "Info & Donate" "☕" "INFO"
+Add-MenuBtn "Kho Ứng Dụng" "🛒" "APP"
+Add-MenuBtn "Công Cụ / ISO" "🛠" "TOOL"
+Add-MenuBtn "Mạng / Bảo Mật" "🛡" "NET"
+Add-MenuBtn "Hệ Thống" "💻" "SYS"
+
+# --- APPLY THEME FUNCTION ---
+function Apply-Theme {
+    $T = if ($Global:DarkMode) { $Theme.Dark } else { $Theme.Light }
+    
+    # Form
+    $Form.BackColor = $T.FormBack; $Form.ForeColor = $T.TextMain
+    
+    # SideBar
+    $PnlSide.BackColor = $T.SideBar
+    $PnlLogo.ForeColor = $T.Accent
+    foreach ($C in $PnlSide.Controls) { if ($C -is [System.Windows.Forms.Button]) { $C.ForeColor = $T.TextMain } }
+    
+    # Content Areas
+    $PnlHeader.BackColor = $T.FormBack
+    $LblAppTitle.ForeColor = $T.Accent
+    $PnlStatus.BackColor = $T.SideBar
+    $LblStatus.ForeColor = $T.TextDim
+    
+    # Theme Button
+    $BtnTheme.Text = if ($Global:DarkMode) { "☀ LIGHT" } else { "🌙 DARK" }
+    $BtnTheme.BackColor = $T.ButtonBack; $BtnTheme.ForeColor = $T.TextMain
+    
+    # Content Pages & Buttons
+    foreach ($page in $Pages.Values) {
+        $page.Panel.BackColor = $T.FormBack
+        foreach ($C in $page.Panel.Controls) {
+            # Buttons
+            if ($C -is [System.Windows.Forms.Button]) {
+                if ($C.Tag -eq "Success") {
+                    $C.BackColor = $T.Success; $C.ForeColor = [System.Drawing.Color]::White
+                } else {
+                    $C.BackColor = $T.ButtonBack; $C.ForeColor = $T.TextMain
+                }
+            }
+            # Checkboxes inside Panels
+            if ($C -is [System.Windows.Forms.FlowLayoutPanel]) {
+                foreach ($SubC in $C.Controls) {
+                     if ($SubC -is [System.Windows.Forms.CheckBox]) { $SubC.ForeColor = $T.TextMain }
+                     if ($SubC -is [System.Windows.Forms.Label]) { 
+                        if ($SubC.Font.Size -gt 10) { $SubC.ForeColor = $T.Accent } else { $SubC.ForeColor = $T.TextMain }
+                     }
+                     # Special install button inside panel
+                     if ($SubC -is [System.Windows.Forms.Button]) {
+                         $SubC.BackColor = $T.Success; $SubC.ForeColor = [System.Drawing.Color]::White
+                     }
+                }
+            }
+            # Labels
+            if ($C -is [System.Windows.Forms.Label]) { $C.ForeColor = $T.TextMain }
+        }
+    }
+}
+
+# --- STARTUP ---
+Apply-Theme
+Switch-Page "SYS" # Mặc định mở trang Hệ Thống
+$Form.Add_Load({ $Form.Opacity = 0; 
+    $Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval=20; 
+    $Timer.Add_Tick({ $Form.Opacity+=0.1; if($Form.Opacity-ge 1){$Timer.Stop()} }); $Timer.Start() 
 })
-$PnlFooter.Controls.Add($BtnDonate)
-
-# Status Bar
-$StatusStrip = New-Object System.Windows.Forms.StatusStrip; $StatusStrip.BackColor = [System.Drawing.Color]::Black; $StatusStrip.ForeColor = "Gray"
-$StatusLabel = New-Object System.Windows.Forms.ToolStripStatusLabel; $StatusLabel.Text = "Sẵn sàng | PhatTanPC Toolkit v12.3"; $StatusStrip.Items.Add($StatusLabel)
-$Form.Controls.Add($StatusStrip)
-
-# Animation Fade-In
-$Form.Opacity = 0
-$Form.Add_Load({ 
-    $Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval = 10
-    $Timer.Add_Tick({ if($Form.Opacity -lt 1){$Form.Opacity+=0.1}else{$Timer.Stop()} })
-    $Timer.Start()
-})
-
 $Form.ShowDialog() | Out-Null
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
