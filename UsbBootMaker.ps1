@@ -1,10 +1,9 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (V4.1: VIRTUALBOX FIX)
-    Fixes: 
-    - Split DiskPart process to handle VM USB latency (Fix "Device not ready")
-    - Fixed Font Constructor ambiguity
-    - Fixed Missing Theme Color
-    - Added User-Agent for GitHub Downloads
+    USB BOOT MAKER - PHAT TAN PC (V4.2: FINAL FIX)
+    Updates:
+    - Fixed Function Name mismatch error
+    - Optimized DiskPart steps for VirtualBox
+    - Auto-detect BootICE or download from GitHub
 #>
 
 # 1. SETUP
@@ -15,18 +14,19 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
 $Global:JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/bootkits.json"
-$Global:BootIceUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/raw/main/BOOTICE.exe" 
+# [LUU Y] File tren Github phai ten la BOOTICE.exe
+$Global:BootIceUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/BOOTICE.exe" 
 $Global:TempDir = "$env:TEMP\UsbBootMaker"
 if (!(Test-Path $Global:TempDir)) { New-Item -ItemType Directory -Path $Global:TempDir -Force | Out-Null }
 
-# 3. THEME (Fixed missing 'Muted')
+# 3. THEME
 $Theme = @{
     BgForm  = [System.Drawing.Color]::FromArgb(20,20,25)
     Card    = [System.Drawing.Color]::FromArgb(35,35,40)
     Text    = [System.Drawing.Color]::FromArgb(240,240,240)
     Cyan    = [System.Drawing.Color]::FromArgb(0,255,255)
     InputBg = [System.Drawing.Color]::FromArgb(50,50,55)
-    Muted   = [System.Drawing.Color]::Gray # [FIX] Thêm màu này để tránh lỗi
+    Muted   = [System.Drawing.Color]::Gray
 }
 
 # --- HELPER FUNCTIONS ---
@@ -36,8 +36,8 @@ function Log-Msg ($Msg) {
     [System.Windows.Forms.Application]::DoEvents()
 }
 
-# [FIX] Tách hàm chạy DiskPart để xử lý độ trễ
-function Run-DiskPart-Step ($Commands) {
+# [FIXED] Doi ten ham ve giong luc goi de het loi
+function Run-DiskPartScript ($Commands) {
     $F = "$Global:TempDir\dp_step.txt"; [IO.File]::WriteAllText($F, $Commands)
     $P = Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow -PassThru
     return $P.ExitCode
@@ -49,38 +49,32 @@ function Run-BootICE ($DiskID, $PartIndex) {
     
     # 1. Tai BootICE neu chua co
     if (!(Test-Path $ToolPath)) {
-        Log-Msg "Đang tải BOOTICE..."
+        Log-Msg "Dang tai BOOTICE..."
         try { 
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $Web = New-Object Net.WebClient
-            $Web.Headers.Add("User-Agent", "Mozilla/5.0") # [FIX] Giả lập trình duyệt
+            $Web.Headers.Add("User-Agent", "Mozilla/5.0")
             $Web.DownloadFile($Global:BootIceUrl, $ToolPath)
         } catch { 
-            Log-Msg "LOI: Không tải được BootICE! Link có thể bị chặn."
+            Log-Msg "LOI: Khong tai duoc BootICE! Kiem tra lai Github."
             return 
         }
     }
 
-    Log-Msg "Đang nạp MBR/PBR (Grub4Dos) cho Disk $DiskID..."
-    
     if (Test-Path $ToolPath) {
-        # 2. Nap MBR
+        Log-Msg "Dang nap MBR/PBR (Grub4Dos)..."
+        # Nap MBR
         $ArgMBR = "/DEVICE=$DiskID /MBR /install /type=GRUB4DOS /auto /quiet"
         Start-Process -FilePath $ToolPath -ArgumentList $ArgMBR -Wait -WindowStyle Hidden
-        
-        # 3. Nap PBR
+        # Nap PBR
         $ArgPBR = "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /auto /quiet"
         Start-Process -FilePath $ToolPath -ArgumentList $ArgPBR -Wait -WindowStyle Hidden
-        
-        Log-Msg "Đã nạp Bootloader Legacy thành công!"
+        Log-Msg "Nap Bootloader xong."
     }
 }
 
 function Get-DriveLetterByLabel ($Label) {
-    # Refresh lại Disk info trước khi tìm
-    Get-Disk | Update-Disk -ErrorAction SilentlyContinue
-    Start-Sleep 1
-    
+    Get-Disk | Update-Disk -ErrorAction SilentlyContinue; Start-Sleep 1
     if (Get-Command "Get-Volume" -ErrorAction SilentlyContinue) {
         try { $v=Get-Volume|Where{$_.FileSystemLabel -eq $Label}|Select -First 1; if($v.DriveLetter){return "$($v.DriveLetter):"} } catch {}
     }
@@ -93,14 +87,14 @@ function Add-GlowBorder ($Panel) {
 }
 
 # --- GUI INIT ---
-$Form = New-Object System.Windows.Forms.Form
-$Form.Text="USB BOOT MAKER V4.1 (FIX VIRTUALBOX)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
-
-# [FIX] Sửa lại constructor Font để tránh lỗi Ambiguous
+# [FIXED] Sua khai bao Font de het loi "Ambiguous"
 $F_Title = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
 $F_Norm  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
 $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
+
+$Form = New-Object System.Windows.Forms.Form
+$Form.Text="USB BOOT MAKER V4.2 (FINAL FIX)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
 
 $MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
@@ -110,28 +104,26 @@ $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Wind
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
 $Form.Controls.Add($MainLayout)
 
-# 1. Header
+# Header
 $PnlTitle=New-Object System.Windows.Forms.Panel; $PnlTitle.Height=50; $PnlTitle.Dock="Top"; $PnlTitle.Margin="0,0,0,10"
-$LblTitle=New-Object System.Windows.Forms.Label; $LblTitle.Text="⚡ USB BOOT CREATOR (VBOX FIX)"; $LblTitle.Font=$F_Title; $LblTitle.ForeColor=$Theme.Cyan; $LblTitle.AutoSize=$true; $LblTitle.Location="10,10"
+$LblTitle=New-Object System.Windows.Forms.Label; $LblTitle.Text="⚡ USB BOOT CREATOR ULTIMATE"; $LblTitle.Font=$F_Title; $LblTitle.ForeColor=$Theme.Cyan; $LblTitle.AutoSize=$true; $LblTitle.Location="10,10"
 $PnlTitle.Controls.Add($LblTitle); $MainLayout.Controls.Add($PnlTitle,0,0)
 
-# Card Helper (Fixed Font usage)
+# Helper
 function New-Card ($T) { 
     $P=New-Object System.Windows.Forms.Panel; $P.BackColor=$Theme.Card; $P.Padding=10; $P.Margin="0,0,0,15"; $P.Dock="Top"; $P.AutoSize=$true; Add-GlowBorder $P; 
     $L=New-Object System.Windows.Forms.Label; $L.Text=$T; $L.Font=$Global:F_Bold; $L.ForeColor=$Theme.Muted; $L.Dock="Top"; $L.Height=25; 
     $P.Controls.Add($L); return $P 
 }
 
-# 2. USB
+# UI Components
 $CardUSB=New-Card "1. CHỌN THIẾT BỊ USB"; $L1=New-Object System.Windows.Forms.TableLayoutPanel; $L1.Dock="Top"; $L1.Height=40; $L1.ColumnCount=2; $L1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,80)))
 $CbUSB=New-Object System.Windows.Forms.ComboBox; $CbUSB.Dock="Fill"; $CbUSB.Font=$F_Norm; $CbUSB.BackColor=$Theme.InputBg; $CbUSB.ForeColor="White"; $CbUSB.DropDownStyle="DropDownList"
 $BtnRef=New-Object System.Windows.Forms.Button; $BtnRef.Text="LÀM MỚI"; $BtnRef.Dock="Fill"; $BtnRef.BackColor=$Theme.InputBg; $BtnRef.ForeColor="White"; $BtnRef.FlatStyle="Flat"
 $L1.Controls.Add($CbUSB,0,0); $L1.Controls.Add($BtnRef,1,0); $CardUSB.Controls.Add($L1); $MainLayout.Controls.Add($CardUSB,0,1)
 
-# 3. Kit
 $CardKit=New-Card "2. CHỌN BOOT KIT"; $CbKit=New-Object System.Windows.Forms.ComboBox; $CbKit.Dock="Top"; $CbKit.Font=$F_Norm; $CbKit.BackColor=$Theme.InputBg; $CbKit.ForeColor="White"; $CbKit.DropDownStyle="DropDownList"; $CardKit.Controls.Add($CbKit); $MainLayout.Controls.Add($CardKit,0,2)
 
-# 4. Settings (Scroll)
 $CardSet=New-Object System.Windows.Forms.GroupBox; $CardSet.Text="3. TÙY CHỈNH NÂNG CAO"; $CardSet.Dock="Fill"; $CardSet.ForeColor=[System.Drawing.Color]::Gold; $CardSet.Padding="5,20,5,5"
 $Scroll=New-Object System.Windows.Forms.Panel; $Scroll.Dock="Fill"; $Scroll.AutoScroll=$true; $CardSet.Controls.Add($Scroll)
 $Grid=New-Object System.Windows.Forms.TableLayoutPanel; $Grid.Dock="Top"; $Grid.AutoSize=$true; $Grid.ColumnCount=3; $Grid.RowCount=3
@@ -150,12 +142,10 @@ $TxtData=New-Object System.Windows.Forms.TextBox; $TxtData.Text="GLIM_DATA"; Add
 
 $MainLayout.Controls.Add($CardSet,0,3)
 
-# 5. Log
 $PnlLog=New-Object System.Windows.Forms.Panel; $PnlLog.Dock="Fill"; $PnlLog.Padding="0,10,0,0"
 $TxtLog=New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline=$true; $TxtLog.Dock="Fill"; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.Font=$F_Code; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"
 $PnlLog.Controls.Add($TxtLog); $MainLayout.Controls.Add($PnlLog,0,4)
 
-# 6. Start
 $BtnStart=New-Object System.Windows.Forms.Button; $BtnStart.Text="🚀 BẮT ĐẦU"; $BtnStart.Font=$F_Title; $BtnStart.BackColor=$Theme.Cyan; $BtnStart.ForeColor="Black"; $BtnStart.FlatStyle="Flat"; $BtnStart.Dock="Bottom"; $BtnStart.Height=60; $Form.Controls.Add($BtnStart)
 
 # --- LOGIC ---
@@ -173,19 +163,12 @@ function Load-K {
         $Web = New-Object Net.WebClient
         $Web.Headers.Add("User-Agent", "Mozilla/5.0")
         $j = $Web.DownloadString("$($Global:JsonUrl)?t=$(Get-Date -UFormat %s)") | ConvertFrom-Json
-        
         if($j){foreach($i in $j){if($i.Name){$CbKit.Items.Add($i.Name);$Global:KitData=$j}}}; if($CbKit.Items.Count -gt 0){$CbKit.SelectedIndex=0; Log-Msg "Sẵn sàng."} 
     } catch { $CbKit.Items.Add("Chế độ Demo");$CbKit.SelectedIndex=0; Log-Msg "Lỗi mạng hoặc JSON lỗi." }
 }
 
 function Download-File ($Url, $Dest) {
-    Log-Msg "Đang tải xuống..."; 
-    try { 
-        $Web = New-Object Net.WebClient
-        $Web.Headers.Add("User-Agent", "Mozilla/5.0")
-        $Web.DownloadFile($Url, $Dest)
-        return $true 
-    } catch { Log-Msg "Lỗi tải file!"; return $false }
+    Log-Msg "Đang tải xuống..."; try { $Web=New-Object Net.WebClient; $Web.Headers.Add("User-Agent","Mozilla/5.0"); $Web.DownloadFile($Url, $Dest); return $true } catch { Log-Msg "Lỗi tải file!"; return $false }
 }
 
 $BtnStart.Add_Click({
@@ -194,68 +177,48 @@ $BtnStart.Add_Click({
     if([System.Windows.Forms.MessageBox]::Show("XÓA SẠCH DỮ LIỆU DISK $ID?","CẢNH BÁO","YesNo","Warning") -ne "Yes"){return}
     $BtnStart.Enabled=$false; $Form.Cursor="WaitCursor"
 
-    # 1. DL ZIP
     $Zip="$Global:TempDir\$($K.FileName)"
     if(!(Test-Path $Zip)){ Log-Msg "Tải Kit: $($K.FileName)..."; if(!(Download-File $K.Url $Zip)){$BtnStart.Enabled=$true;$Form.Cursor="Default";return} }
 
-    # 2. DISKPART (CHIA LÀM 2 BƯỚC ĐỂ FIX LỖI DEVICE NOT READY TRÊN VM)
+    # CHIA DOI DISKPART DE FIX VIRTUALBOX
     $St=if($CbStyle.SelectedIndex -eq 0){"mbr"}else{"gpt"}; $Sz=$NumSize.Value; $BL=$TxtBoot.Text; $DL=$TxtData.Text; $FS=$CbFS.SelectedItem
     
-    # Bước 2a: Clean & Convert (Gây ngắt kết nối USB)
-    Log-Msg "B1: Xóa sạch USB (Clean)..."
-    $Cmd1 = "select disk $ID`nclean`nconvert $St`nrescan"
-    Run-DiskPartScript $Cmd1
-    
-    Log-Msg "Đợi 5s cho VirtualBox nhận lại USB..."
-    Start-Sleep 5 # [QUAN TRỌNG] Chờ USB mount lại
+    # 1. CLEAN
+    Log-Msg "B1: Format USB (Clean)..."
+    Run-DiskPartScript "select disk $ID`nclean`nconvert $St`nrescan"
+    Log-Msg "Doi 5s cho VirtualBox nhan lai USB..."; Start-Sleep 5
 
-    # Bước 2b: Tạo phân vùng
-    Log-Msg "B2: Tạo phân vùng Boot ($Sz MB) & Data..."
-    $Cmd2 = "select disk $ID"
+    # 2. CREATE PARTITIONS
+    Log-Msg "B2: Tao phan vung..."
+    $Cmd="select disk $ID"
     if($St -eq "mbr"){ 
-        $Cmd2 += "`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign"
-        $Cmd2 += "`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
+        $Cmd+="`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign"
+        $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
     } else { 
-        $Cmd2 += "`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nassign"
-        $Cmd2 += "`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
+        $Cmd+="`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nassign"
+        $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
     }
-    
-    Run-DiskPartScript $Cmd2
-    Log-Msg "Đợi Windows gán ký tự ổ đĩa (5s)..."; Start-Sleep 5
+    Run-DiskPartScript $Cmd
+    Log-Msg "Doi 5s gan o dia..."; Start-Sleep 5
 
-    # 3. BOOTICE (MBR/PBR)
-    if ($St -eq "mbr") {
-        Log-Msg "Đang nạp Bootloader (BootICE)..."
-        Run-BootICE $ID 0
-    }
+    # 3. BOOTICE
+    if ($St -eq "mbr") { Run-BootICE $ID 0 }
 
-    # 4. DETECT DRIVE LETTER
-    Log-Msg "Đang tìm ổ đĩa..."
-    for($i=1;$i -le 5;$i++){ 
-        $B=Get-DriveLetterByLabel $BL; $D=Get-DriveLetterByLabel $DL
-        if($B -and $D){break}
-        Start-Sleep 2 
-    }
-    
-    if(!$B){ Log-Msg "CẢNH BÁO: Không tìm thấy ổ Boot ($BL). Có thể cần rút ra cắm lại."; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    # 4. EXTRACT
+    for($i=1;$i -le 5;$i++){ $B=Get-DriveLetterByLabel $BL; $D=Get-DriveLetterByLabel $DL; if($B -and $D){break}; Start-Sleep 2 }
+    if(!$B){ Log-Msg "Lỗi tìm ổ Boot! (Rút USB cắm lại rồi thử lại)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     Log-Msg "Boot: $B | Data: $D"
 
-    # 5. EXTRACT
-    Log-Msg "Giải nén dữ liệu..."
-    try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{ Log-Msg "Lỗi giải nén: $($_.Exception.Message)" }
-    
-    # Menu.lst Bridge (Optional)
-    if ($St -eq "mbr" -and !(Test-Path "$B\menu.lst")) {
-        "timeout 0`ndefault 0`ntitle Boot`nfind --set-root /boot/grub/i386-pc/core.img`nkernel /boot/grub/i386-pc/core.img`nboot" | Out-File "$B\menu.lst" -Encoding ASCII
-    }
+    Log-Msg "Giải nén..."
+    try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{}
+    if ($St -eq "mbr" -and !(Test-Path "$B\menu.lst")) { "timeout 0`ndefault 0`ntitle Boot`nfind --set-root /boot/grub/i386-pc/core.img`nkernel /boot/grub/i386-pc/core.img`nboot" | Out-File "$B\menu.lst" -Encoding ASCII }
 
-    # 6. FOLDERS
     if($D){
-        Log-Msg "Tạo thư mục chứa ISO..."
+        Log-Msg "Tạo thư mục ISO..."
         @("iso\windows","iso\linux","iso\android","iso\utilities") | ForEach { New-Item -ItemType Directory -Path "$D\$_" -Force | Out-Null }
     }
 
-    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("Tạo USB Boot thành công!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("Thành công!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
     if($D){Invoke-Item "$D\iso"}
 })
 
