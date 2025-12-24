@@ -1,0 +1,41 @@
+{
+  "Categories": {
+    "Microsoft 365 (Gói Thuê Bao)": {
+      "M365 Apps for Enterprise (ProPlus)": "O365ProPlusRetail",
+      "M365 Business Standard": "O365BusinessRetail",
+      "M365 Business Basic (Chỉ App Web)": "O365AppsBasicRetail",
+      "M365 Business Premium": "O365SmallBusPremRetail",
+      "M365 Education (Giáo dục)": "O365EduCloudRetail",
+      "M365 Family / Personal": "O365HomePremRetail"
+    },
+    "Office 2021 (Mua 1 Lần)": {
+      "Pro Plus 2021 (Volume - Khuyên dùng)": "ProPlus2021Volume",
+      "Pro Plus 2021 (Retail - Key Online)": "ProPlus2021Retail",
+      "Standard 2021 (Volume)": "Standard2021Volume",
+      "Home & Business 2021": "HomeBusiness2021Retail"
+    },
+    "Office 2019": {
+      "Pro Plus 2019 (Volume)": "ProPlus2019Volume",
+      "Standard 2019 (Volume)": "Standard2019Volume"
+    },
+    "Office 2016": {
+      "Pro Plus 2016 (Volume)": "ProPlusVolume",
+      "Standard 2016 (Volume)": "StandardVolume"
+    }
+  },
+  "Extras": {
+    "VisioRetail": "VisioProRetail",
+    "ProjectRetail": "ProjectProRetail"
+  },
+  "Languages": {
+    "Tiếng Việt (Vietnam)": "vi-vn",
+    "English (US)": "en-us",
+    "English (UK)": "en-gb",
+    "Tiếng Trung (China)": "zh-cn",
+    "Tiếng Nhật (Japan)": "ja-jp",
+    "Tiếng Hàn (Korea)": "ko-kr",
+    "Tiếng Pháp (France)": "fr-fr",
+    "Tiếng Đức (Germany)": "de-de",
+    "Tiếng Nga (Russia)": "ru-ru"
+  }
+}
