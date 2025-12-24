@@ -1,9 +1,9 @@
 <#
     OFFICE MASTER - PHAT TAN PC
-    Version: 5.3 (Multi-Language Support)
+    Version: 5.4 (Debug Fix & TLS 1.2)
     Update: 
-    - Languages are now loaded dynamically from JSON.
-    - Added Backup Languages if offline.
+    - Forced TLS 1.2 Security Protocol (Fix connection errors).
+    - Detailed Error Logging (Show specific exception message).
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -15,10 +15,13 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "SilentlyContinue"
 
+# [FIX] BẮT BUỘC DÙNG TLS 1.2 (QUAN TRỌNG ĐỂ TẢI FILE TỪ MICROSOFT)
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
 # --- 2. CONFIG & DATA LOADER ---
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/office_data.json"
 $Global:ProdMap = @{}
-$Global:LangMap = @{} # [NEW] Map tên ngôn ngữ sang mã
+$Global:LangMap = @{} 
 $Global:Extras = @{ "VisioRetail"="VisioProRetail"; "ProjectRetail"="ProjectProRetail" }
 
 function Load-Config {
@@ -30,20 +33,17 @@ function Load-Config {
         
         $Data = $JsonContent | ConvertFrom-Json
         
-        # Parse Products
         $Data.Categories.PSObject.Properties | ForEach-Object {
             $CatName = $_.Name; $Items = $_.Value; $SubMap = @{}
             $Items.PSObject.Properties | ForEach-Object { $SubMap[$_.Name] = $_.Value }
             $Global:ProdMap[$CatName] = $SubMap
         }
         
-        # Parse Extras
         if ($Data.Extras) {
             $Global:Extras["VisioRetail"] = $Data.Extras.VisioRetail
             $Global:Extras["ProjectRetail"] = $Data.Extras.ProjectRetail
         }
 
-        # [NEW] Parse Languages
         if ($Data.Languages) {
             $Data.Languages.PSObject.Properties | ForEach-Object {
                 $Global:LangMap[$_.Name] = $_.Value
@@ -73,7 +73,7 @@ $Theme = @{
 
 # --- 4. UI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "OFFICE MASTER V5.3 (MULTI-LANG) - PHAT TAN PC"
+$Form.Text = "OFFICE MASTER V5.4 (TLS FIXED) - PHAT TAN PC"
 $Form.Size = New-Object System.Drawing.Size(950, 680)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -123,7 +123,6 @@ $CbMainVer.Add_SelectedIndexChanged({
 })
 if ($CbMainVer.Items.Count -gt 0) { $CbMainVer.SelectedIndex = 0 }
 
-# [UPDATED UI] NGÔN NGỮ TỪ JSON
 $Pnl1.Controls.Add((New-Object System.Windows.Forms.Label -Prop @{Text="Ngôn ngữ:"; AutoSize=$true}))
 $CbLang = New-StyledCombo $Pnl1
 foreach ($L in $Global:LangMap.Keys) { $CbLang.Items.Add($L) | Out-Null }
@@ -164,11 +163,26 @@ function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm'))] $
 function Get-SetupExe {
     $WorkDir = "$env:TEMP\OfficeSetup"; if (!(Test-Path $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir | Out-Null }
     $SetupPath = "$WorkDir\setup.exe"
+    
+    # Kiem tra xem da co setup.exe chua
     if (!(Test-Path $SetupPath)) {
-        Log "Tải ODT từ Microsoft..."
-        try { (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?LinkID=626065", "$WorkDir\odt.exe")
+        Log "Đang tải ODT từ Microsoft..."
+        try { 
+            # Dùng WebClient với User-Agent để tránh bị chặn
+            $Web = New-Object System.Net.WebClient
+            $Web.Headers.Add("User-Agent", "Mozilla/5.0")
+            $Web.DownloadFile("https://go.microsoft.com/fwlink/?LinkID=626065", "$WorkDir\odt.exe")
+            
+            Log "Tải xong. Đang giải nén..."
             Start-Process "$WorkDir\odt.exe" "/quiet /extract:`"$WorkDir`"" -Wait
-        } catch { Log "Lỗi mạng!" }
+            
+            if (Test-Path $SetupPath) { Log "Đã lấy được file Setup!" } else { Log "Lỗi giải nén: Không thấy setup.exe" }
+            
+        } catch { 
+            # [FIX] In ra loi chi tiet thay vi chung chung
+            Log "LỖI TẢI FILE: $($_.Exception.Message)"
+            if ($_.Exception.InnerException) { Log "Chi tiết: $($_.Exception.InnerException.Message)" }
+        }
     }
     return $SetupPath
 }
@@ -177,7 +191,6 @@ function Run-ODT ($Mode) {
     $Main=$CbMainVer.SelectedItem; $Sub=$CbSubVer.SelectedItem
     $ID = $Global:ProdMap[$Main][$Sub]
     
-    # [UPDATED LOGIC] Lấy Mã Ngôn Ngữ từ Map
     $SelLangName = $CbLang.SelectedItem
     $LangID = $Global:LangMap[$SelLangName]
     $Bit=if($R64.Checked){"64"}else{"32"}
@@ -208,6 +221,8 @@ function Run-ODT ($Mode) {
     $Exe = Get-SetupExe
     if(Test-Path $Exe){ 
         if($Mode -eq "Install"){Start-Process $Exe "/configure `"$Xml`""}else{Start-Process $Exe "/download `"$Xml`""}
+    } else {
+        Log "KHÔNG THỂ CHẠY: Thiếu file Setup.exe"
     }
 }
 
