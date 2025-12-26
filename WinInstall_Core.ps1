@@ -286,25 +286,46 @@ function Start-Auto-DISM {
         [System.Windows.Forms.MessageBox]::Show("LỖI DISM (V3):\n\n$RealError", "ERROR", "OK", "Error")
         $Form.Cursor = "Default"; return
     }
-    Log "Creating Boot Entry..."
+    Log "Creating Boot Entry (UNIVERSAL FIX)..."
+    
+    # Di chuyển file ra ổ C (Code cũ)
     Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall.wim" -Force
     Move-Item "$WorkDir\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     Remove-Item $WorkDir -Recurse -Force
 
-    cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk`"" 2>$null
-    cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice partition=$env:SystemDrive"
+    # --- [GEMINI FIX V4: DÙNG "LOCATE" ĐỂ TỰ TÌM Ổ CHỨA] ---
+    # Thay vì ép ổ C:, ta dùng lệnh "locate" để Boot Manager tự dò tìm file.
+    
+    # 1. Cấu hình RAMDISK OPTIONS
+    # Xóa cấu hình cũ nếu có để tránh xung đột
+    cmd /c "bcdedit /delete {ramdiskoptions} /f" 2>$null 
+    cmd /c "bcdedit /create {ramdiskoptions} /d `"Ramdisk Options`"" 2>$null
+    
+    # Quan trọng: Dùng "locate=\boot.sdi" thay vì "partition=C:"
+    cmd /c "bcdedit /set {ramdiskoptions} ramdisksdidevice locate=\boot.sdi"
     cmd /c "bcdedit /set {ramdiskoptions} ramdisksdipath \boot.sdi"
+
+    # 2. Tạo Menu Boot mới
     $Guid = [Guid]::NewGuid().ToString("B")
     cmd /c "bcdedit /create $Guid /d `"AUTO INSTALLER`" /application osloader"
-    cmd /c "bcdedit /set $Guid device ramdisk=[$env:SystemDrive]\WinInstall.wim,{ramdiskoptions}"
-    cmd /c "bcdedit /set $Guid osdevice ramdisk=[$env:SystemDrive]\WinInstall.wim,{ramdiskoptions}"
+    
+    # Quan trọng: Dùng "[locate]\WinInstall.wim"
+    cmd /c "bcdedit /set $Guid device ramdisk=[locate]\WinInstall.wim,{ramdiskoptions}"
+    cmd /c "bcdedit /set $Guid osdevice ramdisk=[locate]\WinInstall.wim,{ramdiskoptions}"
+    
+    # Các thiết lập chuẩn khác
     cmd /c "bcdedit /set $Guid path \windows\system32\boot\winload.efi"
+    cmd /c "bcdedit /set $Guid systemroot \windows"
     cmd /c "bcdedit /set $Guid winpe yes"
     cmd /c "bcdedit /set $Guid detecthal yes"
+    
+    # Đặt boot 1 lần (One-time boot) hoặc thêm vào list
+    cmd /c "bcdedit /displayorder $Guid /addlast"
     cmd /c "bcdedit /bootsequence $Guid"
+    # -------------------------------------------------------
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Sẵn sàng! Bấm YES để Restart.", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force }
+    if ([System.Windows.Forms.MessageBox]::Show("Đã sửa lỗi Boot! Bấm YES để Restart.", "Xong", "YesNo") -eq "Yes") { Restart-Computer -Force }
 }
 
 # --- EVENTS ---
