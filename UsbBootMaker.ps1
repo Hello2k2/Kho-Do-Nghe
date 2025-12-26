@@ -1,9 +1,9 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (V4.4: FINAL RELEASE)
+    USB BOOT MAKER - PHAT TAN PC (V4.5: MBR BOOT FIX)
     Updates:
-    - Updated GRLDR Download Link (Github Release v1.0)
-    - Auto-fix "Missing GRLDR" / "Not Glurp" error
-    - Optimized for VirtualBox (Split DiskPart)
+    - Fix MBR/PBR BootICE logic (Force Grub4Dos).
+    - Fix menu.lst timeout (Stop auto-booting HDD).
+    - Auto-download GRLDR if missing.
 #>
 
 # 1. SETUP
@@ -14,9 +14,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
 $Global:JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/bootkits.json"
-# Link BootICE (Nếu lỗi thì kiểm tra lại link này trên repo của ông)
 $Global:BootIceUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/raw/main/BOOTICE.exe"
-# [UPDATE] Link tải GRLDR chuẩn từ Release v1.0 của ông
 $Global:GrldrUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/grldr" 
 $Global:TempDir = "$env:TEMP\UsbBootMaker"
 
@@ -45,7 +43,7 @@ function Run-DiskPartScript ($Commands) {
     return $P.ExitCode
 }
 
-# --- BOOTICE & GRLDR ---
+# --- BOOTICE & GRLDR FIX ---
 function Run-BootICE ($DiskID, $PartIndex) {
     $ToolPath = "$Global:TempDir\BOOTICE.exe"
     
@@ -60,11 +58,14 @@ function Run-BootICE ($DiskID, $PartIndex) {
     }
 
     if (Test-Path $ToolPath) {
-        Log-Msg "Nạp MBR/PBR (Grub4Dos)..."
+        Log-Msg "Nạp MBR (Grub4Dos)..."
+        # MBR: Nạp Grub4Dos vào Master Boot Record
         $ArgMBR = "/DEVICE=$DiskID /MBR /install /type=GRUB4DOS /auto /quiet"
         Start-Process -FilePath $ToolPath -ArgumentList $ArgMBR -Wait -WindowStyle Hidden
         
-        $ArgPBR = "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /auto /quiet"
+        Log-Msg "Nạp PBR (Grub4Dos -> GRLDR)..."
+        # PBR: Quan trọng! Phải trỏ PBR về file GRLDR
+        $ArgPBR = "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /GRLDR=grldr /auto /quiet"
         Start-Process -FilePath $ToolPath -ArgumentList $ArgPBR -Wait -WindowStyle Hidden
     }
 }
@@ -89,7 +90,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSt
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text="USB BOOT MAKER V4.4 (FINAL)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
+$Form.Text="USB BOOT MAKER V4.5 (MBR FIXED)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
 
 $MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
@@ -168,15 +169,17 @@ $BtnStart.Add_Click({
     $Zip="$Global:TempDir\$($K.FileName)"
     if(!(Test-Path $Zip)){ Log-Msg "Tải Kit: $($K.FileName)..."; if(!(Download-File $K.Url $Zip)){$BtnStart.Enabled=$true;$Form.Cursor="Default";return} }
 
-    # DISKPART (Split Mode for VM)
+    # DISKPART
     $St=if($CbStyle.SelectedIndex -eq 0){"mbr"}else{"gpt"}; $Sz=$NumSize.Value; $BL=$TxtBoot.Text; $DL=$TxtData.Text; $FS=$CbFS.SelectedItem
     
     Log-Msg "B1: Format USB (Clean)..."
     Run-DiskPartScript "select disk $ID`nclean`nconvert $St`nrescan"
-    Log-Msg "Đợi 5s cho VirtualBox nhận lại USB..."; Start-Sleep 5
+    Log-Msg "Đợi 3s..."
+    Start-Sleep 3
 
-    Log-Msg "B2: Tạo phân vùng..."
+    Log-Msg "B2: Tạo phân vùng Boot & Data..."
     $Cmd="select disk $ID"
+    # Sửa logic active cho MBR
     if($St -eq "mbr"){ 
         $Cmd+="`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign"
         $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
@@ -187,33 +190,58 @@ $BtnStart.Add_Click({
     Run-DiskPartScript $Cmd
     Log-Msg "Đợi 5s gán ổ đĩa..."; Start-Sleep 5
 
-    # BOOTICE (MBR/PBR)
-    if ($St -eq "mbr") { Run-BootICE $ID 0 }
-
-    # DETECT
-    for($i=1;$i -le 5;$i++){ $B=Get-DriveLetterByLabel $BL; $D=Get-DriveLetterByLabel $DL; if($B -and $D){break}; Start-Sleep 2 }
-    if(!$B){ Log-Msg "Lỗi tìm ổ Boot! (Rút USB cắm lại rồi thử lại)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    # DETECT DRIVE LETTERS
+    for($i=1;$i -le 10;$i++){ $B=Get-DriveLetterByLabel $BL; $D=Get-DriveLetterByLabel $DL; if($B -and $D){break}; Start-Sleep 1 }
+    if(!$B){ Log-Msg "Lỗi tìm ổ Boot! (Thử rút ra cắm lại)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     Log-Msg "Boot: $B | Data: $D"
 
-    # EXTRACT
-    Log-Msg "Giải nén Kit..."
-    try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{}
-
-    # [FIX] AUTO DOWNLOAD GRLDR NẾU THIẾU
-    if ($St -eq "mbr" -and !(Test-Path "$B\grldr")) {
-        Log-Msg "⚠ Thiếu GRLDR -> Đang tải về..."
-        try {
-            $Web = New-Object Net.WebClient
-            $Web.Headers.Add("User-Agent", "Mozilla/5.0")
-            # Link tu Github Release cua ong
-            $Web.DownloadFile($Global:GrldrUrl, "$B\grldr")
-            Log-Msg "Đã thêm GRLDR vào USB."
-        } catch { Log-Msg "Lỗi tải GRLDR!" }
+    # [IMPORTANT] BOOTICE MUST RUN AFTER PARTITIONING
+    if ($St -eq "mbr") { 
+        Log-Msg "Chạy BootICE (Nạp MBR/PBR)..."
+        Run-BootICE $ID 0 
     }
 
-    # TAO MENU.LST CHO GRLDR
-    if ($St -eq "mbr" -and !(Test-Path "$B\menu.lst")) { 
-        "timeout 0`ndefault 0`ntitle Boot`nfind --set-root /boot/grub/i386-pc/core.img`nkernel /boot/grub/i386-pc/core.img`nboot" | Out-File "$B\menu.lst" -Encoding ASCII 
+    # EXTRACT ZIP
+    Log-Msg "Giải nén Kit vào $B..."
+    try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{Log-Msg "Lỗi giải nén: $_"}
+
+    # [FIX] AUTO DOWNLOAD GRLDR NẾU THIẾU
+    if ($St -eq "mbr") {
+        if (!(Test-Path "$B\grldr")) {
+            Log-Msg "⚠ Thiếu GRLDR -> Đang tải về..."
+            try {
+                $Web = New-Object Net.WebClient
+                $Web.Headers.Add("User-Agent", "Mozilla/5.0")
+                $Web.DownloadFile($Global:GrldrUrl, "$B\grldr")
+                Log-Msg "Đã thêm GRLDR."
+            } catch { Log-Msg "Lỗi tải GRLDR! USB có thể không boot được." }
+        }
+        
+        # [FIX] MENU.LST TIMEOUT
+        # Tạo file menu.lst nếu chưa có, hoặc ghi đè để đảm bảo hiện menu
+        if (!(Test-Path "$B\menu.lst") -or (Get-Content "$B\menu.lst" -Raw) -match "timeout 0") { 
+            Log-Msg "Tạo menu.lst mặc định..."
+            $MenuContent = @"
+timeout 15
+default 0
+color white/blue black/light-gray
+
+title [0] Windows Boot Manager
+find --set-root /bootmgr
+chainloader /bootmgr
+
+title [1] Search for Ventoy
+find --set-root /ventoy/boot.img
+kernel /ventoy/boot.img
+
+title [2] Reboot
+reboot
+
+title [3] Shutdown
+halt
+"@
+            $MenuContent | Out-File "$B\menu.lst" -Encoding ASCII 
+        }
     }
 
     if($D){
@@ -221,7 +249,7 @@ $BtnStart.Add_Click({
         @("iso\windows","iso\linux","iso\android","iso\utilities") | ForEach { New-Item -ItemType Directory -Path "$D\$_" -Force | Out-Null }
     }
 
-    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot đã sẵn sàng!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot đã sẵn sàng! (MBR Fixed)"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
     if($D){Invoke-Item "$D\iso"}
 })
 
