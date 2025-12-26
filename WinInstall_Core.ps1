@@ -230,24 +230,23 @@ function Start-Auto-DISM {
 
     Log "Injecting Script..."
     
-    # --- [GEMINI FIX: BẺ KHÓA QUYỀN TRUY CẬP] ---
+    # --- [GEMINI FIX V2: CHỈ GỠ READ-ONLY (KHÔNG TREO)] ---
     $BootWim = "$WorkDir\boot.wim"
-    Log "Đang xử lý quyền file Boot.wim..."
+    Log "Đang gỡ bỏ Read-Only..."
 
     if (Test-Path $BootWim) {
-        # 1. Tắt thuộc tính Read-only bằng lệnh gốc Windows
+        # 1. Tắt thuộc tính Read-only (Đây là thuốc đặc trị lỗi 0xc1510111)
         & attrib -r -s -h "$BootWim"
 
-        # 2. Tắt bằng PowerShell (để chắc ăn)
+        # 2. Tắt bằng PowerShell (Dự phòng cho chắc)
         Set-ItemProperty -Path "$BootWim" -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
-
-        # 3. Cấp Full Quyền cho mọi người (Tránh lỗi NTFS Permissions)
-        & icacls "$BootWim" /grant Everyone:F /T /C /Q | Out-Null
     }
     
+    # Đã xóa lệnh icacls để tránh bị treo máy
+    # -----------------------------------------------
+
     # Dọn dẹp mount cũ cho sạch sẽ
     Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -WindowStyle Hidden
-    # -----------------------------------------------
 
     $MountSuccess = $false
     
@@ -255,15 +254,14 @@ function Start-Auto-DISM {
     $DebugLog = "$env:TEMP\Dism_Debug.txt"
     "--- DISM LOG START ---" | Out-File $DebugLog -Encoding UTF8
 
-    # ... (Đoạn dưới giữ nguyên logic bắt lỗi) ...
-    # Thử Index 2
+    # Thử Index 2 (Setup)
     $CmdLine = "/c dism /Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`" >> `"$DebugLog`" 2>&1"
     Start-Process "cmd" -ArgumentList $CmdLine -Wait -WindowStyle Hidden
 
     if (Test-Path "$MountDir\Windows\System32") { 
         $MountSuccess = $true 
     } else {
-        # Thử Index 1
+        # Thử Index 1 (PE)
         "--- RETRY INDEX 1 ---" | Out-File $DebugLog -Append
         $CmdLine = "/c dism /Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:1 /MountDir:`"$MountDir`" >> `"$DebugLog`" 2>&1"
         Start-Process "cmd" -ArgumentList $CmdLine -Wait -WindowStyle Hidden
@@ -280,7 +278,7 @@ function Start-Auto-DISM {
         Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Discard" -Wait
         
         if (Test-Path $DebugLog) { $RealError = Get-Content $DebugLog | Out-String } else { $RealError = "Không có log." }
-        [System.Windows.Forms.MessageBox]::Show("LỖI SAU KHI ĐÃ FIX QUYỀN:\n\n$RealError", "STILL ERROR", "OK", "Error")
+        [System.Windows.Forms.MessageBox]::Show("LỖI DISM (V2):\n\n$RealError", "ERROR", "OK", "Error")
         $Form.Cursor = "Default"; return
     }
     Log "Creating Boot Entry..."
