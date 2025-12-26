@@ -1,10 +1,16 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (V4.6: GLIM SUPPORT)
+    USB BOOT MAKER - PHAT TAN PC (V4.7: AUTO ADMIN & GLIM)
     Updates:
-    - Fix Menu.lst: Removed Ventoy, Added GLIM/GRUB2 Chainload.
-    - Logic: Grub4Dos (MBR) -> Menu.lst -> Load /boot/grub/i386-pc/core.img.
-    - Fix: Force Active Partition (MBR Boot).
+    - [FIX] Auto Force Administrator Mode (Fix Diskpart Elevation Error).
+    - Includes V4.6 GLIM Chainload logic.
 #>
+
+# --- 0. FORCE ADMIN (QUAN TRỌNG NHẤT) ---
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    $Arg = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    Start-Process powershell.exe -Verb RunAs -ArgumentList $Arg
+    Exit
+}
 
 # 1. SETUP
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -39,6 +45,7 @@ function Log-Msg ($Msg) {
 
 function Run-DiskPartScript ($Commands) {
     $F = "$Global:TempDir\dp_step.txt"; [IO.File]::WriteAllText($F, $Commands)
+    # Vì script cha đã là Admin, lệnh con sẽ tự kế thừa quyền Admin
     $P = Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow -PassThru
     return $P.ExitCode
 }
@@ -55,11 +62,9 @@ function Run-BootICE ($DiskID, $PartIndex) {
 
     if (Test-Path $ToolPath) {
         Log-Msg "Nạp MBR (Grub4Dos)..."
-        # MBR Grub4Dos
         Start-Process -FilePath $ToolPath -ArgumentList "/DEVICE=$DiskID /MBR /install /type=GRUB4DOS /auto /quiet" -Wait -WindowStyle Hidden
         
         Log-Msg "Nạp PBR (Grub4Dos)..."
-        # PBR trỏ vào GRLDR
         Start-Process -FilePath $ToolPath -ArgumentList "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /GRLDR=grldr /auto /quiet" -Wait -WindowStyle Hidden
     }
 }
@@ -84,7 +89,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSt
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text="USB BOOT MAKER V4.6 (GLIM SUPPORT)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
+$Form.Text="USB BOOT MAKER V4.7 (AUTO ADMIN)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
 
 $MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
