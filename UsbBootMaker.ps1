@@ -1,9 +1,9 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (V4.5: MBR BOOT FIX)
+    USB BOOT MAKER - PHAT TAN PC (V4.6: GLIM SUPPORT)
     Updates:
-    - Fix MBR/PBR BootICE logic (Force Grub4Dos).
-    - Fix menu.lst timeout (Stop auto-booting HDD).
-    - Auto-download GRLDR if missing.
+    - Fix Menu.lst: Removed Ventoy, Added GLIM/GRUB2 Chainload.
+    - Logic: Grub4Dos (MBR) -> Menu.lst -> Load /boot/grub/i386-pc/core.img.
+    - Fix: Force Active Partition (MBR Boot).
 #>
 
 # 1. SETUP
@@ -43,30 +43,24 @@ function Run-DiskPartScript ($Commands) {
     return $P.ExitCode
 }
 
-# --- BOOTICE & GRLDR FIX ---
+# --- BOOTICE & GRLDR ---
 function Run-BootICE ($DiskID, $PartIndex) {
     $ToolPath = "$Global:TempDir\BOOTICE.exe"
-    
     if (!(Test-Path $ToolPath)) {
-        Log-Msg "Đang tải BOOTICE..."
         try { 
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $Web = New-Object Net.WebClient
-            $Web.Headers.Add("User-Agent", "Mozilla/5.0")
-            $Web.DownloadFile($Global:BootIceUrl, $ToolPath)
-        } catch { Log-Msg "Lỗi tải BootICE! (Kiểm tra mạng/Link)"; return }
+            (New-Object Net.WebClient).DownloadFile($Global:BootIceUrl, $ToolPath)
+        } catch { Log-Msg "Lỗi tải BootICE!"; return }
     }
 
     if (Test-Path $ToolPath) {
         Log-Msg "Nạp MBR (Grub4Dos)..."
-        # MBR: Nạp Grub4Dos vào Master Boot Record
-        $ArgMBR = "/DEVICE=$DiskID /MBR /install /type=GRUB4DOS /auto /quiet"
-        Start-Process -FilePath $ToolPath -ArgumentList $ArgMBR -Wait -WindowStyle Hidden
+        # MBR Grub4Dos
+        Start-Process -FilePath $ToolPath -ArgumentList "/DEVICE=$DiskID /MBR /install /type=GRUB4DOS /auto /quiet" -Wait -WindowStyle Hidden
         
-        Log-Msg "Nạp PBR (Grub4Dos -> GRLDR)..."
-        # PBR: Quan trọng! Phải trỏ PBR về file GRLDR
-        $ArgPBR = "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /GRLDR=grldr /auto /quiet"
-        Start-Process -FilePath $ToolPath -ArgumentList $ArgPBR -Wait -WindowStyle Hidden
+        Log-Msg "Nạp PBR (Grub4Dos)..."
+        # PBR trỏ vào GRLDR
+        Start-Process -FilePath $ToolPath -ArgumentList "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /GRLDR=grldr /auto /quiet" -Wait -WindowStyle Hidden
     }
 }
 
@@ -90,7 +84,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSt
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text="USB BOOT MAKER V4.5 (MBR FIXED)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
+$Form.Text="USB BOOT MAKER V4.6 (GLIM SUPPORT)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
 
 $MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
@@ -100,7 +94,6 @@ $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Wind
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
 $Form.Controls.Add($MainLayout)
 
-# UI Elements
 $PnlTitle=New-Object System.Windows.Forms.Panel; $PnlTitle.Height=50; $PnlTitle.Dock="Top"; $PnlTitle.Margin="0,0,0,10"
 $LblTitle=New-Object System.Windows.Forms.Label; $LblTitle.Text="⚡ USB BOOT CREATOR ULTIMATE"; $LblTitle.Font=$F_Title; $LblTitle.ForeColor=$Theme.Cyan; $LblTitle.AutoSize=$true; $LblTitle.Location="10,10"
 $PnlTitle.Controls.Add($LblTitle); $MainLayout.Controls.Add($PnlTitle,0,0)
@@ -177,9 +170,9 @@ $BtnStart.Add_Click({
     Log-Msg "Đợi 3s..."
     Start-Sleep 3
 
-    Log-Msg "B2: Tạo phân vùng Boot & Data..."
+    Log-Msg "B2: Tạo phân vùng..."
     $Cmd="select disk $ID"
-    # Sửa logic active cho MBR
+    # Set ACTIVE for MBR to make it bootable
     if($St -eq "mbr"){ 
         $Cmd+="`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign"
         $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
@@ -190,58 +183,45 @@ $BtnStart.Add_Click({
     Run-DiskPartScript $Cmd
     Log-Msg "Đợi 5s gán ổ đĩa..."; Start-Sleep 5
 
+    # BOOTICE (Only needed for MBR to install Grub4Dos)
+    if ($St -eq "mbr") { Run-BootICE $ID 0 }
+
     # DETECT DRIVE LETTERS
     for($i=1;$i -le 10;$i++){ $B=Get-DriveLetterByLabel $BL; $D=Get-DriveLetterByLabel $DL; if($B -and $D){break}; Start-Sleep 1 }
-    if(!$B){ Log-Msg "Lỗi tìm ổ Boot! (Thử rút ra cắm lại)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
+    if(!$B){ Log-Msg "Lỗi tìm ổ Boot! (Rút USB cắm lại)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     Log-Msg "Boot: $B | Data: $D"
 
-    # [IMPORTANT] BOOTICE MUST RUN AFTER PARTITIONING
-    if ($St -eq "mbr") { 
-        Log-Msg "Chạy BootICE (Nạp MBR/PBR)..."
-        Run-BootICE $ID 0 
-    }
-
-    # EXTRACT ZIP
+    # EXTRACT KIT
     Log-Msg "Giải nén Kit vào $B..."
     try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{Log-Msg "Lỗi giải nén: $_"}
 
-    # [FIX] AUTO DOWNLOAD GRLDR NẾU THIẾU
+    # [FIX] CHECK GRLDR & MENU.LST (GLIM SUPPORT)
     if ($St -eq "mbr") {
         if (!(Test-Path "$B\grldr")) {
-            Log-Msg "⚠ Thiếu GRLDR -> Đang tải về..."
-            try {
-                $Web = New-Object Net.WebClient
-                $Web.Headers.Add("User-Agent", "Mozilla/5.0")
-                $Web.DownloadFile($Global:GrldrUrl, "$B\grldr")
-                Log-Msg "Đã thêm GRLDR."
-            } catch { Log-Msg "Lỗi tải GRLDR! USB có thể không boot được." }
+            Log-Msg "⚠ Thiếu GRLDR -> Auto Download..."
+            try { (New-Object Net.WebClient).DownloadFile($Global:GrldrUrl, "$B\grldr"); Log-Msg "OK." } catch { Log-Msg "Lỗi tải GRLDR!" }
         }
-        
-        # [FIX] MENU.LST TIMEOUT
-        # Tạo file menu.lst nếu chưa có, hoặc ghi đè để đảm bảo hiện menu
-        if (!(Test-Path "$B\menu.lst") -or (Get-Content "$B\menu.lst" -Raw) -match "timeout 0") { 
-            Log-Msg "Tạo menu.lst mặc định..."
-            $MenuContent = @"
+
+        # [NEW] UPDATE MENU.LST FOR GLIM
+        # Grub4Dos sẽ gọi core.img của GRUB2 (như trong list file của ông)
+        Log-Msg "Cập nhật menu.lst cho GLIM..."
+        $MenuContent = @"
 timeout 15
 default 0
 color white/blue black/light-gray
 
-title [0] Windows Boot Manager
-find --set-root /bootmgr
-chainloader /bootmgr
+title [0] Boot GLIM (GRUB2 Core)
+find --set-root /boot/grub/i386-pc/core.img
+kernel /boot/grub/i386-pc/core.img
+boot
 
-title [1] Search for Ventoy
-find --set-root /ventoy/boot.img
-kernel /ventoy/boot.img
-
-title [2] Reboot
+title [1] Reboot
 reboot
 
-title [3] Shutdown
+title [2] Shutdown
 halt
 "@
-            $MenuContent | Out-File "$B\menu.lst" -Encoding ASCII 
-        }
+        $MenuContent | Out-File "$B\menu.lst" -Encoding ASCII 
     }
 
     if($D){
@@ -249,7 +229,7 @@ halt
         @("iso\windows","iso\linux","iso\android","iso\utilities") | ForEach { New-Item -ItemType Directory -Path "$D\$_" -Force | Out-Null }
     }
 
-    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot đã sẵn sàng! (MBR Fixed)"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot Sẵn Sàng (GLIM Configured)!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
     if($D){Invoke-Item "$D\iso"}
 })
 
