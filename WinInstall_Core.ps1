@@ -229,36 +229,60 @@ function Start-Auto-DISM {
                  "timeout /t 5`nwpeutil reboot"
 
     Log "Injecting Script..."
+    
+    # --- [GEMINI FIX: BẺ KHÓA QUYỀN TRUY CẬP] ---
+    $BootWim = "$WorkDir\boot.wim"
+    Log "Đang xử lý quyền file Boot.wim..."
+
+    if (Test-Path $BootWim) {
+        # 1. Tắt thuộc tính Read-only bằng lệnh gốc Windows
+        & attrib -r -s -h "$BootWim"
+
+        # 2. Tắt bằng PowerShell (để chắc ăn)
+        Set-ItemProperty -Path "$BootWim" -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+
+        # 3. Cấp Full Quyền cho mọi người (Tránh lỗi NTFS Permissions)
+        & icacls "$BootWim" /grant Everyone:F /T /C /Q | Out-Null
+    }
+    
+    # Dọn dẹp mount cũ cho sạch sẽ
+    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -WindowStyle Hidden
+    # -----------------------------------------------
+
     $MountSuccess = $false
-    $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`"" -Wait -PassThru
-    if ($Proc.ExitCode -eq 0) { $MountSuccess = $true } else {
-        $Proc = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:1 /MountDir:`"$MountDir`"" -Wait -PassThru
-        if ($Proc.ExitCode -eq 0) { $MountSuccess = $true }
+    
+    # Tạo log debug
+    $DebugLog = "$env:TEMP\Dism_Debug.txt"
+    "--- DISM LOG START ---" | Out-File $DebugLog -Encoding UTF8
+
+    # ... (Đoạn dưới giữ nguyên logic bắt lỗi) ...
+    # Thử Index 2
+    $CmdLine = "/c dism /Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:2 /MountDir:`"$MountDir`" >> `"$DebugLog`" 2>&1"
+    Start-Process "cmd" -ArgumentList $CmdLine -Wait -WindowStyle Hidden
+
+    if (Test-Path "$MountDir\Windows\System32") { 
+        $MountSuccess = $true 
+    } else {
+        # Thử Index 1
+        "--- RETRY INDEX 1 ---" | Out-File $DebugLog -Append
+        $CmdLine = "/c dism /Mount-Image /ImageFile:`"$WorkDir\boot.wim`" /Index:1 /MountDir:`"$MountDir`" >> `"$DebugLog`" 2>&1"
+        Start-Process "cmd" -ArgumentList $CmdLine -Wait -WindowStyle Hidden
+        
+        if (Test-Path "$MountDir\Windows\System32") { $MountSuccess = $true }
     }
 
-    if ($MountSuccess -and (Test-Path "$MountDir\Windows\System32")) {
-        # METHOD A: NORMAL INJECT
+    if ($MountSuccess) {
         Log "Mount OK. Using Standard Method."
         [IO.File]::WriteAllText("$MountDir\Windows\System32\startnet.cmd", $ScriptCmd)
         Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Commit" -Wait
     } else {
-        # METHOD B: BYPASS MOUNT (WINPE UNATTEND TRICK)
-        Log "MOUNT THẤT BẠI -> CHUYỂN SANG BYPASS MODE."
+        Log "MOUNT VẪN THẤT BẠI. XEM LOG CHI TIẾT:"
         Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Discard" -Wait
         
-        # Create AutoScript.cmd on SAFE DRIVE
-        [IO.File]::WriteAllText("$SourceDir\AutoScript.cmd", $ScriptCmd)
-        
-        # Create winpeshl.ini on BOOT DRIVE ROOT (Will be injected later or read by WinPE)
-        # Actually, without mount, we can't edit boot.wim.
-        # TRICK: Use specific folder structure or assume WinPE will scan drives.
-        # BETTER TRICK: Create a secondary boot entry that points to a script if possible? No.
-        
-        # FINAL RESORT: Report Error if can't mount.
-        [System.Windows.Forms.MessageBox]::Show("WinLite này đã bị cắt giảm quá sâu (mất DISM Mount).\nKhông thể chèn lệnh tự động vào Boot.wim.\nVui lòng dùng Mode 3 (WinToHDD) để cài đặt.", "Lỗi WinLite")
+        if (Test-Path $DebugLog) { $RealError = Get-Content $DebugLog | Out-String } else { $RealError = "Không có log." }
+        [System.Windows.Forms.MessageBox]::Show("LỖI SAU KHI ĐÃ FIX QUYỀN:\n\n$RealError", "STILL ERROR", "OK", "Error")
         $Form.Cursor = "Default"; return
     }
-
     Log "Creating Boot Entry..."
     Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall.wim" -Force
     Move-Item "$WorkDir\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
