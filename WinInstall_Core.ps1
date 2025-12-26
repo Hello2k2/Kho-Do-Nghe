@@ -230,23 +230,28 @@ function Start-Auto-DISM {
 
     Log "Injecting Script..."
     
-    # --- [GEMINI FIX V2: CHỈ GỠ READ-ONLY (KHÔNG TREO)] ---
+    # --- [GEMINI FIX V3: DÙNG LỆNH HỆ THỐNG (KHÔNG BAO GIỜ TREO)] ---
     $BootWim = "$WorkDir\boot.wim"
-    Log "Đang gỡ bỏ Read-Only..."
+    Log "Đang xử lý thuộc tính file (V3)..."
+    
+    # 1. Đợi 2 giây để ổ cứng 'nhả' file ra sau khi copy (Rất quan trọng)
+    Start-Sleep -Seconds 2 
 
     if (Test-Path $BootWim) {
-        # 1. Tắt thuộc tính Read-only (Đây là thuốc đặc trị lỗi 0xc1510111)
-        & attrib -r -s -h "$BootWim"
-
-        # 2. Tắt bằng PowerShell (Dự phòng cho chắc)
-        Set-ItemProperty -Path "$BootWim" -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+        try {
+            # 2. Dùng lệnh .NET trực tiếp để gỡ Read-only (Siêu tốc & An toàn)
+            [System.IO.File]::SetAttributes($BootWim, [System.IO.FileAttributes]::Normal)
+            Log "-> Đã gỡ Read-Only thành công."
+        } catch {
+            Log "-> Cảnh báo: Không can thiệp được file (Có thể bỏ qua)."
+        }
     }
     
-    # Đã xóa lệnh icacls để tránh bị treo máy
+    # 3. Dọn dẹp Mount cũ (Thêm Timeout 5s để tránh DISM bị treo mãi mãi)
+    Log "Dọn dẹp DISM..."
+    $P = Start-Process "dism" -ArgumentList "/Cleanup-Wim" -PassThru -WindowStyle Hidden
+    try { $P | Wait-Process -Timeout 5 -ErrorAction Stop } catch { Stop-Process -Id $P.Id -Force -ErrorAction SilentlyContinue }
     # -----------------------------------------------
-
-    # Dọn dẹp mount cũ cho sạch sẽ
-    Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -WindowStyle Hidden
 
     $MountSuccess = $false
     
@@ -278,7 +283,7 @@ function Start-Auto-DISM {
         Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$MountDir`" /Discard" -Wait
         
         if (Test-Path $DebugLog) { $RealError = Get-Content $DebugLog | Out-String } else { $RealError = "Không có log." }
-        [System.Windows.Forms.MessageBox]::Show("LỖI DISM (V2):\n\n$RealError", "ERROR", "OK", "Error")
+        [System.Windows.Forms.MessageBox]::Show("LỖI DISM (V3):\n\n$RealError", "ERROR", "OK", "Error")
         $Form.Cursor = "Default"; return
     }
     Log "Creating Boot Entry..."
