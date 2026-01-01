@@ -1,10 +1,9 @@
 <#
-    WININSTALL CORE V7.4 (WINLITE EDITION)
+    WININSTALL CORE V7.6 (SERVICE FIX EDITION)
     Author: Phat Tan PC
-    Features:
-    - Hybrid Engine: Modern API + Legacy WMI (Auto switch on WinLite)
-    - Robust Mount: Native -> 7-Zip Fallback
-    - Boot Fix: Auto Detect BIOS/UEFI
+    Updates:
+    - Logic mới: Tự động Check & Start dịch vụ (ShellHWDetection, VDS) trước khi Mount.
+    - Bỏ chế độ ép gán Z: (để Windows tự gán E/F/G chuẩn).
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -33,9 +32,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V7.4 - WINLITE SAFE"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V7.6 - SERVICE FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.4"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.6"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -102,16 +101,12 @@ function Check-Iso-Path ($Drv, $IsoPath) {
     return $false
 }
 
-# --- HYBRID DRIVE LIST (WMI + CMDLET) ---
-# Hàm này chạy được trên cả WinLite nát nhất nhờ WMI
 function Get-DriveList-Robust {
     $List = @()
     try {
-        # Ưu tiên WMI (Win32_LogicalDisk) vì nó ổn định hơn Cmdlet trên WinLite
         $Drives = Get-WmiObject Win32_LogicalDisk
         foreach ($D in $Drives) { $List += $D.DeviceID }
     } catch {
-        # Fallback siêu cùn (nếu WMI hỏng): Quét từ A-Z
         67..90 | ForEach-Object { $L = [char]$_ + ":"; if (Test-Path $L) { $List += $L } }
     }
     return $List
@@ -121,8 +116,6 @@ function Get-DriveList-Robust {
 function Load-Partitions {
     $GridPart.Rows.Clear(); $SysDrive = $env:SystemDrive.Replace(":","")
     $UseLegacy = $false
-    
-    # Check nếu lệnh Get-Volume tồn tại (WinLite hay cắt cái này)
     if (!(Get-Command Get-Volume -ErrorAction SilentlyContinue)) { $UseLegacy = $true }
 
     if (!$UseLegacy) {
@@ -134,14 +127,13 @@ function Load-Partitions {
                 $Row = $GridPart.Rows.Add($Dsk, $Prt, $P.DriveLetter, "$([math]::Round($P.Size/1GB,1)) GB", "$($P.FileSystemLabel)$Info")
                 if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $P.DriveLetter }
             }
-            return # Thành công thì thoát
+            return
         } catch {
-            Log "Lỗi Cmdlet hiện đại. Chuyển sang chế độ WMI (WinLite)..."
+            Log "Lỗi Cmdlet hiện đại. Chuyển sang chế độ WMI..."
             $UseLegacy = $true
         }
     }
 
-    # --- WMI LEGACY MODE (Cho WinLite) ---
     if ($UseLegacy) {
         try {
             $Disks = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
@@ -159,12 +151,12 @@ function Unmount-All ($Silent = $true) {
     if (!$Silent) { Log "--- DỌN DẸP Ổ ẢO ---" }
     $Form.Cursor = "WaitCursor"
     
-    # 1. Cmdlet (Nếu có)
+    if (Test-Path "$env:TEMP\WinInstall_Ext") { Remove-Item "$env:TEMP\WinInstall_Ext" -Recurse -Force -ErrorAction SilentlyContinue }
+
     if (Get-Command Dismount-DiskImage -ErrorAction SilentlyContinue) {
         try { Get-DiskImage -ImagePath "*" -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null } catch {}
     }
 
-    # 2. Legacy Cleanup (Mountvol)
     try {
         $CDs = Get-WmiObject Win32_CDROMDrive
         foreach ($CD in $CDs) {
@@ -178,15 +170,55 @@ function Unmount-All ($Silent = $true) {
     $Global:IsoMounted = $null; $CbIndex.Items.Clear(); $Form.Cursor = "Default"
 }
 
+# --- [NEW] CHECK & START SERVICES ---
+function Check-And-Start-Services {
+    Log "🔍 Đang kiểm tra Service hệ thống..."
+    
+    # 1. Shell Hardware Detection (Cực quan trọng để auto gán ký tự)
+    try {
+        $S = Get-Service "ShellHWDetection" -ErrorAction SilentlyContinue
+        if ($S) {
+            if ($S.Status -ne 'Running') {
+                Log "-> Dịch vụ 'Shell Hardware Detection' đang tắt. Bật lại..."
+                Set-Service "ShellHWDetection" -StartupType Automatic
+                Start-Service "ShellHWDetection"
+                Start-Sleep 2 # Chờ nó khởi động
+            } else {
+                Log "-> 'Shell Hardware Detection': OK"
+            }
+        } else { Log "Cảnh báo: Không tìm thấy dịch vụ ShellHWDetection (WinLite)." }
+    } catch { Log "Không thể can thiệp ShellHWDetection." }
+
+    # 2. Virtual Disk Service (VDS)
+    try {
+        $V = Get-Service "vds" -ErrorAction SilentlyContinue
+        if ($V) {
+            if ($V.Status -ne 'Running') {
+                Log "-> Dịch vụ 'Virtual Disk' đang tắt. Bật lại..."
+                Set-Service "vds" -StartupType Manual # VDS thường để Manual
+                Start-Service "vds"
+                Start-Sleep 1
+            } else {
+                Log "-> 'Virtual Disk': OK"
+            }
+        }
+    } catch { Log "Không thể can thiệp VDS." }
+}
+
 # --- 7-ZIP EXTRACT FALLBACK ---
 function Extract-ISO-With-7Zip ($IsoPath) {
+    Log "Unmount để xả nén..."
+    Unmount-All -Silent $true
+    Start-Sleep 1
+
     $7z = Get-7Zip
-    if (!$7z) { [System.Windows.Forms.MessageBox]::Show("Không thể tải 7-Zip để cứu hộ!", "Lỗi"); return }
+    if (!$7z) { [System.Windows.Forms.MessageBox]::Show("Không thể tải 7-Zip!", "Lỗi"); return }
     $ExtDir = "$env:TEMP\WinInstall_Ext"
     if (!(Test-Path $ExtDir)) { New-Item -ItemType Directory -Path $ExtDir -Force | Out-Null }
     
     Get-ChildItem $ExtDir -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
     Log "⚠️ MODE CỨU HỘ: Đang giải nén file Install..."
+    
     $Files = "sources/install.wim sources/install.esd sources/boot.wim boot/boot.sdi setup.exe"
     $Proc = Start-Process $7z -ArgumentList "x `"$IsoPath`" $Files -o`"$ExtDir`" -y" -NoNewWindow -Wait -PassThru
     
@@ -194,8 +226,8 @@ function Extract-ISO-With-7Zip ($IsoPath) {
         $Global:IsoMounted = $ExtDir
         Log "-> Giải nén OK: $ExtDir"; Get-WimInfo
     } else {
-        Log "Lỗi 7-Zip (Code $($Proc.ExitCode))."
-        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. File ISO hỏng.", "Lỗi")
+        Log "Lỗi 7-Zip: Code $($Proc.ExitCode)"
+        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. File ISO có thể bị hỏng hoặc đang bị dùng bởi ứng dụng khác.", "Lỗi")
     }
 }
 
@@ -203,20 +235,24 @@ function Extract-ISO-With-7Zip ($IsoPath) {
 function Mount-ISO {
     $ISO = $CbISO.SelectedItem; if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file ISO!"); return }
     $Form.Cursor = "WaitCursor"
+    
+    # 1. DỌN DẸP
     Unmount-All -Silent $true; Start-Sleep 1 
+    
+    # 2. CHECK & FIX SERVICE (THEO YÊU CẦU)
+    Check-And-Start-Services
     
     Log "--- MOUNT ($ISO) ---"
     $DrivesBefore = Get-DriveList-Robust
     $CmdletExists = [bool](Get-Command Mount-DiskImage -ErrorAction SilentlyContinue)
 
-    # Thử Mount bằng lệnh (nếu có)
+    # 3. Native Mount (Sau khi đã bật service)
     if ($CmdletExists) {
         try {
             Mount-DiskImage -ImagePath $ISO -StorageType ISO -ErrorAction Stop | Out-Null
             
-            # Quét ổ mới (Loop Check)
             Log "Đang quét ổ đĩa..."
-            for ($i=0; $i -lt 10; $i++) {
+            for ($i=0; $i -lt 8; $i++) {
                 $AllDrives = Get-DriveList-Robust
                 foreach ($D in $AllDrives) {
                     if ($DrivesBefore -notcontains $D) {
@@ -227,12 +263,14 @@ function Mount-ISO {
                 }
                 Start-Sleep -Milliseconds 800
             }
+            Log "Mount lệnh thành công nhưng không thấy ký tự ổ (Service chưa gán kịp?)."
+
         } catch { Log "Native Mount lỗi." }
     } else {
         Log "WinLite: Không có lệnh Mount-DiskImage."
     }
 
-    # Nếu thất bại -> Dùng 7-Zip
+    # 4. Fallback: 7-Zip
     Log "Chuyển sang chế độ giải nén (7-Zip)..."
     Extract-ISO-With-7Zip $ISO
     $Form.Cursor = "Default"
@@ -244,7 +282,6 @@ function Get-WimInfo {
     $Global:WimFile = $Wim
     $CbIndex.Items.Clear()
     
-    # Check DISM tồn tại không (WinLite hay xóa DISM)
     $DismPath = "$env:SystemRoot\System32\dism.exe"
     if (Test-Path $DismPath) {
         try {
@@ -264,16 +301,14 @@ function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
     
-    # CHECK CÔNG CỤ TRƯỚC
-    if (!(Test-Path "$env:SystemRoot\System32\dism.exe")) { [System.Windows.Forms.MessageBox]::Show("Lỗi: WinLite này đã bị lược bỏ DISM.exe! Không thể cài theo cách này.", "Error"); return }
-    if (!(Test-Path "$env:SystemRoot\System32\bcdboot.exe")) { [System.Windows.Forms.MessageBox]::Show("Lỗi: WinLite này đã bị lược bỏ BCDBOOT.exe! Không thể fix boot.", "Error"); return }
+    if (!(Test-Path "$env:SystemRoot\System32\dism.exe")) { [System.Windows.Forms.MessageBox]::Show("Lỗi: WinLite này đã bị lược bỏ DISM.exe!", "Error"); return }
+    if (!(Test-Path "$env:SystemRoot\System32\bcdboot.exe")) { [System.Windows.Forms.MessageBox]::Show("Lỗi: WinLite này đã bị lược bỏ BCDBOOT.exe!", "Error"); return }
 
     if ([System.Windows.Forms.MessageBox]::Show("XÁC NHẬN CÀI WIN (MODE 2)?", "Cảnh Báo", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"; $Form.Text = "ĐANG XỬ LÝ..."
     $WorkDir = "$env:SystemDrive\WinInstall_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     
-    # Chọn ổ đĩa an toàn (Dùng WMI)
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) {
@@ -320,13 +355,11 @@ function Start-Auto-DISM {
     Move-Item "$WorkDir\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
     Remove-Item $WorkDir -Recurse -Force
 
-    # --- [BOOT MANAGER FIX V6: WINLITE COMPATIBLE] ---
+    # --- [BOOT MANAGER FIX V6] ---
     Log "Cấu hình Boot Manager..."
     
-    # Check Legacy/UEFI bằng bcdedit (an toàn nhất trên WinLite)
     $BootInfo = & "$env:SystemRoot\System32\bcdedit.exe" /enum "{current}"
     $IsUEFI = ($BootInfo | Select-String "winload.efi") -ne $null
-    
     $LoaderPath = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\boot\winload.exe" }
     
     & "$env:SystemRoot\System32\bcdedit.exe" /delete "{ramdiskoptions}" /f 2>$null 
