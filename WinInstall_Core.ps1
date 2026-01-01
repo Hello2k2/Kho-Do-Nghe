@@ -1,10 +1,9 @@
 <#
-    WININSTALL CORE V8.2 (XML BRUTE FORCE)
+    WININSTALL CORE V8.3 (SYNTAX FIXED)
     Author: Phat Tan PC
     Updates:
-    - FIX XML ERROR: Removed complex 'FOR' loops. Uses explicit checks for drives C-Z.
-    - Added 'Taskkill Setup.exe' to prevent dual execution.
-    - Guarantees valid XML syntax.
+    - FIX ERROR: Fixed variable expansion syntax ${L}: inside strings to prevent ParserError.
+    - Retains XML Bypass logic.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -33,9 +32,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V8.2 - BRUTE FORCE XML"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V8.3 - SYNTAX FIXED"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V8.2"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V8.3"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -64,7 +63,7 @@ function New-BigBtn ($Parent, $Txt, $Y, $Color, $Event) {
     $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "310, 65"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Cursor = "Hand"; $B.Add_Click($Event); $Parent.Controls.Add($B); return $B
 }
 
-New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ Tự động hoàn toàn (Fixed XML)" 40 "Orange" { Start-Auto-DISM }
+New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ Tự động hoàn toàn (Fixed Syntax)" 40 "Orange" { Start-Auto-DISM }
 
 New-BigBtn $GrpAction "MODE 1: SETUP.EXE (AN TOÀN)`n✅ Dùng Rollback của Microsoft`n✅ Chậm nhưng chắc" 120 "LightGray" {
     if (!$Global:IsoMounted) { Log "Chưa Mount ISO!"; return }
@@ -298,7 +297,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (FIXED: XML BRUTE FORCE) ---
+# --- AUTO DISM (FIXED: XML BRUTE FORCE + SYNTAX FIX) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -340,7 +339,6 @@ function Start-Auto-DISM {
     }
 
     # 1. TẠO SCRIPT CÀI ĐẶT
-    # THÊM TASKKILL SETUP.EXE ĐỂ CHẮC CHẮN NÓ KHÔNG CHẠY TRANH
     $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
                  "echo DANG DIET SETUP.EXE (NEU CO)...`r`ntaskkill /F /IM setup.exe >nul 2>&1`r`n" +
                  "echo DANG FORMAT O C...`r`nformat c: /q /y /fs:ntfs`r`n" +
@@ -349,20 +347,18 @@ function Start-Auto-DISM {
                  "echo HOAN TAT! TU DONG KHOI DONG LAI SAU 5 GIAY...`r`ntimeout /t 5`r`nwpeutil reboot"
     [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
 
-    # 2. TẠO FILE RUN.CMD (ĐỂ GỌI TỪ XML)
+    # 2. TẠO FILE RUN.CMD
     $RunCmd = "@echo off`r`nif exist `"$SourceDir\AutoInstall.cmd`" call `"$SourceDir\AutoInstall.cmd`""
     [IO.File]::WriteAllText("$SafeDrive\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII)
 
-    # 3. TẠO XML (BRUTE FORCE - KHÔNG VÒNG LẶP)
-    # Ta sẽ tạo 24 lệnh kiểm tra cho từng ký tự ổ đĩa từ C đến Z.
-    # Đây là cách "cục súc" nhất nhưng đảm bảo 100% không lỗi cú pháp.
-    
+    # 3. TẠO XML (FIXED SYNTAX ${L})
     $CommandsBlock = ""
     $Order = 1
     # Loop từ C (67) đến Z (90)
     for ($i=67; $i -le 90; $i++) {
         $L = [char]$i
-        $Cmd = "cmd /c if exist $L:\Run.cmd $L:\Run.cmd"
+        # FIX: Dùng ${L} để PowerShell không hiểu nhầm dấu : là scope
+        $Cmd = "cmd /c if exist ${L}:\Run.cmd ${L}:\Run.cmd"
         $CommandsBlock += "<RunSynchronousCommand wcm:action=`"add`"><Order>$Order</Order><Path>$Cmd</Path></RunSynchronousCommand>"
         $Order++
     }
