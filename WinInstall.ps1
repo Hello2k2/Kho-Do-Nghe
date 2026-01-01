@@ -31,15 +31,20 @@ $FontSub   = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.Font
 $FontBtn   = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $FontSmall = New-Object System.Drawing.Font("Consolas", 9)
 
-# --- HÀM TẢI MODULE ---
+# --- HÀM TẢI MODULE (ĐÃ FIX QUYỀN) ---
 function Load-Mod ($Name) {
     $Form.Cursor = "WaitCursor" 
     $P = "$TempDir\$Name"
     try { 
+        # 1. Tải File
         [System.Net.ServicePointManager]::SecurityProtocol = 3072
         (New-Object Net.WebClient).DownloadFile("$RawUrl$Name", $P)
-        # Chạy file tải về
-        Start-Process powershell "-Ex Bypass -File `"$P`"" 
+        
+        # 2. FIX QUAN TRỌNG: Mở khóa file (Unblock) để tránh bị Windows chặn
+        Unblock-File -Path $P -ErrorAction SilentlyContinue
+
+        # 3. FIX QUAN TRỌNG: Gọi chạy với quyền Admin tuyệt đối (-Verb RunAs)
+        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$P`"" -Verb RunAs
     } catch { 
         [System.Windows.Forms.MessageBox]::Show("Lỗi tải Module: $Name `nKiểm tra lại mạng internet!", "Error") 
     }
