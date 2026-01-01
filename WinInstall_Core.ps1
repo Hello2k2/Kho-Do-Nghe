@@ -1,9 +1,9 @@
 <#
-    WININSTALL CORE V7.9 (AUTO-RUN FIX)
+    WININSTALL CORE V8.0 (XML SYNTAX FIX)
     Author: Phat Tan PC
     Updates:
-    - Fix logic "Like Setup.exe": Uses winpeshl.ini to KILL Setup.exe and force run AutoInstall.cmd.
-    - Forces script encoding to ASCII (WinPE friendly).
+    - FIXED CRITICAL ERROR: Escaped '&' to '&amp;' in autounattend.xml to prevent parsing errors.
+    - Optimized Boot Loop logic.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -32,9 +32,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V7.9 - AUTO RUN FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V8.0 - XML FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.9"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V8.0"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -112,12 +112,12 @@ function Get-DriveList-Robust {
     return $List
 }
 
-# --- ROBUST PARTITION LOADER (FIXED V7.8) ---
+# --- ROBUST PARTITION LOADER ---
 function Load-Partitions {
     $GridPart.Rows.Clear(); $SysDrive = $env:SystemDrive.Replace(":","")
     $Loaded = $false
 
-    # 1. THỬ CÁCH HIỆN ĐẠI (Get-Volume)
+    # 1. THỬ CÁCH HIỆN ĐẠI
     try {
         if (Get-Command Get-Volume -ErrorAction SilentlyContinue) {
             $Parts = Get-Volume | Where-Object {$_.DriveType -eq 'Fixed'} | Sort-Object DriveLetter -ErrorAction Stop
@@ -133,7 +133,7 @@ function Load-Partitions {
         }
     } catch { Log "Lỗi Cmdlet hiện đại. Chuyển WMI..." }
 
-    # 2. FALLBACK WMI (WINLITE/TINY10)
+    # 2. FALLBACK WMI
     if (!$Loaded) {
         Log "-> Đang dùng WMI để quét ổ (WinLite Mode)..."
         try {
@@ -303,7 +303,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (FIXED: UNATTEND + WINPESHL) ---
+# --- AUTO DISM (FIXED: XML SYNTAX) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -316,7 +316,7 @@ function Start-Auto-DISM {
     $Form.Cursor = "WaitCursor"; $Form.Text = "ĐANG XỬ LÝ..."
     $WorkDir = "$env:SystemDrive\WinInstall_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     
-    # Chọn ổ đĩa an toàn (Dùng WMI cho WinLite)
+    # Chọn ổ đĩa an toàn
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) {
@@ -344,7 +344,7 @@ function Start-Auto-DISM {
         $DrvCmd = "dism /Image:C:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`n"
     }
 
-    # 1. TẠO SCRIPT CÀI ĐẶT (AutoInstall.cmd)
+    # 1. TẠO SCRIPT CÀI ĐẶT
     $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
                  "echo DANG FORMAT O C...`r`nformat c: /q /y /fs:ntfs`r`n" +
                  "echo DANG BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:C:\`r`n" +
@@ -353,18 +353,19 @@ function Start-Auto-DISM {
 
     [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
 
-    # 2. TẠO AUTOUNATTEND.XML (Cách 1)
-    $SmartCommand = 'cmd /c "for %I in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do if exist %I:\WinSource\AutoInstall.cmd (call %I:\WinSource\AutoInstall.cmd & exit)"'
+    # 2. TẠO XML (FIXED: &amp; EXIT)
+    # Thay đổi ký tự '&' thành '&amp;' để hợp lệ cú pháp XML
+    $SmartCommand = 'cmd /c "for %I in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do if exist %I:\WinSource\AutoInstall.cmd (call %I:\WinSource\AutoInstall.cmd &amp; exit)"'
+    
     $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>$SmartCommand</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
 
-    # 3. TẠO WINPESHL.INI (Cách 2 - Mạnh hơn, ghi đè Setup.exe)
-    # WinPE sẽ đọc file này trước. Nếu có, nó chạy file này thay vì chạy Setup.exe
+    # 3. WINPESHL.INI (BACKUP PLAN)
     $WinPeShl = "[LaunchApps]`r`ncmd.exe, /c `"$SmartCommand`""
     
     Log "Injecting Boot Triggers..."
     $AllDrives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $AllDrives) { 
-        try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent) } catch {} 
+        try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8) } catch {} 
         try { [IO.File]::WriteAllText("$($D.DeviceID)\winpeshl.ini", $WinPeShl, [System.Text.Encoding]::ASCII) } catch {}
     }
 
