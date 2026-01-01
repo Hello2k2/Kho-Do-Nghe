@@ -4,8 +4,8 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 }
 
 # --- ENCODING FIX ---
-# Ép console hiển thị đúng Unicode (để log không bị lỗi)
-[Console]::OutputEncoding = [System.Text.Encoding]::Unicode
+# Chuyển Console sang UTF-8 để hiển thị Tiếng Việt mượt mà
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # --- CONFIG ---
 $RawUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/"
@@ -27,7 +27,6 @@ $Form.MaximizeBox = $false
 
 # --- FONTS ---
 $FontTitle = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-# Đã fix dòng này: New-Object Label -> New-Object Font
 $FontSub   = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Italic) 
 $FontBtn   = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $FontSmall = New-Object System.Drawing.Font("Consolas", 9)
