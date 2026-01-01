@@ -1,10 +1,10 @@
 <#
-    WININSTALL CORE V7.7 (AUTOMOUNT ENFORCER)
+    WININSTALL CORE V7.8 (PARTITION FIX)
     Author: Phat Tan PC
     Updates:
-    - Added 'Enable-Automount': Force Diskpart to enable automatic drive letter assignment.
-    - Added 'Smart-Assign-Letter': Detects mounted ISO without letter and assigns available one.
-    - Fixed 7-Zip 'Code 2': Ensures file is unlocked before extraction.
+    - Fixed Empty Partition Table on WinLite.
+    - Logic: Forces WMI fallback if Get-Volume returns 0 rows.
+    - Retains Automount & Ghost Fixes from V7.7.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -33,9 +33,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V7.7 - AUTOMOUNT FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V7.8 - PARTITION FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.7"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.8"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -113,37 +113,45 @@ function Get-DriveList-Robust {
     return $List
 }
 
-# --- ROBUST PARTITION LOADER ---
+# --- ROBUST PARTITION LOADER (FIXED V7.8) ---
 function Load-Partitions {
     $GridPart.Rows.Clear(); $SysDrive = $env:SystemDrive.Replace(":","")
-    $UseLegacy = $false
-    if (!(Get-Command Get-Volume -ErrorAction SilentlyContinue)) { $UseLegacy = $true }
+    $Loaded = $false
 
-    if (!$UseLegacy) {
-        try {
+    # 1. THỬ CÁCH HIỆN ĐẠI (Get-Volume)
+    try {
+        if (Get-Command Get-Volume -ErrorAction SilentlyContinue) {
             $Parts = Get-Volume | Where-Object {$_.DriveType -eq 'Fixed'} | Sort-Object DriveLetter -ErrorAction Stop
-            foreach ($P in $Parts) {
-                try { $Dsk = (Get-Partition -DriveLetter $P.DriveLetter).DiskNumber; $Prt = (Get-Partition -DriveLetter $P.DriveLetter).PartitionNumber } catch { $Dsk = "?"; $Prt = "?" }
-                $Info = if ($P.DriveLetter -eq $SysDrive) { " (WIN CŨ)" } else { "" }
-                $Row = $GridPart.Rows.Add($Dsk, $Prt, $P.DriveLetter, "$([math]::Round($P.Size/1GB,1)) GB", "$($P.FileSystemLabel)$Info")
-                if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $P.DriveLetter }
+            if ($Parts.Count -gt 0) {
+                foreach ($P in $Parts) {
+                    try { $Dsk = (Get-Partition -DriveLetter $P.DriveLetter).DiskNumber; $Prt = (Get-Partition -DriveLetter $P.DriveLetter).PartitionNumber } catch { $Dsk = "?"; $Prt = "?" }
+                    $Info = if ($P.DriveLetter -eq $SysDrive) { " (WIN CŨ)" } else { "" }
+                    $Row = $GridPart.Rows.Add($Dsk, $Prt, $P.DriveLetter, "$([math]::Round($P.Size/1GB,1)) GB", "$($P.FileSystemLabel)$Info")
+                    if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $P.DriveLetter }
+                }
+                # Kiểm tra nếu bảng đã có dữ liệu
+                if ($GridPart.Rows.Count -gt 0) { $Loaded = $true }
             }
-            return
-        } catch {
-            Log "Lỗi Cmdlet hiện đại. Chuyển sang chế độ WMI..."
-            $UseLegacy = $true
         }
-    }
+    } catch { Log "Lỗi Cmdlet hiện đại. Chuyển WMI..." }
 
-    if ($UseLegacy) {
+    # 2. FALLBACK WMI (WINLITE/TINY10)
+    # Nếu cách 1 lỗi HOẶC cách 1 chạy xong mà bảng vẫn trống -> Chạy WMI
+    if (!$Loaded) {
+        Log "-> Đang dùng WMI để quét ổ (WinLite Mode)..."
         try {
             $Disks = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
             foreach ($D in $Disks) {
                 $Letter = $D.DeviceID.Replace(":",""); $SizeGB = [math]::Round($D.Size / 1GB, 1)
-                $Row = $GridPart.Rows.Add("?", "?", $Letter, "$SizeGB GB", "$($D.VolumeName)")
+                $VolName = if ($D.VolumeName) { $D.VolumeName } else { "Local Disk" }
+                
+                # Ở chế độ WMI, ta không lấy được Disk/Part ID dễ dàng, để dấu ?
+                $Info = if ($Letter -eq $SysDrive) { " (WIN CŨ)" } else { "" }
+                $Row = $GridPart.Rows.Add("?", "?", $Letter, "$SizeGB GB", "$VolName$Info")
+                
                 if ($Letter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $Letter }
             }
-        } catch { Log "Lỗi WMI! Máy này hỏng nặng rồi." }
+        } catch { Log "Lỗi WMI! Không thể đọc danh sách ổ đĩa." }
     }
 }
 
@@ -154,12 +162,10 @@ function Unmount-All ($Silent = $true) {
     
     if (Test-Path "$env:TEMP\WinInstall_Ext") { Remove-Item "$env:TEMP\WinInstall_Ext" -Recurse -Force -ErrorAction SilentlyContinue }
 
-    # Native Unmount
     if (Get-Command Dismount-DiskImage -ErrorAction SilentlyContinue) {
         try { Get-DiskImage -ImagePath "*" -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null } catch {}
     }
 
-    # Legacy Unmount (Clean CD-ROMs)
     try {
         $CDs = Get-WmiObject Win32_CDROMDrive
         foreach ($CD in $CDs) {
@@ -173,20 +179,16 @@ function Unmount-All ($Silent = $true) {
     $Global:IsoMounted = $null; $CbIndex.Items.Clear(); $Form.Cursor = "Default"
 }
 
-# --- [NEW] ENABLE AUTOMOUNT & START SERVICES ---
+# --- ENABLE AUTOMOUNT & START SERVICES ---
 function Prepare-System-For-Mount {
     Log "🔧 Chuẩn bị hệ thống (Fix Automount)..."
-    
-    # 1. BẬT AUTOMOUNT BẰNG DISKPART (CỰC QUAN TRỌNG)
     try {
         $Script = "$env:TEMP\dp_automount.txt"
         "automount enable`nautomount scrub" | Out-File $Script -Encoding ASCII
         Start-Process "diskpart" -ArgumentList "/s `"$Script`"" -NoNewWindow -Wait
         Remove-Item $Script -Force -ErrorAction SilentlyContinue
-        Log "-> Automount: ENABLED"
     } catch { Log "Lỗi Diskpart Automount." }
 
-    # 2. Check Services
     try {
         $S = Get-Service "ShellHWDetection" -ErrorAction SilentlyContinue
         if ($S -and $S.Status -ne 'Running') {
@@ -202,20 +204,16 @@ function Prepare-System-For-Mount {
     Start-Sleep 1
 }
 
-# --- [NEW] SMART LETTER ASSIGN (NO Z FORCE) ---
+# --- SMART LETTER ASSIGN (NO Z FORCE) ---
 function Smart-Assign-Letter {
-    Log "⚠️ Đã Mount nhưng chưa có ký tự. Đang fix..."
+    Log "⚠️ Đang tìm ổ bị ẩn..."
     try {
-        # Tìm Volume loại CD-ROM (Type 5) mà chưa có DriveLetter
         $Vols = Get-WmiObject Win32_Volume | Where-Object { $_.DriveType -eq 5 -and $_.DriveLetter -eq $null }
         foreach ($V in $Vols) {
-            # Tìm ký tự trống đầu tiên (từ E trở đi)
             $Available = 69..90 | ForEach-Object { [char]$_ + ":" } | Where-Object { !(Test-Path $_) } | Select-Object -First 1
             if ($Available) {
-                Log "-> Gán ký tự $Available cho ổ ảo..."
-                $V.DriveLetter = $Available
-                $V.Put()
-                Start-Sleep 1
+                Log "-> Gán ký tự $Available..."
+                $V.DriveLetter = $Available; $V.Put(); Start-Sleep 1
                 if (Test-Path $Available) { return $Available }
             }
         }
@@ -225,10 +223,9 @@ function Smart-Assign-Letter {
 
 # --- 7-ZIP EXTRACT FALLBACK ---
 function Extract-ISO-With-7Zip ($IsoPath) {
-    # ⚠️ QUAN TRỌNG: Unmount trước để tránh lỗi "File Locked" (Code 2)
     Log "Unmount sạch sẽ trước khi xả nén..."
     Unmount-All -Silent $true
-    Start-Sleep 2 # Chờ file được nhả ra hoàn toàn
+    Start-Sleep 2 
 
     $7z = Get-7Zip
     if (!$7z) { [System.Windows.Forms.MessageBox]::Show("Không thể tải 7-Zip!", "Lỗi"); return }
@@ -246,7 +243,7 @@ function Extract-ISO-With-7Zip ($IsoPath) {
         Log "-> Giải nén OK: $ExtDir"; Get-WimInfo
     } else {
         Log "Lỗi 7-Zip: Code $($Proc.ExitCode)"
-        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. Có thể file ISO đang bị khóa bởi ứng dụng khác. Hãy khởi động lại máy!", "Lỗi")
+        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. File ISO có thể bị hỏng hoặc bị khóa.", "Lỗi")
     }
 }
 
@@ -256,7 +253,7 @@ function Mount-ISO {
     $Form.Cursor = "WaitCursor"
     
     Unmount-All -Silent $true; Start-Sleep 1 
-    Prepare-System-For-Mount # Chạy fix automount
+    Prepare-System-For-Mount 
     
     Log "--- MOUNT ($ISO) ---"
     $DrivesBefore = Get-DriveList-Robust
@@ -279,7 +276,6 @@ function Mount-ISO {
                 Start-Sleep -Milliseconds 800
             }
             
-            # Nếu loop xong mà không thấy -> Chạy Smart Assign
             $NewLetter = Smart-Assign-Letter
             if ($NewLetter) {
                 $Global:IsoMounted = $NewLetter; Log "-> Fix OK: $NewLetter"; Get-WimInfo; $Form.Cursor = "Default"; return
@@ -288,7 +284,6 @@ function Mount-ISO {
         } catch { Log "Native Mount lỗi." }
     } else { Log "WinLite: Không có lệnh Mount-DiskImage." }
 
-    # Fallback
     Log "Chuyển sang chế độ giải nén (7-Zip)..."
     Extract-ISO-With-7Zip $ISO
     $Form.Cursor = "Default"
@@ -327,6 +322,7 @@ function Start-Auto-DISM {
     $Form.Cursor = "WaitCursor"; $Form.Text = "ĐANG XỬ LÝ..."
     $WorkDir = "$env:SystemDrive\WinInstall_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     
+    # Chọn ổ đĩa an toàn (Dùng WMI cho WinLite)
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) {
