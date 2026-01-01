@@ -1,9 +1,10 @@
 <#
-    WININSTALL CORE V7.6 (SERVICE FIX EDITION)
+    WININSTALL CORE V7.7 (AUTOMOUNT ENFORCER)
     Author: Phat Tan PC
     Updates:
-    - Logic mới: Tự động Check & Start dịch vụ (ShellHWDetection, VDS) trước khi Mount.
-    - Bỏ chế độ ép gán Z: (để Windows tự gán E/F/G chuẩn).
+    - Added 'Enable-Automount': Force Diskpart to enable automatic drive letter assignment.
+    - Added 'Smart-Assign-Letter': Detects mounted ISO without letter and assigns available one.
+    - Fixed 7-Zip 'Code 2': Ensures file is unlocked before extraction.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -32,9 +33,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V7.6 - SERVICE FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V7.7 - AUTOMOUNT FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.6"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.7"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -153,10 +154,12 @@ function Unmount-All ($Silent = $true) {
     
     if (Test-Path "$env:TEMP\WinInstall_Ext") { Remove-Item "$env:TEMP\WinInstall_Ext" -Recurse -Force -ErrorAction SilentlyContinue }
 
+    # Native Unmount
     if (Get-Command Dismount-DiskImage -ErrorAction SilentlyContinue) {
         try { Get-DiskImage -ImagePath "*" -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null } catch {}
     }
 
+    # Legacy Unmount (Clean CD-ROMs)
     try {
         $CDs = Get-WmiObject Win32_CDROMDrive
         foreach ($CD in $CDs) {
@@ -170,46 +173,62 @@ function Unmount-All ($Silent = $true) {
     $Global:IsoMounted = $null; $CbIndex.Items.Clear(); $Form.Cursor = "Default"
 }
 
-# --- [NEW] CHECK & START SERVICES ---
-function Check-And-Start-Services {
-    Log "🔍 Đang kiểm tra Service hệ thống..."
+# --- [NEW] ENABLE AUTOMOUNT & START SERVICES ---
+function Prepare-System-For-Mount {
+    Log "🔧 Chuẩn bị hệ thống (Fix Automount)..."
     
-    # 1. Shell Hardware Detection (Cực quan trọng để auto gán ký tự)
+    # 1. BẬT AUTOMOUNT BẰNG DISKPART (CỰC QUAN TRỌNG)
+    try {
+        $Script = "$env:TEMP\dp_automount.txt"
+        "automount enable`nautomount scrub" | Out-File $Script -Encoding ASCII
+        Start-Process "diskpart" -ArgumentList "/s `"$Script`"" -NoNewWindow -Wait
+        Remove-Item $Script -Force -ErrorAction SilentlyContinue
+        Log "-> Automount: ENABLED"
+    } catch { Log "Lỗi Diskpart Automount." }
+
+    # 2. Check Services
     try {
         $S = Get-Service "ShellHWDetection" -ErrorAction SilentlyContinue
-        if ($S) {
-            if ($S.Status -ne 'Running') {
-                Log "-> Dịch vụ 'Shell Hardware Detection' đang tắt. Bật lại..."
-                Set-Service "ShellHWDetection" -StartupType Automatic
-                Start-Service "ShellHWDetection"
-                Start-Sleep 2 # Chờ nó khởi động
-            } else {
-                Log "-> 'Shell Hardware Detection': OK"
-            }
-        } else { Log "Cảnh báo: Không tìm thấy dịch vụ ShellHWDetection (WinLite)." }
-    } catch { Log "Không thể can thiệp ShellHWDetection." }
-
-    # 2. Virtual Disk Service (VDS)
-    try {
+        if ($S -and $S.Status -ne 'Running') {
+            Set-Service "ShellHWDetection" -StartupType Automatic; Start-Service "ShellHWDetection"
+            Log "-> ShellHWDetection: Started"
+        }
         $V = Get-Service "vds" -ErrorAction SilentlyContinue
-        if ($V) {
-            if ($V.Status -ne 'Running') {
-                Log "-> Dịch vụ 'Virtual Disk' đang tắt. Bật lại..."
-                Set-Service "vds" -StartupType Manual # VDS thường để Manual
-                Start-Service "vds"
+        if ($V -and $V.Status -ne 'Running') {
+            Set-Service "vds" -StartupType Manual; Start-Service "vds"
+            Log "-> Virtual Disk: Started"
+        }
+    } catch {}
+    Start-Sleep 1
+}
+
+# --- [NEW] SMART LETTER ASSIGN (NO Z FORCE) ---
+function Smart-Assign-Letter {
+    Log "⚠️ Đã Mount nhưng chưa có ký tự. Đang fix..."
+    try {
+        # Tìm Volume loại CD-ROM (Type 5) mà chưa có DriveLetter
+        $Vols = Get-WmiObject Win32_Volume | Where-Object { $_.DriveType -eq 5 -and $_.DriveLetter -eq $null }
+        foreach ($V in $Vols) {
+            # Tìm ký tự trống đầu tiên (từ E trở đi)
+            $Available = 69..90 | ForEach-Object { [char]$_ + ":" } | Where-Object { !(Test-Path $_) } | Select-Object -First 1
+            if ($Available) {
+                Log "-> Gán ký tự $Available cho ổ ảo..."
+                $V.DriveLetter = $Available
+                $V.Put()
                 Start-Sleep 1
-            } else {
-                Log "-> 'Virtual Disk': OK"
+                if (Test-Path $Available) { return $Available }
             }
         }
-    } catch { Log "Không thể can thiệp VDS." }
+    } catch { Log "Lỗi gán ký tự tự động." }
+    return $null
 }
 
 # --- 7-ZIP EXTRACT FALLBACK ---
 function Extract-ISO-With-7Zip ($IsoPath) {
-    Log "Unmount để xả nén..."
+    # ⚠️ QUAN TRỌNG: Unmount trước để tránh lỗi "File Locked" (Code 2)
+    Log "Unmount sạch sẽ trước khi xả nén..."
     Unmount-All -Silent $true
-    Start-Sleep 1
+    Start-Sleep 2 # Chờ file được nhả ra hoàn toàn
 
     $7z = Get-7Zip
     if (!$7z) { [System.Windows.Forms.MessageBox]::Show("Không thể tải 7-Zip!", "Lỗi"); return }
@@ -227,7 +246,7 @@ function Extract-ISO-With-7Zip ($IsoPath) {
         Log "-> Giải nén OK: $ExtDir"; Get-WimInfo
     } else {
         Log "Lỗi 7-Zip: Code $($Proc.ExitCode)"
-        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. File ISO có thể bị hỏng hoặc đang bị dùng bởi ứng dụng khác.", "Lỗi")
+        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. Có thể file ISO đang bị khóa bởi ứng dụng khác. Hãy khởi động lại máy!", "Lỗi")
     }
 }
 
@@ -236,17 +255,13 @@ function Mount-ISO {
     $ISO = $CbISO.SelectedItem; if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file ISO!"); return }
     $Form.Cursor = "WaitCursor"
     
-    # 1. DỌN DẸP
     Unmount-All -Silent $true; Start-Sleep 1 
-    
-    # 2. CHECK & FIX SERVICE (THEO YÊU CẦU)
-    Check-And-Start-Services
+    Prepare-System-For-Mount # Chạy fix automount
     
     Log "--- MOUNT ($ISO) ---"
     $DrivesBefore = Get-DriveList-Robust
     $CmdletExists = [bool](Get-Command Mount-DiskImage -ErrorAction SilentlyContinue)
 
-    # 3. Native Mount (Sau khi đã bật service)
     if ($CmdletExists) {
         try {
             Mount-DiskImage -ImagePath $ISO -StorageType ISO -ErrorAction Stop | Out-Null
@@ -263,14 +278,17 @@ function Mount-ISO {
                 }
                 Start-Sleep -Milliseconds 800
             }
-            Log "Mount lệnh thành công nhưng không thấy ký tự ổ (Service chưa gán kịp?)."
+            
+            # Nếu loop xong mà không thấy -> Chạy Smart Assign
+            $NewLetter = Smart-Assign-Letter
+            if ($NewLetter) {
+                $Global:IsoMounted = $NewLetter; Log "-> Fix OK: $NewLetter"; Get-WimInfo; $Form.Cursor = "Default"; return
+            }
 
         } catch { Log "Native Mount lỗi." }
-    } else {
-        Log "WinLite: Không có lệnh Mount-DiskImage."
-    }
+    } else { Log "WinLite: Không có lệnh Mount-DiskImage." }
 
-    # 4. Fallback: 7-Zip
+    # Fallback
     Log "Chuyển sang chế độ giải nén (7-Zip)..."
     Extract-ISO-With-7Zip $ISO
     $Form.Cursor = "Default"
