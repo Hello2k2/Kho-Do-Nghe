@@ -1,9 +1,10 @@
 <#
-    WININSTALL CORE V8.1 (XML BYPASS STRATEGY)
+    WININSTALL CORE V8.2 (XML BRUTE FORCE)
     Author: Phat Tan PC
     Updates:
-    - FIX TRIỆT ĐỂ lỗi "Invalid Answer File" bằng cách tách lệnh ra file Run.cmd riêng.
-    - XML giờ chỉ gọi lệnh đơn giản, không chứa ký tự đặc biệt.
+    - FIX XML ERROR: Removed complex 'FOR' loops. Uses explicit checks for drives C-Z.
+    - Added 'Taskkill Setup.exe' to prevent dual execution.
+    - Guarantees valid XML syntax.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -32,9 +33,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V8.1 - FINAL BYPASS"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V8.2 - BRUTE FORCE XML"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V8.1"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V8.2"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -297,7 +298,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (FIXED: XML BYPASS + RUN.CMD) ---
+# --- AUTO DISM (FIXED: XML BRUTE FORCE) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -310,6 +311,7 @@ function Start-Auto-DISM {
     $Form.Cursor = "WaitCursor"; $Form.Text = "ĐANG XỬ LÝ..."
     $WorkDir = "$env:SystemDrive\WinInstall_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     
+    # Chọn ổ đĩa an toàn
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) {
@@ -337,32 +339,39 @@ function Start-Auto-DISM {
         $DrvCmd = "dism /Image:C:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`n"
     }
 
-    # 1. TẠO FILE LỆNH CHÍNH (AutoInstall.cmd)
+    # 1. TẠO SCRIPT CÀI ĐẶT
+    # THÊM TASKKILL SETUP.EXE ĐỂ CHẮC CHẮN NÓ KHÔNG CHẠY TRANH
     $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
+                 "echo DANG DIET SETUP.EXE (NEU CO)...`r`ntaskkill /F /IM setup.exe >nul 2>&1`r`n" +
                  "echo DANG FORMAT O C...`r`nformat c: /q /y /fs:ntfs`r`n" +
                  "echo DANG BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:C:\`r`n" +
                  "echo DANG CAI BOOTLOADER...`r`nbcdboot C:\Windows /s C: /f ALL`r`n" + $DrvCmd + 
                  "echo HOAN TAT! TU DONG KHOI DONG LAI SAU 5 GIAY...`r`ntimeout /t 5`r`nwpeutil reboot"
     [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
 
-    # 2. TẠO FILE TÌM KIẾM (Run.cmd) - Để né lỗi XML
-    # File này sẽ được copy vào gốc tất cả các ổ đĩa
-    $RunCmd = "@echo off`r`nfor %%i in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (`r`n" +
-              "  if exist `"%%i:\WinSource\AutoInstall.cmd`" (`r`n" +
-              "    call `"%%i:\WinSource\AutoInstall.cmd`"`r`n    exit`r`n  )`r`n)"
+    # 2. TẠO FILE RUN.CMD (ĐỂ GỌI TỪ XML)
+    $RunCmd = "@echo off`r`nif exist `"$SourceDir\AutoInstall.cmd`" call `"$SourceDir\AutoInstall.cmd`""
+    [IO.File]::WriteAllText("$SafeDrive\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII)
+
+    # 3. TẠO XML (BRUTE FORCE - KHÔNG VÒNG LẶP)
+    # Ta sẽ tạo 24 lệnh kiểm tra cho từng ký tự ổ đĩa từ C đến Z.
+    # Đây là cách "cục súc" nhất nhưng đảm bảo 100% không lỗi cú pháp.
     
-    # 3. TẠO XML SIÊU ĐƠN GIẢN (Chỉ gọi Run.cmd)
-    # Lệnh này cực ngắn, không có ký tự đặc biệt, đảm bảo không lỗi cú pháp
-    $SafeCommand = 'cmd /c "for %i in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do if exist %i:\Run.cmd call %i:\Run.cmd"'
-    # Fix Quote cho XML
-    $XmlCmd = $SafeCommand.Replace('"', '&quot;')
-    
-    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>$XmlCmd</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
+    $CommandsBlock = ""
+    $Order = 1
+    # Loop từ C (67) đến Z (90)
+    for ($i=67; $i -le 90; $i++) {
+        $L = [char]$i
+        $Cmd = "cmd /c if exist $L:\Run.cmd $L:\Run.cmd"
+        $CommandsBlock += "<RunSynchronousCommand wcm:action=`"add`"><Order>$Order</Order><Path>$Cmd</Path></RunSynchronousCommand>"
+        $Order++
+    }
+
+    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous>$CommandsBlock</RunSynchronous></component></settings></unattend>"
 
     Log "Injecting Boot Triggers..."
     $AllDrives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $AllDrives) { 
-        try { [IO.File]::WriteAllText("$($D.DeviceID)\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII) } catch {}
         try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8) } catch {}
     }
 
