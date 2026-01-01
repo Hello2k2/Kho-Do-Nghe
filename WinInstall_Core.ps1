@@ -1,10 +1,9 @@
 <#
-    WININSTALL CORE V7.8 (PARTITION FIX)
+    WININSTALL CORE V7.9 (AUTO-RUN FIX)
     Author: Phat Tan PC
     Updates:
-    - Fixed Empty Partition Table on WinLite.
-    - Logic: Forces WMI fallback if Get-Volume returns 0 rows.
-    - Retains Automount & Ghost Fixes from V7.7.
+    - Fix logic "Like Setup.exe": Uses winpeshl.ini to KILL Setup.exe and force run AutoInstall.cmd.
+    - Forces script encoding to ASCII (WinPE friendly).
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -33,9 +32,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V7.8 - PARTITION FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V7.9 - AUTO RUN FIX"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.8"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V7.9"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -64,7 +63,7 @@ function New-BigBtn ($Parent, $Txt, $Y, $Color, $Event) {
     $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "310, 65"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Cursor = "Hand"; $B.Add_Click($Event); $Parent.Controls.Add($B); return $B
 }
 
-New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Bypass Mount (Không cần DISM)`n✅ Tự động Fix Boot" 40 "Orange" { Start-Auto-DISM }
+New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ Tự động hoàn toàn (Không hỏi)" 40 "Orange" { Start-Auto-DISM }
 
 New-BigBtn $GrpAction "MODE 1: SETUP.EXE (AN TOÀN)`n✅ Dùng Rollback của Microsoft`n✅ Chậm nhưng chắc" 120 "LightGray" {
     if (!$Global:IsoMounted) { Log "Chưa Mount ISO!"; return }
@@ -129,14 +128,12 @@ function Load-Partitions {
                     $Row = $GridPart.Rows.Add($Dsk, $Prt, $P.DriveLetter, "$([math]::Round($P.Size/1GB,1)) GB", "$($P.FileSystemLabel)$Info")
                     if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $P.DriveLetter }
                 }
-                # Kiểm tra nếu bảng đã có dữ liệu
                 if ($GridPart.Rows.Count -gt 0) { $Loaded = $true }
             }
         }
     } catch { Log "Lỗi Cmdlet hiện đại. Chuyển WMI..." }
 
     # 2. FALLBACK WMI (WINLITE/TINY10)
-    # Nếu cách 1 lỗi HOẶC cách 1 chạy xong mà bảng vẫn trống -> Chạy WMI
     if (!$Loaded) {
         Log "-> Đang dùng WMI để quét ổ (WinLite Mode)..."
         try {
@@ -144,11 +141,8 @@ function Load-Partitions {
             foreach ($D in $Disks) {
                 $Letter = $D.DeviceID.Replace(":",""); $SizeGB = [math]::Round($D.Size / 1GB, 1)
                 $VolName = if ($D.VolumeName) { $D.VolumeName } else { "Local Disk" }
-                
-                # Ở chế độ WMI, ta không lấy được Disk/Part ID dễ dàng, để dấu ?
                 $Info = if ($Letter -eq $SysDrive) { " (WIN CŨ)" } else { "" }
                 $Row = $GridPart.Rows.Add("?", "?", $Letter, "$SizeGB GB", "$VolName$Info")
-                
                 if ($Letter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $Letter }
             }
         } catch { Log "Lỗi WMI! Không thể đọc danh sách ổ đĩa." }
@@ -309,7 +303,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (WINLITE ROBUST) ---
+# --- AUTO DISM (FIXED: UNATTEND + WINPESHL) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -350,19 +344,29 @@ function Start-Auto-DISM {
         $DrvCmd = "dism /Image:C:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`n"
     }
 
-    $ScriptCmd = "@echo off`ntitle AUTO INSTALLER`ncolor 1f`ncls`nformat c: /q /y /fs:ntfs`n" +
-                 "dism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:C:\`n" +
-                 "bcdboot C:\Windows /s C: /f ALL`n" + $DrvCmd + "timeout /t 5`nwpeutil reboot"
+    # 1. TẠO SCRIPT CÀI ĐẶT (AutoInstall.cmd)
+    $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
+                 "echo DANG FORMAT O C...`r`nformat c: /q /y /fs:ntfs`r`n" +
+                 "echo DANG BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:C:\`r`n" +
+                 "echo DANG CAI BOOTLOADER...`r`nbcdboot C:\Windows /s C: /f ALL`r`n" + $DrvCmd + 
+                 "echo HOAN TAT! TU DONG KHOI DONG LAI SAU 5 GIAY...`r`ntimeout /t 5`r`nwpeutil reboot"
 
-    Log "Tạo cơ chế tự động (Bypass)..."
-    [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd)
-    
+    [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
+
+    # 2. TẠO AUTOUNATTEND.XML (Cách 1)
     $SmartCommand = 'cmd /c "for %I in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do if exist %I:\WinSource\AutoInstall.cmd (call %I:\WinSource\AutoInstall.cmd & exit)"'
-    
     $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>$SmartCommand</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
 
+    # 3. TẠO WINPESHL.INI (Cách 2 - Mạnh hơn, ghi đè Setup.exe)
+    # WinPE sẽ đọc file này trước. Nếu có, nó chạy file này thay vì chạy Setup.exe
+    $WinPeShl = "[LaunchApps]`r`ncmd.exe, /c `"$SmartCommand`""
+    
+    Log "Injecting Boot Triggers..."
     $AllDrives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
-    foreach ($D in $AllDrives) { try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent) } catch {} }
+    foreach ($D in $AllDrives) { 
+        try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent) } catch {} 
+        try { [IO.File]::WriteAllText("$($D.DeviceID)\winpeshl.ini", $WinPeShl, [System.Text.Encoding]::ASCII) } catch {}
+    }
 
     Log "Moving Boot Files..."
     Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall.wim" -Force
@@ -396,7 +400,7 @@ function Start-Auto-DISM {
     & "$env:SystemRoot\System32\bcdedit.exe" /bootsequence $Guid
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập Boot thành công! Bấm YES để Restart vào môi trường cài đặt.", "Hoàn Tất", "YesNo", "Information") -eq "Yes") { Restart-Computer -Force }
+    if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập Boot thành công!`n`nLƯU Ý: Máy sẽ khởi động lại vào màn hình đen/xanh trong vài giây.`nNó sẽ TỰ ĐỘNG FORMAT C và CÀI WIN.`nĐừng tắt máy!", "Hoàn Tất", "YesNo", "Information") -eq "Yes") { Restart-Computer -Force }
 }
 
 # --- EVENTS ---
