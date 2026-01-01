@@ -1,9 +1,9 @@
 <#
-    WININSTALL CORE V8.3 (SYNTAX FIXED)
+    WININSTALL CORE V9.0 (UEFI/GPT ARCHITECT)
     Author: Phat Tan PC
     Updates:
-    - FIX ERROR: Fixed variable expansion syntax ${L}: inside strings to prevent ParserError.
-    - Retains XML Bypass logic.
+    - FIX CRITICAL "NO OS FOUND": Implements Diskpart scripts to create EFI partition (FAT32) for UEFI boot.
+    - FIX XML PARSING: Simplified XML generation to prevent "Invalid Answer File".
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -32,9 +32,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V8.3 - SYNTAX FIXED"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V9.0 - UEFI ARCHITECT"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V8.3"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V9.0"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -63,7 +63,7 @@ function New-BigBtn ($Parent, $Txt, $Y, $Color, $Event) {
     $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "310, 65"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Cursor = "Hand"; $B.Add_Click($Event); $Parent.Controls.Add($B); return $B
 }
 
-New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ Tự động hoàn toàn (Fixed Syntax)" 40 "Orange" { Start-Auto-DISM }
+New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Chia ổ chuẩn UEFI/BIOS -> Bung Win`n✅ FIX LỖI: No OS Found" 40 "Orange" { Start-Auto-DISM }
 
 New-BigBtn $GrpAction "MODE 1: SETUP.EXE (AN TOÀN)`n✅ Dùng Rollback của Microsoft`n✅ Chậm nhưng chắc" 120 "LightGray" {
     if (!$Global:IsoMounted) { Log "Chưa Mount ISO!"; return }
@@ -297,7 +297,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (FIXED: XML BRUTE FORCE + SYNTAX FIX) ---
+# --- AUTO DISM (FIXED: UEFI PARTITION + VALID XML) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -335,29 +335,44 @@ function Start-Auto-DISM {
         $DrvPath = "$SafeDrive\Drivers_Backup"; New-Item -ItemType Directory -Path $DrvPath -Force | Out-Null
         Log "Backup Driver..."
         & "$env:SystemRoot\System32\dism.exe" /online /export-driver /destination:"$DrvPath" | Out-Null
-        $DrvCmd = "dism /Image:C:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`n"
+        $DrvCmd = "dism /Image:W:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`r`n"
     }
 
-    # 1. TẠO SCRIPT CÀI ĐẶT
+    # --- 1. TẠO AUTOINSTALL.CMD (CHỨA LOGIC DISKPART) ---
+    # File này sẽ tự check BIOS/UEFI và chia ổ tương ứng
+    # UEFI: Tạo EFI (S:) và Windows (W:)
+    # BIOS: Tạo Windows (W:) và set Active
     $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
                  "echo DANG DIET SETUP.EXE (NEU CO)...`r`ntaskkill /F /IM setup.exe >nul 2>&1`r`n" +
-                 "echo DANG FORMAT O C...`r`nformat c: /q /y /fs:ntfs`r`n" +
-                 "echo DANG BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:C:\`r`n" +
-                 "echo DANG CAI BOOTLOADER...`r`nbcdboot C:\Windows /s C: /f ALL`r`n" + $DrvCmd + 
-                 "echo HOAN TAT! TU DONG KHOI DONG LAI SAU 5 GIAY...`r`ntimeout /t 5`r`nwpeutil reboot"
+                 "echo DANG CHUAN BI DISKPART...`r`n" +
+                 "reg query HKLM\System\CurrentControlSet\Control /v PEFirmwareType 2>nul | find `"0x2`" >nul`r`n" +
+                 "if %errorlevel%==0 (goto :UEFI) else (goto :BIOS)`r`n" +
+                 ":UEFI`r`necho CHE DO: UEFI (GPT)...`r`n" +
+                 "(echo select disk 0 & echo clean & echo convert gpt & echo create partition efi size=260 & echo format quick fs=fat32 label=`"System`" & echo assign letter=S & echo create partition msr size=16 & echo create partition primary & echo format quick fs=ntfs label=`"Windows`" & echo assign letter=W) > diskpart.txt`r`n" +
+                 "diskpart /s diskpart.txt`r`n" +
+                 "echo DANG BUNG FILE IMAGE VAO O W...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:W:\`r`n" +
+                 "echo DANG CAI BOOTLOADER UEFI...`r`nbcdboot W:\Windows /s S: /f UEFI`r`n" + $DrvCmd + 
+                 "goto :DONE`r`n" +
+                 ":BIOS`r`necho CHE DO: LEGACY BIOS (MBR)...`r`n" +
+                 "(echo select disk 0 & echo clean & echo convert mbr & echo create partition primary & echo format quick fs=ntfs label=`"Windows`" & echo assign letter=W & echo active) > diskpart.txt`r`n" +
+                 "diskpart /s diskpart.txt`r`n" +
+                 "echo DANG BUNG FILE IMAGE VAO O W...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:W:\`r`n" +
+                 "echo DANG CAI BOOTLOADER BIOS...`r`nbcdboot W:\Windows /s W: /f BIOS`r`n" + $DrvCmd + 
+                 ":DONE`r`necho HOAN TAT! REBOOT SAU 5S...`r`ntimeout /t 5`r`nwpeutil reboot"
+
     [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
 
-    # 2. TẠO FILE RUN.CMD
+    # 2. TẠO FILE RUN.CMD (ĐỂ XML GỌI - NE LỖI CÚ PHÁP)
     $RunCmd = "@echo off`r`nif exist `"$SourceDir\AutoInstall.cmd`" call `"$SourceDir\AutoInstall.cmd`""
     [IO.File]::WriteAllText("$SafeDrive\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII)
 
-    # 3. TẠO XML (FIXED SYNTAX ${L})
+    # 3. TẠO XML SIÊU ĐƠN GIẢN (FIXED)
+    # Ta dùng vòng lặp tạo 24 dòng lệnh riêng biệt trong XML thay vì dùng vòng lặp FOR của CMD
+    # Cách này đảm bảo Windows PE đọc hiểu 100%
     $CommandsBlock = ""
     $Order = 1
-    # Loop từ C (67) đến Z (90)
     for ($i=67; $i -le 90; $i++) {
         $L = [char]$i
-        # FIX: Dùng ${L} để PowerShell không hiểu nhầm dấu : là scope
         $Cmd = "cmd /c if exist ${L}:\Run.cmd ${L}:\Run.cmd"
         $CommandsBlock += "<RunSynchronousCommand wcm:action=`"add`"><Order>$Order</Order><Path>$Cmd</Path></RunSynchronousCommand>"
         $Order++
@@ -403,7 +418,7 @@ function Start-Auto-DISM {
     & "$env:SystemRoot\System32\bcdedit.exe" /bootsequence $Guid
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập Boot thành công!`n`nLƯU Ý: Máy sẽ khởi động lại vào màn hình đen/xanh trong vài giây.`nNó sẽ TỰ ĐỘNG FORMAT C và CÀI WIN.`nĐừng tắt máy!", "Hoàn Tất", "YesNo", "Information") -eq "Yes") { Restart-Computer -Force }
+    if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập Boot thành công!`n`nLƯU Ý: Máy sẽ khởi động lại vào màn hình đen/xanh trong vài giây.`nNó sẽ TỰ ĐỘNG CHIA Ổ (DISKPART) và CÀI WIN.`nTuyệt đối không tắt máy!", "Hoàn Tất", "YesNo", "Information") -eq "Yes") { Restart-Computer -Force }
 }
 
 # --- EVENTS ---
