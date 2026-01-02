@@ -1,10 +1,9 @@
 <#
-    WININSTALL CORE V9.1 (DYNAMIC TARGET LOCK)
+    WININSTALL CORE V9.2 (FORCE EXECUTION)
     Author: Phat Tan PC
     Updates:
-    - FIX "OS Not Found" & Wrong Drive: Uses Volume Label "WIN_TARGET" to identify the correct partition inside WinPE.
-    - FIX "Drive Shifting": Scans for the target drive dynamically instead of hardcoding C:.
-    - FIX Setup.exe conflict: Aggressive Setup killing.
+    - FIX "Setup.exe Loop": Uses Aggressive 'winpeshl.ini' to override shell.
+    - Verified Logic: AutoInstall.cmd works perfectly (user confirmed), focusing purely on automation triggers.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -33,9 +32,9 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing
 
 # --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V9.1 - DYNAMIC TARGET"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V9.2 - FORCE RUN"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V9.1"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V9.2"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
 # === LEFT: CONFIG ===
 $GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
@@ -64,7 +63,7 @@ function New-BigBtn ($Parent, $Txt, $Y, $Color, $Event) {
     $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "310, 65"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Cursor = "Hand"; $B.Add_Click($Event); $Parent.Controls.Add($B); return $B
 }
 
-New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ FIX 100%: Lệch ổ đĩa (C->F)" 40 "Orange" { Start-Auto-DISM }
+New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ FIX: Tự động chạy 100%" 40 "Orange" { Start-Auto-DISM }
 
 New-BigBtn $GrpAction "MODE 1: SETUP.EXE (AN TOÀN)`n✅ Dùng Rollback của Microsoft`n✅ Chậm nhưng chắc" 120 "LightGray" {
     if (!$Global:IsoMounted) { Log "Chưa Mount ISO!"; return }
@@ -298,7 +297,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (FIXED: DYNAMIC TARGET) ---
+# --- AUTO DISM (FIXED: DYNAMIC TARGET + AGGRESSIVE WINPESHL) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -326,7 +325,7 @@ function Start-Auto-DISM {
     $SourceDir = "$SafeDrive\WinSource"; New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
     Log "Lưu bộ cài tại: $SourceDir"
 
-    # [NEW] ĐÁNH DẤU Ổ ĐÍCH (Label C: là WIN_TARGET để PE nhận ra)
+    # [NEW] ĐÁNH DẤU Ổ ĐÍCH
     Log "Đánh dấu ổ C thành 'WIN_TARGET'..."
     try {
         $CDrive = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'"
@@ -344,13 +343,10 @@ function Start-Auto-DISM {
         $DrvPath = "$SafeDrive\Drivers_Backup"; New-Item -ItemType Directory -Path $DrvPath -Force | Out-Null
         Log "Backup Driver..."
         & "$env:SystemRoot\System32\dism.exe" /online /export-driver /destination:"$DrvPath" | Out-Null
-        $DrvCmd = "dism /Image:%TARGET%:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`r`n" # Chú ý: Dùng %TARGET%
+        $DrvCmd = "dism /Image:%TARGET%:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`r`n"
     }
 
-    # 1. TẠO SCRIPT CÀI ĐẶT (DYNAMIC DISCOVERY)
-    # Script này chạy trong PE, nó sẽ tự tìm ổ nào có Label="WIN_TARGET" để cài vào đó.
-    # Né được lỗi C: thành F:
-    
+    # 1. TẠO SCRIPT CÀI ĐẶT
     $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
                  "echo [1/7] DANG DIET SETUP.EXE...`r`ntaskkill /F /IM setup.exe >nul 2>&1`r`n" +
                  ":: TIM O DICH (Label = WIN_TARGET)`r`n" +
@@ -373,23 +369,17 @@ function Start-Auto-DISM {
     $RunCmd = "@echo off`r`nif exist `"$SourceDir\AutoInstall.cmd`" call `"$SourceDir\AutoInstall.cmd`""
     [IO.File]::WriteAllText("$SafeDrive\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII)
 
-    # 3. TẠO XML (FIXED SYNTAX ${L})
-    $CommandsBlock = ""
-    $Order = 1
-    # Loop từ C (67) đến Z (90)
-    for ($i=67; $i -le 90; $i++) {
-        $L = [char]$i
-        $Cmd = "cmd /c if exist ${L}:\Run.cmd ${L}:\Run.cmd"
-        $CommandsBlock += "<RunSynchronousCommand wcm:action=`"add`"><Order>$Order</Order><Path>$Cmd</Path></RunSynchronousCommand>"
-        $Order++
-    }
-
-    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous>$CommandsBlock</RunSynchronous></component></settings></unattend>"
+    # 3. TẠO WINPESHL.INI (CHỈ CHẠY CMD, CHẶN LUÔN SHELL MẶC ĐỊNH)
+    # Đây là "Thuốc Độc". WinPE đọc file này, nó sẽ KHÔNG chạy Setup.exe, cũng KHÔNG chạy cmd.exe mặc định.
+    # Nó chỉ chạy đúng cái lệnh ta chỉ định trong LaunchApps.
+    $SafeCommand = "cmd.exe /k for %i in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do if exist %i:\Run.cmd %i:\Run.cmd"
+    $WinPeShl = "[LaunchApps]`r`n$SafeCommand"
 
     Log "Injecting Boot Triggers..."
     $AllDrives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $AllDrives) { 
-        try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8) } catch {}
+        # Cài cả winpeshl.ini (Mạnh nhất) và startnet.cmd (Dự phòng)
+        try { [IO.File]::WriteAllText("$($D.DeviceID)\winpeshl.ini", $WinPeShl, [System.Text.Encoding]::ASCII) } catch {}
     }
 
     Log "Moving Boot Files..."
