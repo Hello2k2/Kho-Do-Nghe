@@ -1,4 +1,4 @@
-# --- 1. FORCE ADMIN ---
+# --- 1. FORCE ADMIN & CONFIG ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
@@ -8,265 +8,249 @@ Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
-# --- THEME NEON ---
+# --- THEME: CYBERPUNK ---
 $Theme = @{
-    Back      = [System.Drawing.Color]::FromArgb(30, 30, 35)
-    Card      = [System.Drawing.Color]::FromArgb(45, 45, 50)
-    Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    Accent    = [System.Drawing.Color]::FromArgb(0, 255, 127) # SpringGreen
-    Warn      = [System.Drawing.Color]::FromArgb(255, 165, 0)
-    Err       = [System.Drawing.Color]::FromArgb(255, 69, 0)
+    Back      = [System.Drawing.Color]::FromArgb(20, 20, 25)
+    Panel     = [System.Drawing.Color]::FromArgb(35, 35, 40)
+    Text      = [System.Drawing.Color]::FromArgb(220, 220, 220)
+    Accent    = [System.Drawing.Color]::FromArgb(0, 190, 255) # Deep Cyan
+    Hacker    = [System.Drawing.Color]::FromArgb(0, 255, 65)  # Matrix Green
+    Warn      = [System.Drawing.Color]::FromArgb(255, 140, 0)
+    Err       = [System.Drawing.Color]::FromArgb(255, 50, 50)
 }
 
-# --- GUI SETUP ---
+# --- GUI INIT ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "DATA & SYSTEM RESCUE (V3.0 ULTIMATE)"
-$Form.Size = New-Object System.Drawing.Size(900, 650)
+$Form.Text = "PHAT TAN RESCUE CENTER - V5.0 PRO MAX"
+$Form.Size = New-Object System.Drawing.Size(1000, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "PHAT TAN RESCUE CENTER"; $LblT.Font = "Impact, 22"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,10"
-$Form.Controls.Add($LblT)
+# HEADER
+$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Size="1000, 70"; $PnlHead.Dock="Top"; $PnlHead.BackColor=$Theme.Panel; $Form.Controls.Add($PnlHead)
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "SYSTEM RECOVERY PROTOCOL"; $LblT.Font = "Impact, 26"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $PnlHead.Controls.Add($LblT)
+$LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text = "Build V5.0 | High Performance | Auto-Threading"; $LblSub.ForeColor = "Gray"; $LblSub.Location = "450, 28"; $LblSub.AutoSize = $true; $PnlHead.Controls.Add($LblSub)
 
-# --- TAB CONTROL ---
+# TAB CONTROL
 $TabControl = New-Object System.Windows.Forms.TabControl
-$TabControl.Location = "20, 60"; $TabControl.Size = "845, 380"
+$TabControl.Location = "20, 90"; $TabControl.Size = "945, 420"
 $Form.Controls.Add($TabControl)
 
-function Add-Page ($Title) { $p=New-Object System.Windows.Forms.TabPage; $p.Text=$Title; $p.BackColor=$Theme.Card; $p.ForeColor=$Theme.Text; $TabControl.Controls.Add($p); return $p }
+function Add-Page ($Title) { $p=New-Object System.Windows.Forms.TabPage; $p.Text=$Title; $p.BackColor=$Theme.Back; $p.ForeColor=$Theme.Text; $TabControl.Controls.Add($p); return $p }
+function Add-Grp ($P, $T, $X, $Y, $W, $H, $C) { $g=New-Object System.Windows.Forms.GroupBox; $g.Text=$T; $g.Location="$X,$Y"; $g.Size="$W,$H"; $g.ForeColor=$C; $P.Controls.Add($g); return $g }
 function Add-Chk ($P, $T, $X, $Y, $Tag) { $c=New-Object System.Windows.Forms.CheckBox; $c.Text=$T; $c.Location="$X,$Y"; $c.AutoSize=$true; $c.Tag=$Tag; $c.Font="Segoe UI, 10"; $c.ForeColor="White"; $P.Controls.Add($c); return $c }
 
 # ==========================================
-# TAB 1: BACKUP (SAO LƯU)
+# TAB 1: BACKUP ZONE
 # ==========================================
-$TabBackup = Add-Page "  1. BACKUP SYSTEM  "
+$TabB = Add-Page "  /// EXECUTE BACKUP  "
 
-$LblB1 = New-Object System.Windows.Forms.Label; $LblB1.Text = "Nơi lưu trữ (Destination):"; $LblB1.Location = "20,20"; $LblB1.AutoSize = $true; $TabBackup.Controls.Add($LblB1)
-$TxtDest = New-Object System.Windows.Forms.TextBox; $TxtDest.Location = "20,45"; $TxtDest.Size = "650,25"; $TabBackup.Controls.Add($TxtDest)
+$LblDest = New-Object System.Windows.Forms.Label; $LblDest.Text = "DESTINATION PATH:"; $LblDest.Location = "20,20"; $LblDest.AutoSize = $true; $TabB.Controls.Add($LblDest)
+$TxtDest = New-Object System.Windows.Forms.TextBox; $TxtDest.Location = "20,45"; $TxtDest.Size = "800,25"; $TxtDest.BackColor=$Theme.Panel; $TxtDest.ForeColor="White"; $TxtDest.BorderStyle="FixedSingle"; $TabB.Controls.Add($TxtDest)
 if(Test-Path "D:\"){$TxtDest.Text="D:\PhatTan_Backup"}else{$TxtDest.Text="C:\PhatTan_Backup"}
+$BtnBrw = New-Object System.Windows.Forms.Button; $BtnBrw.Text="..."; $BtnBrw.Location="830,45"; $BtnBrw.Size="40,25"; $BtnBrw.FlatStyle="Flat"; $TabB.Controls.Add($BtnBrw)
+$BtnBrw.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtDest.Text=$F.SelectedPath+"\PhatTan_Backup"} })
 
-$BtnBrowseB = New-Object System.Windows.Forms.Button; $BtnBrowseB.Text="..."; $BtnBrowseB.Location="680,43"; $BtnBrowseB.Size="40,27"; $BtnBrowseB.FlatStyle="Flat"; $TabBackup.Controls.Add($BtnBrowseB)
-$BtnBrowseB.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtDest.Text=$F.SelectedPath+"\PhatTan_Backup"} })
+# -- COLUMN 1: CORE SYSTEM --
+$Gb1 = Add-Grp $TabB " [ SYSTEM CORE ] " 20 90 280 230 $Theme.Accent
+$cB_Wifi  = Add-Chk $Gb1 "Wifi Profiles (XML)" 20 30 "Wifi"
+$cB_Drv   = Add-Chk $Gb1 "Drivers (DISM Export)" 20 60 "Driver"
+$cB_Net   = Add-Chk $Gb1 "IP Config (Static IP)" 20 90 "Net"  # NEW
+$cB_Print = Add-Chk $Gb1 "Printers (Config File)" 20 120 "Print" # NEW
+$cB_Hosts = Add-Chk $Gb1 "Hosts File" 20 150 "Hosts"
+$cB_Start = Add-Chk $Gb1 "Start Menu Layout" 20 180 "Start"
 
-# GROUP 1: BASIC DATA
-$GbBasic = New-Object System.Windows.Forms.GroupBox; $GbBasic.Text="Dữ liệu cơ bản"; $GbBasic.Location="20,80"; $GbBasic.Size="390,120"; $GbBasic.ForeColor="Cyan"; $TabBackup.Controls.Add($GbBasic)
-$cB_Wifi = Add-Chk $GbBasic "Wifi Passwords (All)" 20 30 "Wifi"
-$cB_Drv  = Add-Chk $GbBasic "Drivers (Export DISM)" 20 60 "Driver"
-$cB_Data = Add-Chk $GbBasic "User Data (Desktop/Doc...)" 200 30 "UserData"
-$cB_Font = Add-Chk $GbBasic "Installed Fonts" 200 60 "Fonts"
+# -- COLUMN 2: APPS & UTILS --
+$Gb2 = Add-Grp $TabB " [ APPLICATIONS ] " 320 90 280 230 $Theme.Hacker
+$cB_IDM    = Add-Chk $Gb2 "IDM (Full Key + Data)" 20 30 "IDM"
+$cB_Zalo   = Add-Chk $Gb2 "Zalo PC (Chat Data)" 20 60 "Zalo"
+$cB_Chrome = Add-Chk $Gb2 "Chrome (User Profile)" 20 90 "Chrome"
+$cB_Edge   = Add-Chk $Gb2 "Edge (User Profile)" 20 120 "Edge"
+$cB_Font   = Add-Chk $Gb2 "Fonts (External)" 20 150 "Fonts"
+$cB_HTML   = Add-Chk $Gb2 "Export App List (HTML)" 20 180 "HTML"
 
-# GROUP 2: APPS & SYSTEM (NEW!)
-$GbAdv = New-Object System.Windows.Forms.GroupBox; $GbAdv.Text="Apps & System (Nâng cao)"; $GbAdv.Location="430,80"; $GbAdv.Size="390,120"; $GbAdv.ForeColor="SpringGreen"; $TabBackup.Controls.Add($GbAdv)
-$cB_IDM   = Add-Chk $GbAdv "IDM (Key + Data + Settings)" 20 30 "IDM"
-$cB_Start = Add-Chk $GbAdv "Start Menu & Taskbar Layout" 20 60 "StartLayout"
-$cB_Hosts = Add-Chk $GbAdv "File Hosts (Chặn QC)" 20 90 "Hosts"
-$cB_HTML  = Add-Chk $GbAdv "Xuất List phần mềm (HTML)" 220 30 "HTML"
-$cB_Zalo  = Add-Chk $GbAdv "Zalo PC Data" 220 60 "Zalo"
+# -- COLUMN 3: USER FILES --
+$Gb3 = Add-Grp $TabB " [ USER DATA ] " 620 90 280 230 $Theme.Warn
+$cB_Desk = Add-Chk $Gb3 "Desktop" 20 30 "Desktop"
+$cB_Doc  = Add-Chk $Gb3 "Documents" 20 60 "Doc"
+$cB_Pic  = Add-Chk $Gb3 "Pictures" 20 90 "Pic"
+$cB_Down = Add-Chk $Gb3 "Downloads" 20 120 "Down"
+$cB_Mus  = Add-Chk $Gb3 "Music & Video" 20 150 "Media"
 
-$BtnRunBackup = New-Object System.Windows.Forms.Button; $BtnRunBackup.Text="CHẠY BACKUP (FULL OPTIONS)"; $BtnRunBackup.Location="20,290"; $BtnRunBackup.Size="805,50"; $BtnRunBackup.BackColor=$Theme.Accent; $BtnRunBackup.ForeColor="Black"; $BtnRunBackup.FlatStyle="Flat"; $BtnRunBackup.Font="Segoe UI, 13, Bold"
-$TabBackup.Controls.Add($BtnRunBackup)
+# Defaults
+$cB_Wifi.Checked=$true; $cB_Drv.Checked=$true; $cB_Net.Checked=$true; $cB_IDM.Checked=$true; $cB_Zalo.Checked=$true; $cB_Desk.Checked=$true
 
-# ==========================================
-# TAB 2: RESTORE (KHÔI PHỤC)
-# ==========================================
-$TabRestore = Add-Page "  2. RESTORE SYSTEM  "
-
-$LblR1 = New-Object System.Windows.Forms.Label; $LblR1.Text = "Chọn thư mục Backup:"; $LblR1.Location = "20,20"; $LblR1.AutoSize = $true; $TabRestore.Controls.Add($LblR1)
-$TxtSource = New-Object System.Windows.Forms.TextBox; $TxtSource.Location = "20,45"; $TxtSource.Size = "650,25"; $TabRestore.Controls.Add($TxtSource)
-$BtnBrowseR = New-Object System.Windows.Forms.Button; $BtnBrowseR.Text="CHỌN..."; $BtnBrowseR.Location="680,43"; $BtnBrowseR.Size="80,27"; $BtnBrowseR.FlatStyle="Flat"; $TabRestore.Controls.Add($BtnBrowseR)
-$BtnBrowseR.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtSource.Text=$F.SelectedPath} })
-
-$GbRes = New-Object System.Windows.Forms.GroupBox; $GbRes.Text="Chọn mục cần Khôi phục"; $GbRes.Location="20,80"; $GbRes.Size="805,180"; $GbRes.ForeColor="Orange"; $TabRestore.Controls.Add($GbRes)
-
-# Restore Columns
-$cR_Wifi = Add-Chk $GbRes "Wifi Passwords" 30 30 "Wifi"
-$cR_Drv  = Add-Chk $GbRes "Drivers (Auto Install)" 30 60 "Driver"
-$cR_Data = Add-Chk $GbRes "User Data (Ghi đè)" 30 90 "UserData"
-
-$cR_IDM   = Add-Chk $GbRes "IDM (Reg + Settings)" 250 30 "IDM"
-$cR_Start = Add-Chk $GbRes "Start Menu Layout" 250 60 "StartLayout"
-$cR_Hosts = Add-Chk $GbRes "File Hosts" 250 90 "Hosts"
-
-$cR_Zalo = Add-Chk $GbRes "Zalo PC Data" 500 30 "Zalo"
-$cR_Font = Add-Chk $GbRes "Install Fonts" 500 60 "Fonts"
-
-$BtnRunRestore = New-Object System.Windows.Forms.Button; $BtnRunRestore.Text="TIẾN HÀNH KHÔI PHỤC (DANGEROUS)"; $BtnRunRestore.Location="20,290"; $BtnRunRestore.Size="805,50"; $BtnRunRestore.BackColor="Firebrick"; $BtnRunRestore.ForeColor="White"; $BtnRunRestore.FlatStyle="Flat"; $BtnRunRestore.Font="Segoe UI, 13, Bold"
-$TabRestore.Controls.Add($BtnRunRestore)
-
-# --- LOG AREA ---
-$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline=$true; $TxtLog.Location="20,460"; $TxtLog.Size="845,130"; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"; $TxtLog.Font="Consolas, 10"
-$Form.Controls.Add($TxtLog)
-
-function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret(); [System.Windows.Forms.Application]::DoEvents() }
-function Copy-Item-R ($S, $D) { if(Test-Path $S){ Copy-Item $S $D -Force; Log "Copied: $S" } else { Log "Miss: $S" } }
+$BtnBack = New-Object System.Windows.Forms.Button; $BtnBack.Text="INITIALIZE BACKUP SEQUENCE"; $BtnBack.Location="20,340"; $BtnBack.Size="880,45"; $BtnBack.BackColor=$Theme.Accent; $BtnBack.ForeColor="Black"; $BtnBack.FlatStyle="Flat"; $BtnBack.Font="Segoe UI, 12, Bold"
+$TabB.Controls.Add($BtnBack)
 
 # ==========================================
-# LOGIC GENERATE HTML LIST
+# TAB 2: RESTORE ZONE
 # ==========================================
-function Export-HTML-List ($Path) {
-    Log "Generating HTML Software List..."
-    $RegPath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    $Apps = Get-ItemProperty $RegPath | Where-Object {$_.DisplayName -ne $null} | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Sort-Object DisplayName
-    
-    $HTML = @"
-<html><head><title>DANH SÁCH PHẦN MỀM</title>
-<style>
-body { font-family: 'Segoe UI', sans-serif; background: #222; color: #fff; padding: 20px; }
-h1 { color: #00FF7F; border-bottom: 2px solid #555; padding-bottom: 10px; }
-input { width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px; background: #333; color: white; border: 1px solid #555; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 12px; text-align: left; border-bottom: 1px solid #444; }
-th { background-color: #333; color: #00FF7F; }
-tr:hover { background-color: #444; }
-</style>
-<script>
-function filterTable() {
-  var input, filter, table, tr, td, i, txtValue;
-  input = document.getElementById("myInput");
-  filter = input.value.toUpperCase();
-  table = document.getElementById("myTable");
-  tr = table.getElementsByTagName("tr");
-  for (i = 0; i < tr.length; i++) {
-    td = tr[i].getElementsByTagName("td")[0];
-    if (td) {
-      txtValue = td.textContent || td.innerText;
-      if (txtValue.toUpperCase().indexOf(filter) > -1) { tr[i].style.display = ""; } else { tr[i].style.display = "none"; }
-    }       
-  }
+$TabR = Add-Page "  /// RESTORE DATA  "
+
+$LblSrc = New-Object System.Windows.Forms.Label; $LblSrc.Text = "SOURCE PATH:"; $LblSrc.Location = "20,20"; $LblSrc.AutoSize = $true; $TabR.Controls.Add($LblSrc)
+$TxtSrc = New-Object System.Windows.Forms.TextBox; $TxtSrc.Location = "20,45"; $TxtSrc.Size = "800,25"; $TxtSrc.BackColor=$Theme.Panel; $TxtSrc.ForeColor="White"; $TxtSrc.BorderStyle="FixedSingle"; $TabR.Controls.Add($TxtSrc)
+$BtnBrwR = New-Object System.Windows.Forms.Button; $BtnBrwR.Text="SRC"; $BtnBrwR.Location="830,45"; $BtnBrwR.Size="40,25"; $BtnBrwR.FlatStyle="Flat"; $TabR.Controls.Add($BtnBrwR)
+$BtnBrwR.Add_Click({ $F=New-Object System.Windows.Forms.FolderBrowserDialog; if($F.ShowDialog() -eq "OK"){$TxtSrc.Text=$F.SelectedPath} })
+
+$GbR = Add-Grp $TabR " [ RESTORE MODULES ] " 20 90 880 230 "White"
+$cR_Wifi = Add-Chk $GbR "Wifi" 30 30 "R_Wifi"; $cR_Drv = Add-Chk $GbR "Drivers" 30 60 "R_Drv"; $cR_Net = Add-Chk $GbR "IP Config" 30 90 "R_Net"
+$cR_Print= Add-Chk $GbR "Printers (Info Only)" 30 120 "R_Print"; $cR_Hosts= Add-Chk $GbR "Hosts" 30 150 "R_Hosts"
+
+$cR_IDM = Add-Chk $GbR "IDM (Full)" 200 30 "R_IDM"; $cR_Zalo= Add-Chk $GbR "Zalo PC" 200 60 "R_Zalo"
+$cR_Chrome= Add-Chk $GbR "Chrome" 200 90 "R_Chrome"; $cR_Edge= Add-Chk $GbR "Edge" 200 120 "R_Edge"
+$cR_Start= Add-Chk $GbR "Start Menu" 200 150 "R_Start"; $cR_Font= Add-Chk $GbR "Fonts" 200 180 "R_Font"
+
+$cR_Data = Add-Chk $GbR "OVERWRITE USER DATA" 450 30 "R_Data"; $cR_Data.ForeColor=$Theme.Warn
+$LblW = New-Object System.Windows.Forms.Label; $LblW.Text="WARNING: Browsers & Zalo will be terminated forcefully during restore!"; $LblW.ForeColor=$Theme.Err; $LblW.Location="450, 60"; $LblW.AutoSize=$true; $GbR.Controls.Add($LblW)
+
+$BtnRes = New-Object System.Windows.Forms.Button; $BtnRes.Text="ENGAGE RESTORE PROCESS"; $BtnRes.Location="20,340"; $BtnRes.Size="880,45"; $BtnRes.BackColor=$Theme.Err; $BtnRes.ForeColor="White"; $BtnRes.FlatStyle="Flat"; $BtnRes.Font="Segoe UI, 12, Bold"
+$TabR.Controls.Add($BtnRes)
+
+# --- STATUS & LOG ---
+$PBar = New-Object System.Windows.Forms.ProgressBar; $PBar.Location="20, 520"; $PBar.Size="945, 20"; $PBar.Style="Continuous"; $Form.Controls.Add($PBar)
+$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline=$true; $TxtLog.Location="20,550"; $TxtLog.Size="945,140"; $TxtLog.BackColor="Black"; $TxtLog.ForeColor=$Theme.Hacker; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"; $TxtLog.Font="Consolas, 9"; $Form.Controls.Add($TxtLog)
+
+function Log ($M, $Val=0) { 
+    $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] $M`r`n"); $TxtLog.ScrollToCaret()
+    if($Val -gt 0){ $PBar.Value = $Val }
+    [System.Windows.Forms.Application]::DoEvents() 
 }
-</script>
-</head><body>
-<h1>DANH SÁCH PHẦN MỀM ĐÃ CÀI - $(Get-Date -F 'dd/MM/yyyy')</h1>
-<input type="text" id="myInput" onkeyup="filterTable()" placeholder="Tìm kiếm tên phần mềm...">
-<table id="myTable">
-<tr><th>Tên phần mềm</th><th>Phiên bản</th><th>Nhà phát hành</th></tr>
-"@
-    foreach ($a in $Apps) {
-        $HTML += "<tr><td>$($a.DisplayName)</td><td>$($a.DisplayVersion)</td><td>$($a.Publisher)</td></tr>`n"
+
+# ==========================================
+# ADVANCED LOGIC V5.0
+# ==========================================
+
+function Export-NetConfig ($Path) {
+    Log "Scanning Network Adapters..." 10
+    $Net = Get-NetIPAddress | Where-Object { $_.AddressFamily -eq "IPv4" -and $_.InterfaceAlias -notlike "*Loopback*" } | Select InterfaceAlias, IPAddress, PrefixLength
+    $DNS = Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses } | Select InterfaceAlias, ServerAddresses
+    $Report = "NETWORK CONFIG REPORT`n---------------------`n"
+    foreach ($N in $Net) {
+        $Report += "Interface: $($N.InterfaceAlias)`nIP: $($N.IPAddress) / $($N.PrefixLength)`n"
+        $D = $DNS | Where {$_.InterfaceAlias -eq $N.InterfaceAlias}
+        if($D){ $Report += "DNS: $($D.ServerAddresses -join ', ')" }
+        $Report += "`n---------------------`n"
     }
-    $HTML += "</table></body></html>"
-    $HTML | Out-File "$Path\Software_List.html" -Encoding UTF8
-    Log "Export HTML Done: $Path\Software_List.html"
-    Invoke-Item "$Path\Software_List.html"
+    $Report | Out-File "$Path\NetworkConfig.txt"; Log "Network Config Saved." 15
 }
 
-# ==========================================
-# LOGIC BACKUP
-# ==========================================
-$BtnRunBackup.Add_Click({
+function Export-Printers ($Path) {
+    Log "Exporting Printer Configs..." 20
+    # Save list to text for human reading
+    Get-Printer | Select Name, DriverName, PortName | Out-File "$Path\PrinterList.txt"
+    # Try using PrintUI to save config to binary (experimental)
+    # Start-Process "rundll32" "printui.dll,PrintUIEntry /Ss /n `"PrinterName`" /a `"$Path\Printer.dat`"" -Wait # Complex to loop all
+    Log "Printer List Exported." 25
+}
+
+function Robo ($S, $D, $N, $P) {
+    if(Test-Path $S) { Log "Processing: $N..." $P; Start-Process "robocopy.exe" "`"$S`" `"$D`" /E /MT:32 /R:0 /W:0 /NFL /NDL" -WindowStyle Hidden -Wait }
+}
+
+# --- BACKUP EVENT ---
+$BtnBack.Add_Click({
     $Dst = "$($TxtDest.Text)\Backup_$(Get-Date -F 'ddMM_HHmm')"
-    New-Item -ItemType Directory -Path "$Dst\System" -Force | Out-Null
-    New-Item -ItemType Directory -Path "$Dst\AppData" -Force | Out-Null
+    New-Item -Path $Dst -Type Directory -Force | Out-Null
+    $PBar.Value = 0
     
-    # 1. IDM (Registry + AppData)
-    if ($cB_IDM.Checked) {
-        Log "Backing up IDM (Registry & Data)..."
-        # Export Registry Settings & License info
-        Start-Process "reg.exe" "export `"HKCU\Software\DownloadManager`" `"$Dst\System\IDM_Reg.reg`" /y" -Wait
-        # Backup AppData (Lists, DwnlData)
-        if (Test-Path "$env:APPDATA\IDM") { Copy-Item "$env:APPDATA\IDM" "$Dst\AppData\IDM" -Recurse -Force }
-        if (Test-Path "$env:APPDATA\DwnlData") { Copy-Item "$env:APPDATA\DwnlData" "$Dst\AppData\DwnlData" -Recurse -Force }
-    }
-
-    # 2. START MENU & TASKBAR & HOSTS
-    if ($cB_Start.Checked) {
-        Log "Backing up Start Menu & Taskbar..."
-        # Start Menu Registry (Quan trọng cho Win 10/11)
-        Start-Process "reg.exe" "export `"HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore`" `"$Dst\System\StartMenu_CloudStore.reg`" /y" -Wait
-        # Taskbar Shortcuts
-        if (Test-Path "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar") {
-            New-Item "$Dst\System\TaskbarIcons" -ItemType Directory -Force | Out-Null
-            Copy-Item "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" "$Dst\System\TaskbarIcons" -Force
-        }
+    # 1. SYSTEM
+    if($cB_Wifi.Checked){ New-Item "$Dst\System\Wifi" -Force -Type Directory; netsh wlan export profile key=clear folder="$Dst\System\Wifi" | Out-Null; Log "Wifi Exported." 5 }
+    if($cB_Net.Checked){ Export-NetConfig "$Dst\System" }
+    if($cB_Print.Checked){ Export-Printers "$Dst\System" }
+    if($cB_Hosts.Checked){ Copy-Item "C:\Windows\System32\drivers\etc\hosts" "$Dst\System\hosts_backup" -Force; Log "Hosts Saved." 30 }
+    
+    if($cB_Start.Checked){ 
+        New-Item "$Dst\System\Start" -Force -Type Directory
+        reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore" "$Dst\System\Start\StartLayout.reg" /y | Out-Null
+        Copy-Item "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" "$Dst\System\Start" -Recurse -Force
+        Log "Start Layout Saved." 35 
     }
     
-    # 3. HOSTS FILE
-    if ($cB_Hosts.Checked) {
-        Log "Backing up Hosts file..."
-        Copy-Item "C:\Windows\System32\drivers\etc\hosts" "$Dst\System\hosts_backup" -Force
+    if($cB_Drv.Checked){ Log "Exporting Drivers (Deep Scan)..." 40; New-Item "$Dst\Drivers" -Type Directory; Start-Process "dism" "/online /export-driver /destination:`"$Dst\Drivers`"" -WindowStyle Hidden -Wait }
+    
+    # 2. APPS
+    if($cB_IDM.Checked){ 
+        Log "Backing up IDM..." 50; New-Item "$Dst\AppData\IDM" -Type Directory -Force
+        reg export "HKCU\Software\DownloadManager" "$Dst\AppData\IDM\IDM_Reg.reg" /y | Out-Null
+        if(Test-Path "$env:APPDATA\IDM"){ Copy-Item "$env:APPDATA\IDM" "$Dst\AppData\IDM\Roaming_IDM" -Recurse -Force }
+        if(Test-Path "$env:APPDATA\DwnlData"){ Copy-Item "$env:APPDATA\DwnlData" "$Dst\AppData\IDM\Roaming_DwnlData" -Recurse -Force }
+    }
+    
+    if($cB_Zalo.Checked){ Robo "$env:APPDATA\ZaloPC" "$Dst\AppData\ZaloPC" "Zalo" 60 }
+    if($cB_Chrome.Checked){ Robo "$env:LOCALAPPDATA\Google\Chrome\User Data" "$Dst\AppData\Chrome" "Chrome" 65 }
+    if($cB_Edge.Checked){ Robo "$env:LOCALAPPDATA\Microsoft\Edge\User Data" "$Dst\AppData\Edge" "Edge" 70 }
+    
+    if($cB_Font.Checked){ 
+        Log "Cloning Fonts..." 75; New-Item "$Dst\System\Fonts" -Type Directory
+        Get-ChildItem "C:\Windows\Fonts" -Include *.ttf,*.otf -Recurse | Copy-Item -Destination "$Dst\System\Fonts" 
+    }
+    
+    if($cB_HTML.Checked){
+        Log "Generating HTML Report..." 80
+        $Reg = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        $Apps = Get-ItemProperty $Reg | Where {$_.DisplayName} | Select DisplayName, DisplayVersion | Sort DisplayName
+        $H = "<html><body style='background:#111;color:#0f0;font-family:Consolas'><h2>APP LIST</h2><table border='1' style='border-color:#333;width:100%'>"
+        foreach($a in $Apps){ $H += "<tr><td>$($a.DisplayName)</td><td>$($a.DisplayVersion)</td></tr>" }
+        $H += "</table></body></html>"; $H | Out-File "$Dst\Apps.html" -Encoding UTF8
     }
 
-    # 4. WIFI & DRIVERS
-    if ($cB_Wifi.Checked) { 
-        New-Item "$Dst\System\Wifi" -ItemType Directory -Force | Out-Null
-        netsh wlan export profile key=clear folder="$Dst\System\Wifi" | Out-Null; Log "Wifi Exported." 
-    }
-    if ($cB_Drv.Checked) {
-        Log "Exporting Drivers (Wait ~5 mins)..."
-        New-Item "$Dst\Drivers" -ItemType Directory -Force | Out-Null
-        Start-Process "dism.exe" "/online /export-driver /destination:`"$Dst\Drivers`"" -NoNewWindow -Wait
-    }
+    # 3. DATA
+    if($cB_Desk.Checked){ Robo "$env:USERPROFILE\Desktop" "$Dst\UserData\Desktop" "Desktop" 85 }
+    if($cB_Doc.Checked){ Robo "$env:USERPROFILE\Documents" "$Dst\UserData\Documents" "Documents" 90 }
+    if($cB_Pic.Checked){ Robo "$env:USERPROFILE\Pictures" "$Dst\UserData\Pictures" "Pictures" 92 }
+    if($cB_Down.Checked){ Robo "$env:USERPROFILE\Downloads" "$Dst\UserData\Downloads" "Downloads" 95 }
+    if($cB_Mus.Checked){ Robo "$env:USERPROFILE\Music" "$Dst\UserData\Music" "Music" 98 }
 
-    # 5. USER DATA & ZALO & FONTS
-    if ($cB_Data.Checked) {
-        foreach ($F in @("Desktop", "Documents", "Pictures", "Downloads")) {
-            Log "Robocopy: $F"
-            Start-Process "robocopy.exe" "`"$env:USERPROFILE\$F`" `"$Dst\UserData\$F`" /E /MT:16 /R:0 /W:0 /NFL /NDL" -NoNewWindow -Wait
-        }
-    }
-    if ($cB_Zalo.Checked) {
-        Log "Backing up ZaloPC..."
-        Start-Process "robocopy.exe" "`"$env:APPDATA\ZaloPC`" `"$Dst\AppData\ZaloPC`" /E /MT:16 /R:0 /W:0 /NFL /NDL" -NoNewWindow -Wait
-    }
-    if ($cB_HTML.Checked) { Export-HTML-List $Dst }
-
-    Log "--- BACKUP COMPLETED ---"
-    [System.Windows.Forms.MessageBox]::Show("Backup thành công!", "Phat Tan PC")
+    $PBar.Value = 100; Log "=== MISSION ACCOMPLISHED ===" 100
     Invoke-Item $Dst
 })
 
-# ==========================================
-# LOGIC RESTORE
-# ==========================================
-$BtnRunRestore.Add_Click({
-    $Src = $TxtSource.Text
-    if (!(Test-Path $Src)) { [System.Windows.Forms.MessageBox]::Show("Folder không tồn tại!", "Lỗi"); return }
-    if ([System.Windows.Forms.MessageBox]::Show("Dữ liệu cũ sẽ bị ghi đè. Tiếp tục?", "Cảnh báo", "YesNo", "Warning") -eq "No") { return }
+# --- RESTORE EVENT ---
+$BtnRes.Add_Click({
+    $Src = $TxtSrc.Text
+    if(!(Test-Path $Src)){ [System.Windows.Forms.MessageBox]::Show("INVALID SOURCE PATH!"); return }
+    if([System.Windows.Forms.MessageBox]::Show("DANGER: FILES WILL BE OVERWRITTEN!`nCONTINUE?", "CONFIRM", "YesNo", "Warning") -eq "No"){ return }
+    $PBar.Value = 0
 
-    # 1. RESTORE IDM
-    if ($cR_IDM.Checked) {
-        Log "Restoring IDM..."
-        Stop-Process -Name "IDMan" -ErrorAction SilentlyContinue
-        # Import Registry
-        if (Test-Path "$Src\System\IDM_Reg.reg") { Start-Process "reg.exe" "import `"$Src\System\IDM_Reg.reg`"" -Wait }
-        # Restore AppData
-        if (Test-Path "$Src\AppData\IDM") { Copy-Item "$Src\AppData\IDM" "$env:APPDATA" -Recurse -Force }
-        if (Test-Path "$Src\AppData\DwnlData") { Copy-Item "$Src\AppData\DwnlData" "$env:APPDATA" -Recurse -Force }
+    if($cR_Wifi.Checked){ Get-ChildItem "$Src\System\Wifi\*.xml" | % { netsh wlan add profile filename="$($_.FullName)" }; Log "Wifi Imported." 10 }
+    if($cR_Hosts.Checked){ Copy-Item "$Src\System\hosts_backup" "C:\Windows\System32\drivers\etc\hosts" -Force; Log "Hosts Restored." 20 }
+    
+    if($cR_Net.Checked -and (Test-Path "$Src\System\NetworkConfig.txt")){ Invoke-Item "$Src\System\NetworkConfig.txt"; Log "Opened IP Config for manual review." 25 }
+    
+    if($cR_Drv.Checked){ Log "Injecting Drivers..." 30; Start-Process "pnputil" "/add-driver `"$Src\Drivers\*.inf`" /subdirs /install" -WindowStyle Hidden -Wait }
+    
+    if($cR_Font.Checked -and (Test-Path "$Src\System\Fonts")){
+        Log "Installing Fonts..." 40; $Shell = New-Object -ComObject Shell.Application; $F = $Shell.Namespace(0x14)
+        Get-ChildItem "$Src\System\Fonts" | Where { $_.Extension -match "\.ttf|\.otf" } | ForEach { $F.CopyHere($_.FullName) }
     }
 
-    # 2. RESTORE HOSTS
-    if ($cR_Hosts.Checked) {
-        Log "Restoring Hosts..."
-        Copy-Item "$Src\System\hosts_backup" "C:\Windows\System32\drivers\etc\hosts" -Force
+    if($cR_Start.Checked){
+        Log "Resetting Shell..." 50; Stop-Process -Name explorer -Force
+        reg import "$Src\System\Start\StartLayout.reg"
+        Copy-Item "$Src\System\Start\*" "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar" -Recurse -Force
+        Start-Sleep 2; Start-Process explorer
     }
 
-    # 3. RESTORE START MENU
-    if ($cR_Start.Checked) {
-        Log "Restoring Start Menu (Registry)..."
-        # Kill Explorer to refresh
-        Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
-        if (Test-Path "$Src\System\StartMenu_CloudStore.reg") { Start-Process "reg.exe" "import `"$Src\System\StartMenu_CloudStore.reg`"" -Wait }
-        if (Test-Path "$Src\System\TaskbarIcons") { Copy-Item "$Src\System\TaskbarIcons\*" "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar" -Force }
-        Start-Sleep -s 2
-        Start-Process "explorer.exe"
+    if($cR_IDM.Checked){
+        Stop-Process -Name IDMan -Force; Log "Restoring IDM..." 60
+        reg import "$Src\AppData\IDM\IDM_Reg.reg"
+        Copy-Item "$Src\AppData\IDM\Roaming_IDM" "$env:APPDATA\IDM" -Recurse -Force
+        Copy-Item "$Src\AppData\IDM\Roaming_DwnlData" "$env:APPDATA\DwnlData" -Recurse -Force
     }
 
-    # 4. BASIC RESTORE
-    if ($cR_Wifi.Checked) { Get-ChildItem "$Src\System\Wifi\*.xml" | ForEach { netsh wlan add profile filename="$($_.FullName)" } }
-    if ($cR_Drv.Checked) { Start-Process "pnputil.exe" "/add-driver `"$Src\Drivers\*.inf`" /subdirs /install" -Wait }
-    if ($cR_Zalo.Checked) { 
-        Stop-Process -Name "Zalo" -ErrorAction SilentlyContinue
-        Copy-Item "$Src\AppData\ZaloPC" "$env:APPDATA" -Recurse -Force 
-    }
-    if ($cR_Data.Checked) {
-        foreach ($F in @("Desktop", "Documents", "Pictures", "Downloads")) {
-            if (Test-Path "$Src\UserData\$F") { Copy-Item "$Src\UserData\$F\*" "$env:USERPROFILE\$F" -Recurse -Force }
-        }
+    if($cR_Zalo.Checked){ Stop-Process -Name Zalo -Force; Robo "$Src\AppData\ZaloPC" "$env:APPDATA\ZaloPC" "Zalo" 70 }
+    if($cR_Chrome.Checked){ Stop-Process -Name chrome -Force; Robo "$Src\AppData\Chrome" "$env:LOCALAPPDATA\Google\Chrome\User Data" "Chrome" 80 }
+    if($cR_Edge.Checked){ Stop-Process -Name msedge -Force; Robo "$Src\AppData\Edge" "$env:LOCALAPPDATA\Microsoft\Edge\User Data" "Edge" 90 }
+
+    if($cR_Data.Checked){
+        Robo "$Src\UserData\Desktop" "$env:USERPROFILE\Desktop" "Desktop" 95
+        Robo "$Src\UserData\Documents" "$env:USERPROFILE\Documents" "Documents" 98
     }
 
-    Log "--- RESTORE FINISHED ---"
-    [System.Windows.Forms.MessageBox]::Show("Đã khôi phục xong! Vui lòng khởi động lại máy.", "Thông báo")
+    $PBar.Value = 100; Log "=== RESTORE COMPLETE! REBOOT REQUIRED ===" 100
+    [System.Windows.Forms.MessageBox]::Show("Operation Finished!")
 })
 
 $Form.ShowDialog() | Out-Null
