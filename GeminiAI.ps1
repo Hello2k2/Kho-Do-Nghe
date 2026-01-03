@@ -91,7 +91,7 @@ $BtnInstall.Add_Click({
             $Url = "https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi"; $Dest = "$env:TEMP\node.msi"
             (New-Object System.Net.WebClient).DownloadFile($Url, $Dest)
             Start-Process "msiexec.exe" -ArgumentList "/i `"$Dest`" /quiet /norestart" -Wait
-            [System.Windows.Forms.MessageBox]::Show("Đã cài Node. Khởi động lại Tool!", "Info"); $Form.Close(); return
+            [System.Windows.Forms.MessageBox]::Show("Đã cài Node. Vui lòng khởi động lại Máy để máy nhận diện path của node!", "Info"); $Form.Close(); return
         }
     }
     if ($Global:NodeReady) {
