@@ -1,8 +1,9 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (V4.8: FIXED GLIM CHAINLOAD)
+    USB BOOT MAKER - PHAT TAN PC (V4.9: DUAL BOOT LEGACY & UEFI)
     Updates:
-    - [FIX] Chainload GRUB2 via lnxboot.img (Fix treo may Legacy).
-    - [FIX] Rewrite UEFI grub.cfg to search by LABEL (Fix tu vao Win).
+    - [MODE] Tùy chọn MBR (Dual Boot) hoặc GPT (UEFI Only).
+    - [FIX] Tự động bỏ qua nạp MBR/PBR nếu chọn GPT.
+    - [FIX] Cấu trúc EFI chuẩn cho cả 2 chế độ.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -49,7 +50,6 @@ function Run-DiskPartScript ($Commands) {
     return $P.ExitCode
 }
 
-# --- BOOTICE & GRLDR ---
 function Run-BootICE ($DiskID, $PartIndex) {
     $ToolPath = "$Global:TempDir\BOOTICE.exe"
     if (!(Test-Path $ToolPath)) {
@@ -58,12 +58,9 @@ function Run-BootICE ($DiskID, $PartIndex) {
             (New-Object Net.WebClient).DownloadFile($Global:BootIceUrl, $ToolPath)
         } catch { Log-Msg "Lỗi tải BootICE!"; return }
     }
-
     if (Test-Path $ToolPath) {
-        Log-Msg "Nạp MBR (Grub4Dos)..."
+        Log-Msg "Nạp MBR/PBR (Grub4Dos cho Legacy)..."
         Start-Process -FilePath $ToolPath -ArgumentList "/DEVICE=$DiskID /MBR /install /type=GRUB4DOS /auto /quiet" -Wait -WindowStyle Hidden
-        
-        Log-Msg "Nạp PBR (Grub4Dos)..."
         Start-Process -FilePath $ToolPath -ArgumentList "/DEVICE=$DiskID /PBR /partition=$PartIndex /install /type=GRUB4DOS /GRLDR=grldr /auto /quiet" -Wait -WindowStyle Hidden
     }
 }
@@ -88,7 +85,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSt
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text="USB BOOT MAKER V4.8 (FIXED GLIM)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
+$Form.Text="USB BOOT MAKER V4.9 (DUAL BOOT LEGACY/UEFI)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
 
 $MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
@@ -121,7 +118,13 @@ $Scroll.Controls.Add($Grid)
 
 function Add-Set ($L,$C,$R,$Cl) { $P=New-Object System.Windows.Forms.Panel; $P.Dock="Top"; $P.Height=60; $P.Padding=5; $Lb=New-Object System.Windows.Forms.Label; $Lb.Text=$L; $Lb.Dock="Top"; $Lb.Height=20; $Lb.ForeColor="Silver"; $C.Dock="Top"; $C.Font=$Global:F_Norm; $C.BackColor=$Theme.InputBg; $C.ForeColor="White"; $P.Controls.Add($C); $P.Controls.Add($Lb); $Grid.Controls.Add($P,$Cl,$R) }
 
-$CbStyle=New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy+UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex=0; $CbStyle.DropDownStyle="DropDownList"; Add-Set "Kiểu Partition:" $CbStyle 0 0
+# --- QUAN TRỌNG: CẤU HÌNH COMBOBOX ---
+$CbStyle=New-Object System.Windows.Forms.ComboBox; 
+# Option 0: MBR = Legacy + UEFI (Phổ biến nhất)
+# Option 1: GPT = UEFI Only (Cho máy đời mới)
+$CbStyle.Items.AddRange(@("MBR (Chạy cả Legacy + UEFI)", "GPT (Chỉ chạy UEFI)")); 
+$CbStyle.SelectedIndex=0; $CbStyle.DropDownStyle="DropDownList"; Add-Set "Kiểu Partition:" $CbStyle 0 0
+
 $NumSize=New-Object System.Windows.Forms.NumericUpDown; $NumSize.Minimum=100; $NumSize.Maximum=8192; $NumSize.Value=512; Add-Set "Size Boot (MB):" $NumSize 0 1
 $TxtBoot=New-Object System.Windows.Forms.TextBox; $TxtBoot.Text="GLIM_BOOT"; Add-Set "Nhãn Boot:" $TxtBoot 0 2
 $CbFS=New-Object System.Windows.Forms.ComboBox; $CbFS.Items.AddRange(@("NTFS","exFAT","FAT32")); $CbFS.SelectedIndex=0; $CbFS.DropDownStyle="DropDownList"; Add-Set "Định dạng Data:" $CbFS 1 0
@@ -166,93 +169,95 @@ $BtnStart.Add_Click({
     $Zip="$Global:TempDir\$($K.FileName)"
     if(!(Test-Path $Zip)){ Log-Msg "Tải Kit: $($K.FileName)..."; if(!(Download-File $K.Url $Zip)){$BtnStart.Enabled=$true;$Form.Cursor="Default";return} }
 
-    # DISKPART
-    $St=if($CbStyle.SelectedIndex -eq 0){"mbr"}else{"gpt"}; $Sz=$NumSize.Value; $BL=$TxtBoot.Text; $DL=$TxtData.Text; $FS=$CbFS.SelectedItem
+    # XÁC ĐỊNH CHẾ ĐỘ BOOT
+    # SelectedIndex 0 = MBR (Dual Boot), 1 = GPT (UEFI Only)
+    $St=if($CbStyle.SelectedIndex -eq 0){"mbr"}else{"gpt"}
+    $Sz=$NumSize.Value; $BL=$TxtBoot.Text; $DL=$TxtData.Text; $FS=$CbFS.SelectedItem
     
-    Log-Msg "B1: Format USB (Clean)..."
+    Log-Msg "B1: Format USB ($St)..."
     Run-DiskPartScript "select disk $ID`nclean`nconvert $St`nrescan"
     Log-Msg "Đợi 3s..."
     Start-Sleep 3
 
     Log-Msg "B2: Tạo phân vùng..."
     $Cmd="select disk $ID"
-    # Set ACTIVE for MBR to make it bootable
     if($St -eq "mbr"){ 
+        # MBR: Active partition cho Legacy
         $Cmd+="`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nactive`nassign"
-        $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
     } else { 
+        # GPT: Chi can partition FAT32, khong can Active
         $Cmd+="`ncreate part pri size=$Sz`nformat fs=fat32 quick label=`"$BL`"`nassign"
-        $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit" 
     }
+    # Tao partition DATA
+    $Cmd+="`ncreate part pri`nformat fs=$FS quick label=`"$DL`"`nassign`nexit"
+    
     Run-DiskPartScript $Cmd
     Log-Msg "Đợi 5s gán ổ đĩa..."; Start-Sleep 5
 
-    # BOOTICE (Only needed for MBR to install Grub4Dos)
-    if ($St -eq "mbr") { Run-BootICE $ID 0 }
+    # BOOTICE CHỈ CHẠY KHI CHỌN MBR (LEGACY)
+    if ($St -eq "mbr") { 
+        Log-Msg "Cấu hình Boot Legacy (BootICE)..."
+        Run-BootICE $ID 0 
+    } else {
+        Log-Msg "Chế độ GPT: Bỏ qua BootICE (Thuần UEFI)."
+    }
 
     # DETECT DRIVE LETTERS
     for($i=1;$i -le 10;$i++){ $B=Get-DriveLetterByLabel $BL; $D=Get-DriveLetterByLabel $DL; if($B -and $D){break}; Start-Sleep 1 }
     if(!$B){ Log-Msg "Lỗi tìm ổ Boot! (Rút USB cắm lại)"; $BtnStart.Enabled=$true; $Form.Cursor="Default"; return }
     Log-Msg "Boot: $B | Data: $D"
 
-    # EXTRACT KIT
+    # EXTRACT KIT (Chứa file EFI cho UEFI Boot)
     Log-Msg "Giải nén Kit vào $B..."
     try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{Log-Msg "Lỗi giải nén: $_"}
 
     # ===============================================
-    # [FIXED LOGIC START]
+    # LOGIC FIX BOOT CHO CẢ 2
     # ===============================================
 
-    # 1. FIX UEFI BOOT: Tạo lại grub.cfg trỏ theo Label (tránh lỗi UUID cũ)
+    # 1. LUÔN FIX UEFI (Cho cả MBR và GPT)
     $UefiCfg = "$B\EFI\BOOT\grub.cfg"
     if (Test-Path "$B\EFI\BOOT") {
-        Log-Msg "Fix UEFI grub.cfg (Tìm theo Label: $BL)..."
+        Log-Msg "Cấu hình UEFI (grub.cfg)..."
         $CfgContent = @"
 search --no-floppy --set=root --label $BL
 set prefix=(`$root)/boot/grub
 configfile (`$root)/boot/grub/grub.cfg
 "@
         $CfgContent | Out-File $UefiCfg -Encoding ASCII -Force
+    } else {
+        Log-Msg "⚠ CẢNH BÁO: Không thấy thư mục EFI. USB có thể không Boot được UEFI!"
     }
 
-    # 2. FIX LEGACY BOOT: Tạo menu.lst chainload qua lnxboot.img
+    # 2. CHỈ FIX LEGACY NẾU LÀ MBR
     if ($St -eq "mbr") {
         if (!(Test-Path "$B\grldr")) {
-            Log-Msg "⚠ Thiếu GRLDR -> Auto Download..."
-            try { (New-Object Net.WebClient).DownloadFile($Global:GrldrUrl, "$B\grldr"); Log-Msg "OK." } catch { Log-Msg "Lỗi tải GRLDR!" }
+            Log-Msg "Tải GRLDR cho Legacy..."
+            try { (New-Object Net.WebClient).DownloadFile($Global:GrldrUrl, "$B\grldr") } catch { Log-Msg "Lỗi tải GRLDR!" }
         }
 
-        Log-Msg "Fix Legacy menu.lst (Chainload lnxboot)..."
+        Log-Msg "Cấu hình Legacy (menu.lst)..."
         $MenuContent = @"
 timeout 10
 default 0
 color white/blue black/light-gray
-
-title [0] Boot GLIM (GRUB2 Multiboot)
-# Fix: Load lnxboot.img lam Kernel de goi GRUB2
+title [0] Boot GLIM (Legacy)
 find --set-root /boot/grub/i386-pc/lnxboot.img
 kernel /boot/grub/i386-pc/lnxboot.img
 initrd /boot/grub/i386-pc/core.img
 boot
-
 title [1] Reboot
 reboot
-
-title [2] Shutdown
-halt
 "@
         $MenuContent | Out-File "$B\menu.lst" -Encoding ASCII 
     }
-    # ===============================================
-    # [FIXED LOGIC END]
-    # ===============================================
 
     if($D){
         Log-Msg "Tạo thư mục ISO..."
         @("iso\windows","iso\linux","iso\android","iso\utilities") | ForEach { New-Item -ItemType Directory -Path "$D\$_" -Force | Out-Null }
     }
 
-    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot Sẵn Sàng (V4.8 Stable)!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot Sẵn Sàng!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
     if($D){Invoke-Item "$D\iso"}
 })
 
