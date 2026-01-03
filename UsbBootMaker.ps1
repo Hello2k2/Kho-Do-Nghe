@@ -1,11 +1,11 @@
 <#
-    USB BOOT MAKER - PHAT TAN PC (V4.7: AUTO ADMIN & GLIM)
+    USB BOOT MAKER - PHAT TAN PC (V4.8: FIXED GLIM CHAINLOAD)
     Updates:
-    - [FIX] Auto Force Administrator Mode (Fix Diskpart Elevation Error).
-    - Includes V4.6 GLIM Chainload logic.
+    - [FIX] Chainload GRUB2 via lnxboot.img (Fix treo may Legacy).
+    - [FIX] Rewrite UEFI grub.cfg to search by LABEL (Fix tu vao Win).
 #>
 
-# --- 0. FORCE ADMIN (QUAN TRỌNG NHẤT) ---
+# --- 0. FORCE ADMIN ---
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     $Arg = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
     Start-Process powershell.exe -Verb RunAs -ArgumentList $Arg
@@ -45,7 +45,6 @@ function Log-Msg ($Msg) {
 
 function Run-DiskPartScript ($Commands) {
     $F = "$Global:TempDir\dp_step.txt"; [IO.File]::WriteAllText($F, $Commands)
-    # Vì script cha đã là Admin, lệnh con sẽ tự kế thừa quyền Admin
     $P = Start-Process "diskpart" "/s `"$F`"" -Wait -NoNewWindow -PassThru
     return $P.ExitCode
 }
@@ -89,7 +88,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontSt
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text="USB BOOT MAKER V4.7 (AUTO ADMIN)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
+$Form.Text="USB BOOT MAKER V4.8 (FIXED GLIM)"; $Form.Size="900,750"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
 
 $MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
 $MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
@@ -200,24 +199,40 @@ $BtnStart.Add_Click({
     Log-Msg "Giải nén Kit vào $B..."
     try{Expand-Archive -Path $Zip -DestinationPath "$B\" -Force}catch{Log-Msg "Lỗi giải nén: $_"}
 
-    # [FIX] CHECK GRLDR & MENU.LST (GLIM SUPPORT)
+    # ===============================================
+    # [FIXED LOGIC START]
+    # ===============================================
+
+    # 1. FIX UEFI BOOT: Tạo lại grub.cfg trỏ theo Label (tránh lỗi UUID cũ)
+    $UefiCfg = "$B\EFI\BOOT\grub.cfg"
+    if (Test-Path "$B\EFI\BOOT") {
+        Log-Msg "Fix UEFI grub.cfg (Tìm theo Label: $BL)..."
+        $CfgContent = @"
+search --no-floppy --set=root --label $BL
+set prefix=(`$root)/boot/grub
+configfile (`$root)/boot/grub/grub.cfg
+"@
+        $CfgContent | Out-File $UefiCfg -Encoding ASCII -Force
+    }
+
+    # 2. FIX LEGACY BOOT: Tạo menu.lst chainload qua lnxboot.img
     if ($St -eq "mbr") {
         if (!(Test-Path "$B\grldr")) {
             Log-Msg "⚠ Thiếu GRLDR -> Auto Download..."
             try { (New-Object Net.WebClient).DownloadFile($Global:GrldrUrl, "$B\grldr"); Log-Msg "OK." } catch { Log-Msg "Lỗi tải GRLDR!" }
         }
 
-        # [NEW] UPDATE MENU.LST FOR GLIM
-        # Grub4Dos sẽ gọi core.img của GRUB2 (như trong list file của ông)
-        Log-Msg "Cập nhật menu.lst cho GLIM..."
+        Log-Msg "Fix Legacy menu.lst (Chainload lnxboot)..."
         $MenuContent = @"
-timeout 15
+timeout 10
 default 0
 color white/blue black/light-gray
 
-title [0] Boot GLIM (GRUB2 Core)
-find --set-root /boot/grub/i386-pc/core.img
-kernel /boot/grub/i386-pc/core.img
+title [0] Boot GLIM (GRUB2 Multiboot)
+# Fix: Load lnxboot.img lam Kernel de goi GRUB2
+find --set-root /boot/grub/i386-pc/lnxboot.img
+kernel /boot/grub/i386-pc/lnxboot.img
+initrd /boot/grub/i386-pc/core.img
 boot
 
 title [1] Reboot
@@ -228,13 +243,16 @@ halt
 "@
         $MenuContent | Out-File "$B\menu.lst" -Encoding ASCII 
     }
+    # ===============================================
+    # [FIXED LOGIC END]
+    # ===============================================
 
     if($D){
         Log-Msg "Tạo thư mục ISO..."
         @("iso\windows","iso\linux","iso\android","iso\utilities") | ForEach { New-Item -ItemType Directory -Path "$D\$_" -Force | Out-Null }
     }
 
-    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot Sẵn Sàng (GLIM Configured)!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
+    Log-Msg "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("USB Boot Sẵn Sàng (V4.8 Stable)!"); $BtnStart.Enabled=$true; $Form.Cursor="Default"
     if($D){Invoke-Item "$D\iso"}
 })
 
