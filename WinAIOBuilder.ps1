@@ -48,7 +48,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WIN AIO BUILDER v7.5 - PHÁT TÂN PC (VIETNAMESE EDITION)"
+$Form.Text = "WIN AIO BUILDER v7.5.2 - PHÁT TÂN PC (VIETNAMESE EDITION)"
 $Form.Size = New-Object System.Drawing.Size(960, 860)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
