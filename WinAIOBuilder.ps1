@@ -139,32 +139,55 @@ function Get-7Zip {
 }
 
 # [FIX] HÀM GET-OSCDIMG MỚI: Tự tìm -> Tải -> Hỏi người dùng chọn thủ công
+# [FIXED v7.6] LOGIC TÌM TOOL THÔNG MINH: Auto -> GitHub -> Browse -> Tải ADK
 function Get-Oscdimg {
     $Tool = "$env:TEMP\oscdimg.exe"
-    # 1. Check trong Temp
-    if (Test-Path $Tool) { return $Tool }
 
-    # 2. Check thư mục cài đặt ADK
+    # 1. QUÉT TRONG MÁY (Temp & Thư mục cài đặt mặc định)
+    if (Test-Path $Tool) { return $Tool }
     $AdkPaths = @(
         "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-        "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+        "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
+        "$env:ProgramFiles(x86)\Windows Kits\8.1\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
     )
     foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
 
-    # 3. Thử download từ GitHub
-    Log "Đang tải oscdimg.exe..."
+    # 2. TẢI TỪ GITHUB (Nhanh, gọn nhẹ)
+    Log "Đang thử tải oscdimg.exe từ Server..."
     try { 
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/oscdimg.exe", $Tool)
         if ((Get-Item $Tool).Length -gt 100kb) { return $Tool } 
-    } catch { Log "Không tải được oscdimg tự động." }
+    } catch { Log "Không tải được từ Server." }
     
-    # 4. HỎI NGƯỜI DÙNG CHỌN FILE THỦ CÔNG
-    if ([System.Windows.Forms.MessageBox]::Show("Không tìm thấy 'oscdimg.exe' để tạo ISO.`nBạn có muốn chọn file này thủ công không?", "Thiếu Tool", "YesNo", "Warning") -eq "Yes") {
+    # 3. HỎI NGƯỜI DÙNG CHỌN THỦ CÔNG (Browse)
+    if ([System.Windows.Forms.MessageBox]::Show("Không tìm thấy 'oscdimg.exe'.`nBạn có muốn CHỌN FILE thủ công không?", "Thiếu Tool", "YesNo", "Question") -eq "Yes") {
         $O = New-Object System.Windows.Forms.OpenFileDialog
         $O.Title = "Chọn file oscdimg.exe"
         $O.Filter = "Oscdimg Tool|oscdimg.exe|All Files|*.*"
         if ($O.ShowDialog() -eq "OK") { return $O.FileName }
+    }
+
+    # 4. [MỚI] TẢI ADK SETUP TỪ MICROSOFT (Phương án cuối cùng)
+    if ([System.Windows.Forms.MessageBox]::Show("Vẫn không có tool!`nBạn có muốn tải bộ cài Windows ADK từ Microsoft để cài đặt không?", "Tải ADK", "YesNo", "Warning") -eq "Yes") {
+        Log "Đang tải ADK Setup (adksetup.exe)..."
+        $AdkSetup = "$env:TEMP\adksetup.exe"
+        try {
+            # Link tải ADK cho Windows 10/11
+            (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2196127", $AdkSetup)
+            
+            Log "Đang khởi chạy cài đặt ADK..."
+            [System.Windows.Forms.MessageBox]::Show("Tool sẽ mở trình cài đặt ADK.`nVui lòng chọn cài 'Deployment Tools' rồi quay lại đây nhé!", "Hướng dẫn")
+            
+            # Chạy file cài đặt và chờ người dùng cài xong
+            Start-Process $AdkSetup -Wait
+            
+            # Quét lại lần nữa sau khi cài
+            foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
+        } catch {
+            Log "Lỗi khi tải hoặc chạy ADK Setup!"
+            [System.Windows.Forms.MessageBox]::Show("Lỗi mạng! Không tải được ADK.", "Lỗi")
+        }
     }
 
     return $null
