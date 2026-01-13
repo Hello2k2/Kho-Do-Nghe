@@ -48,7 +48,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WIN AIO BUILDER v7.5.2 - PHÁT TÂN PC (VIETNAMESE EDITION)"
+$Form.Text = "WIN AIO BUILDER v7.5.3 - PHÁT TÂN PC (VIETNAMESE EDITION)"
 $Form.Size = New-Object System.Drawing.Size(960, 860)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -315,6 +315,7 @@ function Load-Cloud-BootKits {
 }
 
 # --- [FIXED] WIM TO ISO LOGIC (FIXED ESD & CRASH) ---
+# --- [FIXED V7.6] WIM TO ISO (AUTO FIX CORRUPT CACHE) ---
 function Wim-To-Iso {
     $Wim = $TxtWimIn.Text
     if (!$Wim -or !(Test-Path $Wim)) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file WIM hoặc ESD!", "Lỗi"); return }
@@ -328,9 +329,9 @@ function Wim-To-Iso {
 
     # === LOGIC CHỌN NGUỒN BOOT ===
     if ($RbUseLocal.Checked) {
+        # ... (GIỮ NGUYÊN CODE PHẦN LOCAL ISO CỦA BẠN) ...
         $BaseIso = $TxtBaseIso.Text
-        if (!$BaseIso -or !(Test-Path $BaseIso)) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file ISO gốc (Boot Base)!", "Lỗi"); return }
-        
+        if (!$BaseIso -or !(Test-Path $BaseIso)) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file ISO gốc!", "Lỗi"); return }
         Log "Mode: Local ISO. Đang trích xuất..."
         $Drv = Get-IsoDrive $BaseIso
         if (!$Drv) {
@@ -343,7 +344,7 @@ function Wim-To-Iso {
              $7z = Get-7Zip; Start-Process $7z -ArgumentList "x `"$BaseIso`" -o`"$WorkDir`" -x!sources\install.wim -x!sources\install.esd -y" -NoNewWindow -Wait
         }
     } else {
-        # === CLOUD JSON MODE ===
+        # === [UPDATE] CLOUD JSON MODE (FIX LỖI FILE HỎNG) ===
         if ($CbBootKits.SelectedItem -eq $null) { Load-Cloud-BootKits }
         if ($CbBootKits.SelectedItem -eq $null) { return }
         
@@ -351,16 +352,46 @@ function Wim-To-Iso {
         $KitFile = "$Global:BootKitCacheDir\$($Kit.FileName)"
         
         Log "Mode: Cloud Boot Kit ($KitName)"
-        if (!(Test-Path $KitFile) -or (Get-Item $KitFile).Length -lt 1MB) {
-            Log "Đang tải: $KitName..."
+        
+        # Hàm con để tải file
+        $DownloadBlock = {
+            Log "Đang tải Boot Kit từ Server..."
             try {
                 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
                 (New-Object System.Net.WebClient).DownloadFile($KitUrl, $KitFile)
-            } catch { [System.Windows.Forms.MessageBox]::Show("Tải Boot Kit Thất Bại! Kiểm tra mạng.", "Lỗi"); return }
-        } else { Log "Dùng Boot Kit đã lưu trong Cache." }
+                return $true
+            } catch { return $false }
+        }
+
+        # 1. Kiểm tra cache cơ bản
+        if (!(Test-Path $KitFile) -or (Get-Item $KitFile).Length -lt 1MB) {
+            if (-not (Invoke-Command $DownloadBlock)) { [System.Windows.Forms.MessageBox]::Show("Tải thất bại! Kiểm tra mạng.", "Lỗi"); return }
+        } else { Log "Dùng Boot Kit từ Cache." }
         
-        Log "Giải nén Boot Kit..."
-        $7z = Get-7Zip; Start-Process $7z -ArgumentList "x `"$KitFile`" -o`"$WorkDir`" -y" -NoNewWindow -Wait
+        # 2. Giải nén & Tự Fix nếu lỗi
+        Log "Đang giải nén Boot Kit..."
+        $7z = Get-7Zip
+        $P7z = Start-Process $7z -ArgumentList "x `"$KitFile`" -o`"$WorkDir`" -y" -NoNewWindow -PassThru -Wait
+        
+        # [QUAN TRỌNG] Nếu giải nén thất bại (ExitCode != 0) -> Xóa file và tải lại
+        if ($P7z.ExitCode -ne 0) {
+            Log "PHÁT HIỆN FILE CACHE BỊ LỖI! Đang xóa và tải lại..."
+            Remove-Item $KitFile -Force -ErrorAction SilentlyContinue
+            
+            if (Invoke-Command $DownloadBlock) {
+                Log "Đang giải nén lại..."
+                Start-Process $7z -ArgumentList "x `"$KitFile`" -o`"$WorkDir`" -y" -NoNewWindow -Wait
+            } else {
+                [System.Windows.Forms.MessageBox]::Show("Không thể tải lại Boot Kit. Vui lòng kiểm tra đường truyền.", "Lỗi"); return
+            }
+        }
+    }
+
+    # === [UPDATE] KIỂM TRA FILE BOOT TRƯỚC KHI ĐÓNG GÓI ===
+    if (!(Test-Path "$WorkDir\boot\etfsboot.com") -and !(Test-Path "$WorkDir\efi\microsoft\boot\efisys.bin")) {
+        Log "LỖI NGHIÊM TRỌNG: Không tìm thấy file Boot (etfsboot.com)!"
+        Log "Nguyên nhân: Giải nén Boot Kit thất bại hoặc ISO nguồn bị thiếu file."
+        [System.Windows.Forms.MessageBox]::Show("Thiếu file khởi động (Boot Sector)!`nQuá trình tạo ISO đã bị hủy.", "Lỗi File Nguồn"); return
     }
 
     # === INJECT & BUILD ===
@@ -371,10 +402,9 @@ function Wim-To-Iso {
         $DestDrive = [System.IO.Path]::GetPathRoot($TargetIso).Trim('\')
         try { if ((Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $DestDrive }).FreeSpace -lt ((Get-Item $Wim).Length + 1GB)) { [System.Windows.Forms.MessageBox]::Show("Ổ đĩa đích đã đầy!", "Full"); return } } catch {}
 
-        Log "Đang bơm file WIM/ESD của bạn vào..."
+        Log "Đang bơm file WIM/ESD vào..."
         $DestWimDir = "$WorkDir\sources"; if(!(Test-Path $DestWimDir)){ New-Item -ItemType Directory -Path $DestWimDir | Out-Null }
         
-        # [FIX] CHECK ĐUÔI FILE (ESD hay WIM)
         $Ext = [System.IO.Path]::GetExtension($Wim).ToLower()
         $TargetName = "install.wim"
         if ($Ext -eq ".esd") { $TargetName = "install.esd" }
@@ -382,7 +412,6 @@ function Wim-To-Iso {
         
         Log "Đóng gói file ISO (Vui lòng chờ)..."
         
-        # [FIX] ĐỔI TÊN BIẾN $Args THÀNH $IsoArgs ĐỂ TRÁNH CRASH
         $IsoArgs = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$WorkDir\boot\etfsboot.com`"#pEF,e,b`"$WorkDir\efi\microsoft\boot\efisys.bin`" `"$WorkDir`" `"$TargetIso`""
         
         $Proc = Start-Process $Oscd -ArgumentList $IsoArgs -NoNewWindow -PassThru -Wait
@@ -392,8 +421,8 @@ function Wim-To-Iso {
             [System.Windows.Forms.MessageBox]::Show("Thành công! File ISO đã được tạo.", "Success")
             Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
         } else {
-            Log "LỖI: Oscdimg thất bại hoặc bị chặn. ExitCode: $($Proc.ExitCode)"
-            [System.Windows.Forms.MessageBox]::Show("Có lỗi xảy ra! ISO chưa được tạo.`nKiểm tra Log hoặc thử chạy oscdimg thủ công.", "Lỗi")
+            Log "LỖI: Oscdimg thất bại. ExitCode: $($Proc.ExitCode)"
+            [System.Windows.Forms.MessageBox]::Show("Có lỗi xảy ra! ISO chưa được tạo.`nKiểm tra Log.", "Lỗi")
         }
     }
 }
