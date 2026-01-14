@@ -64,7 +64,7 @@ function New-BigBtn ($Parent, $Txt, $Y, $Color, $Event) {
     $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "310, 65"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Cursor = "Hand"; $B.Add_Click($Event); $Parent.Controls.Add($B); return $B
 }
 
-New-BigBtn $GrpAction "MODE 2: AUTO DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ FIX: Auto-Kill Setup.exe" 40 "Orange" { Start-Auto-DISM }
+New-BigBtn $GrpAction "MODE 2:  DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ FIX: Auto-Kill Setup.exe" 40 "Orange" { Start-Auto-DISM }
 
 New-BigBtn $GrpAction "MODE 1: SETUP.EXE (AN TOÀN)`n✅ Dùng Rollback của Microsoft`n✅ Chậm nhưng chắc" 120 "LightGray" {
     if (!$Global:IsoMounted) { Log "Chưa Mount ISO!"; return }
@@ -298,7 +298,7 @@ function Get-WimInfo {
     $CbIndex.SelectedIndex = 0
 }
 
-# --- AUTO DISM (FIXED: XML STRICT + SETUP HUNTER) ---
+# --- AUTO DISM (FIXED: DYNAMIC PATH & CLEAN ROOT) ---
 function Start-Auto-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
@@ -311,7 +311,7 @@ function Start-Auto-DISM {
     $Form.Cursor = "WaitCursor"; $Form.Text = "ĐANG XỬ LÝ..."
     $WorkDir = "$env:SystemDrive\WinInstall_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     
-    # Chọn ổ đĩa an toàn
+    # Chọn ổ đĩa an toàn (Safe Drive)
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) {
@@ -324,7 +324,7 @@ function Start-Auto-DISM {
     }
     
     $SourceDir = "$SafeDrive\WinSource"; New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
-    Log "Lưu bộ cài tại: $SourceDir"
+    Log "Lưu bộ cài tại: $SourceDir (Sẽ tự nhận diện trong WinPE)"
 
     # [NEW] ĐÁNH DẤU Ổ ĐÍCH
     Log "Đánh dấu ổ C thành 'WIN_TARGET'..."
@@ -344,43 +344,48 @@ function Start-Auto-DISM {
         $DrvPath = "$SafeDrive\Drivers_Backup"; New-Item -ItemType Directory -Path $DrvPath -Force | Out-Null
         Log "Backup Driver..."
         & "$env:SystemRoot\System32\dism.exe" /online /export-driver /destination:"$DrvPath" | Out-Null
-        $DrvCmd = "dism /Image:%TARGET%:\ /Add-Driver /Driver:`"$DrvPath`" /Recurse`r`n"
+        # FIX PATH: Dùng %~d0 để lấy ổ đĩa chứa bộ cài trong WinPE
+        $DrvCmd = "echo [6/7] NAP DRIVER...`r`ndism /Image:%TARGET%:\ /Add-Driver /Driver:`"%~d0\Drivers_Backup`" /Recurse`r`n"
     }
 
-    # 1. TẠO SCRIPT CÀI ĐẶT (SETUP HUNTER MODE)
-    # Thêm vòng lặp giết setup ở đầu
+    # 1. TẠO SCRIPT CÀI ĐẶT (DYNAMIC PATH FIXED)
+    # %~dp0 = Đường dẫn chứa file script này (Ví dụ E:\WinSource\)
     $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
-                 ":: SETUP HUNTER`r`n" +
-                 "start /min cmd /c `"for /l %%i in (1,1,20) do (taskkill /F /IM setup.exe >nul 2>&1 & timeout /t 1 >nul)`"`r`n" +
-                 ":: TIM O DICH`r`n" +
+                 ":: SETUP HUNTER (KILL SETUP.EXE)`r`n" +
+                 "start /min cmd /c `"for /l %%i in (1,1,30) do (taskkill /F /IM setup.exe >nul 2>&1 & timeout /t 1 >nul)`"`r`n" +
+                 ":: TIM O DICH QUA LABEL`r`n" +
                  "set TARGET=`r`n" +
                  "for %%x in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (`r`n" +
                  "  vol %%x: 2>nul | find `"WIN_TARGET`" >nul`r`n" +
                  "  if not errorlevel 1 set TARGET=%%x`r`n)`r`n" +
                  "if `"%TARGET%`"==`"`" (echo LOI: KHONG TIM THAY O DICH! & pause & exit)`r`n" +
                  "echo -> DANG CAI VAO O: %TARGET%:`r`n" +
+                 "echo -> BO CAI NAM O: %~dp0`r`n" +
                  "echo [2/7] DON DEP O DICH (SOFT FORMAT)...`r`n" +
                  "rd /s /q %TARGET%:\Windows >nul 2>&1`r`nrd /s /q %TARGET%:\Program Files >nul 2>&1`r`n" +
                  "rd /s /q %TARGET%:\Program Files (x86) >nul 2>&1`r`nrd /s /q %TARGET%:\Users >nul 2>&1`r`n" +
-                 "echo [3/7] BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"$SourceDir\install.wim`" /Index:$Idx /ApplyDir:%TARGET%:\`r`n" +
+                 ":: Clean Root Files (Fix Bootmgr Conflict)`r`n" +
+                 "del /f /q /a %TARGET%:\*.* >nul 2>&1`r`n" +
+                 "echo [3/7] BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"%~dp0install.wim`" /Index:$Idx /ApplyDir:%TARGET%:\`r`n" +
                  "echo [4/7] FIX BOOT SECTOR...`r`nbootsect /nt60 %TARGET%: /force /mbr`r`n" +
                  "echo [5/7] NAP BOOTLOADER...`r`nbcdboot %TARGET%:\Windows /f ALL`r`n" + 
-                 $DrvCmd.Replace("Image:C:","Image:%TARGET%:") + 
+                 $DrvCmd + 
                  "echo [7/7] HOAN TAT! REBOOT SAU 5S...`r`ntimeout /t 5`r`nwpeutil reboot"
 
     [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
 
-    # 2. TẠO FILE RUN.CMD
-    $RunCmd = "@echo off`r`nif exist `"$SourceDir\AutoInstall.cmd`" call `"$SourceDir\AutoInstall.cmd`""
+    # 2. TẠO FILE RUN.CMD (DYNAMIC PATH FIXED)
+    # %~d0 = Ký tự ổ đĩa hiện tại (Trong WinPE nó sẽ tự nhận là C:, D: hay E: tùy hoàn cảnh)
+    $RunCmd = "@echo off`r`nif exist `"%~d0\WinSource\AutoInstall.cmd`" call `"%~d0\WinSource\AutoInstall.cmd`""
     [IO.File]::WriteAllText("$SafeDrive\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII)
 
-    # 3. TẠO XML (STRICT SYNTAX - &quot;)
+    # 3. TẠO XML (STRICT SYNTAX)
     $CommandsBlock = ""
     $Order = 1
     # Loop C-Z
     for ($i=67; $i -le 90; $i++) {
         $L = [char]$i
-        # FIX XML ERROR: Dùng &quot; thay cho " và ${L}
+        # XML Trigger: Chạy Run.cmd ở mọi ổ đĩa tìm thấy
         $Cmd = "cmd /c if exist ${L}:\Run.cmd ${L}:\Run.cmd"
         $CommandsBlock += "<RunSynchronousCommand wcm:action=`"add`"><Order>$Order</Order><Path>$Cmd</Path></RunSynchronousCommand>"
         $Order++
