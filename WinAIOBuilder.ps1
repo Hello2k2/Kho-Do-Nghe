@@ -137,7 +137,57 @@ function Get-7Zip {
     $7z = "$env:TEMP\7zr.exe"; if (Test-Path $7z) { return $7z }
     Log "Đang tải 7-Zip..."; try { (New-Object System.Net.WebClient).DownloadFile("https://www.7-zip.org/a/7zr.exe", $7z); return $7z } catch { Log "Lỗi tải 7-Zip!"; return $null }
 }
+# --- [NEW] HÀM TẢI NHANH (BUFFER 512KB - NO FREEZE) ---
+function Download-Fast ($Url, $DestFile) {
+    try {
+        $HttpClient = New-Object System.Net.Http.HttpClient
+        # Fake User-Agent để Server không chặn
+        $HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        
+        Log "Kết nối Server..."
+        $Response = $HttpClient.GetAsync($Url).Result
+        if (!$Response.IsSuccessStatusCode) { throw "HTTP Error: $($Response.StatusCode)" }
 
+        $TotalBytes = $Response.Content.Headers.ContentLength
+        $RemoteStream = $Response.Content.ReadAsStreamAsync().Result
+        $FileStream = [System.IO.File]::Create($DestFile)
+        
+        # [THEO YÊU CẦU] Buffer Size = 512 KB
+        $BufferSize = 512 * 1024 
+        $Buffer = New-Object byte[] $BufferSize
+        $TotalRead = 0
+        $LastPercent = 0
+
+        Log "Bắt đầu tải (Mode: Stream, Buffer: 512KB)..."
+        
+        do {
+            $Count = $RemoteStream.Read($Buffer, 0, $BufferSize)
+            if ($Count -gt 0) {
+                $FileStream.Write($Buffer, 0, $Count)
+                $TotalRead += $Count
+                
+                # Tính % để Log đỡ trôi (Cập nhật mỗi 5%)
+                if ($TotalBytes -gt 0) {
+                    $Percent = [Math]::Floor(($TotalRead / $TotalBytes) * 100)
+                    if ($Percent -ge $LastPercent + 10) { 
+                        Log "Đang tải... $Percent% ($([Math]::Round($TotalRead/1MB, 2)) MB)"
+                        $LastPercent = $Percent
+                    }
+                }
+            }
+        } while ($Count -gt 0)
+
+        $FileStream.Close()
+        $RemoteStream.Close()
+        $HttpClient.Dispose()
+        Log "Tải hoàn tất 100%."
+        return $true
+    } catch {
+        Log "Lỗi tải file: $($_.Exception.Message)"
+        if ($FileStream) { $FileStream.Close() }
+        return $false
+    }
+}
 # [FIX] HÀM GET-OSCDIMG MỚI: Tự tìm -> Tải -> Hỏi người dùng chọn thủ công
 # [FIXED v7.6] LOGIC TÌM TOOL THÔNG MINH: Auto -> GitHub -> Browse -> Tải ADK
 function Get-Oscdimg {
@@ -298,16 +348,20 @@ function Build-Core ($CopyBoot) {
 
 # --- LOAD BOOT KITS FROM JSON ---
 function Load-Cloud-BootKits {
-    $Form.Cursor = "WaitCursor"; Log "Đang tải danh sách Boot Kit từ Server..."
+    $Form.Cursor = "WaitCursor"; Log "Đang tải danh sách Boot Kit..."
     $CbBootKits.Items.Clear()
     try {
-        $JsonContent = (New-Object System.Net.WebClient).DownloadString($Global:JsonUrl)
+        # Dùng HttpClient thay vì WebClient cho nhanh
+        $HttpClient = New-Object System.Net.Http.HttpClient
+        $JsonContent = $HttpClient.GetStringAsync($Global:JsonUrl).Result
+        $HttpClient.Dispose()
+
         $RawItems = $JsonContent | ConvertFrom-Json
         foreach ($Item in $RawItems) { $CbBootKits.Items.Add($Item) }
         if ($CbBootKits.Items.Count -gt 0) { $CbBootKits.SelectedIndex = 0 }
-        Log "Tải thành công $($CbBootKits.Items.Count) Boot Kit."
+        Log "Đã tải xong list ($($CbBootKits.Items.Count) bản)."
     } catch {
-        Log "Lỗi tải JSON! Đang dùng danh sách dự phòng."
+        Log "Lỗi tải JSON! Dùng list dự phòng."
         $Global:DefaultBootKits | ForEach-Object { $CbBootKits.Items.Add([PSCustomObject]$_) }
         $CbBootKits.SelectedIndex = 0
     }
@@ -354,12 +408,11 @@ function Wim-To-Iso {
         Log "Mode: Cloud Boot Kit ($KitName)"
         
         # 1. Tải file (Nếu chưa có)
+        # 1. Tải file (Nếu chưa có)
         if (!(Test-Path $KitFile) -or (Get-Item $KitFile).Length -lt 1MB) {
-            Log "Đang tải Boot Kit từ Server..."
-            try {
-                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-                (New-Object System.Net.WebClient).DownloadFile($KitUrl, $KitFile)
-            } catch { [System.Windows.Forms.MessageBox]::Show("Tải thất bại! Kiểm tra mạng.", "Lỗi"); return }
+            # GỌI HÀM TẢI MỚI (BUFFER 512KB)
+            $Success = Download-Fast $KitUrl $KitFile
+            if (!$Success) { [System.Windows.Forms.MessageBox]::Show("Tải thất bại! Kiểm tra mạng.", "Lỗi"); return }
         } else { Log "Dùng Boot Kit từ Cache." }
         
         # 2. GIẢI NÉN BẰNG WINDOWS (Expand-Archive) - CHUẨN HƠN 7ZIP
