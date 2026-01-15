@@ -351,42 +351,47 @@ function Load-Cloud-BootKits {
     $Form.Cursor = "WaitCursor"; Log "Đang tải danh sách Boot Kit..."
     $CbBootKits.Items.Clear()
     
-    # [FIX QUAN TRỌNG] Dòng này giúp chỉ hiện Tên, giấu các thông tin rác đi
+    # 1. FIX HIỂN THỊ: Chỉ hiện Tên, giấu Link đi cho gọn
     $CbBootKits.DisplayMember = "Name"
 
     try {
-        # Dùng HttpClient (System.Net.Http) để tải JSON siêu tốc
         $HttpClient = New-Object System.Net.Http.HttpClient
-        # Fake User-Agent để Server GitHub không chặn
         $HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        
-        # Tải JSON dạng chuỗi
         $JsonContent = $HttpClient.GetStringAsync($Global:JsonUrl).Result
         $HttpClient.Dispose()
 
-        # Parse JSON sang Object
         $RawItems = $JsonContent | ConvertFrom-Json
-        
-        # Đảm bảo nó là Mảng (Array) để không bị lỗi nếu chỉ có 1 Boot Kit
         if ($RawItems -isnot [Array]) { $RawItems = @($RawItems) }
 
-        foreach ($Item in $RawItems) { 
-            # Thêm Object vào ComboBox (Nhờ dòng DisplayMember ở trên nên nó sẽ đẹp)
-            $CbBootKits.Items.Add($Item) 
-        }
+        foreach ($Item in $RawItems) { $CbBootKits.Items.Add($Item) }
 
-        if ($CbBootKits.Items.Count -gt 0) { $CbBootKits.SelectedIndex = 0 }
+        # --- 2. LOGIC TỰ CHỌN THÔNG MINH (AUTO SELECT) ---
+        if ($CbBootKits.Items.Count -gt 0) {
+            # Mặc định cứ chọn cái đầu tiên trước (Win 10)
+            $CbBootKits.SelectedIndex = 0 
+
+            # Quét danh sách, nếu thấy "Windows 11" hoặc "GLIM" thì ưu tiên chọn ngay
+            for ($i = 0; $i -lt $CbBootKits.Items.Count; $i++) {
+                $Name = $CbBootKits.Items[$i].Name.ToString()
+                
+                # [CONFIG] Thích cái nào thì sửa từ khóa ở dòng dưới (Ví dụ: "Windows 11" hoặc "GLIM")
+                if ($Name -match "Windows 11" -or $Name -match "Moi nhat") {
+                    $CbBootKits.SelectedIndex = $i
+                    Log "Tự động đề xuất: $Name"
+                    break # Tìm thấy rồi thì dừng, không tìm nữa
+                }
+            }
+        }
+        
         Log "Đã tải xong list ($($CbBootKits.Items.Count) bản)."
 
     } catch {
-        Log "Lỗi tải JSON hoặc sai cấu trúc! Dùng list dự phòng."
-        # List dự phòng cũng phải có property "Name"
+        Log "Lỗi tải JSON! Dùng list dự phòng."
         $Global:DefaultBootKits | ForEach-Object { $CbBootKits.Items.Add([PSCustomObject]$_) }
         $CbBootKits.SelectedIndex = 0
     }
     $Form.Cursor = "Default"
 }
-
 # --- [FIXED] WIM TO ISO LOGIC (FIXED ESD & CRASH) ---
 # --- [FIXED v7.7] WIM TO ISO (DÙNG NATIVE WINDOWS UNZIP) ---
 function Wim-To-Iso {
