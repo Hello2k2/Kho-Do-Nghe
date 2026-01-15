@@ -396,7 +396,7 @@ function Load-Cloud-BootKits {
         $CbBootKits.SelectedIndex = 0
     }
     $Form.Cursor = "Default"
-}orm.Cursor = "Default"
+}
 }
 # --- [FIXED] WIM TO ISO LOGIC (FIXED ESD & CRASH) ---
 # --- [FIXED v7.7] WIM TO ISO (DÙNG NATIVE WINDOWS UNZIP) ---
