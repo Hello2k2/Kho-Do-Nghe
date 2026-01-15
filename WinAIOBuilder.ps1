@@ -340,17 +340,28 @@ function Load-Cloud-BootKits {
     $CbBootKits.DisplayMember = "Name"
 
     try {
-        $HttpClient = New-Object System.Net.Http.HttpClient
-        $HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        $JsonContent = $HttpClient.GetStringAsync($Global:JsonUrl).Result
-        $HttpClient.Dispose()
+        # [QUAN TRỌNG NHẤT] Ép buộc Windows dùng TLS 1.2 (GitHub bắt buộc cái này)
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
+        # Dùng WebClient (Cổ điển nhưng an toàn, máy nào cũng có)
+        $WebClient = New-Object System.Net.WebClient
+        
+        # Fake User-Agent để GitHub không chặn (Giả làm trình duyệt Chrome)
+        $WebClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        
+        # Tải JSON về (Dạng text)
+        $JsonContent = $WebClient.DownloadString($Global:JsonUrl)
+        $WebClient.Dispose()
+
+        # Xử lý dữ liệu JSON
         $RawItems = $JsonContent | ConvertFrom-Json
         if ($RawItems -isnot [Array]) { $RawItems = @($RawItems) }
 
         $BestIndex = 0 
         for ($i = 0; $i -lt $RawItems.Count; $i++) {
             $CbBootKits.Items.Add($RawItems[$i])
+            
+            # Logic tự chọn Windows 11 / Gen 12
             $Name = $RawItems[$i].Name.ToString()
             if ($Name -match "Windows 11" -or $Name -match "Gen 12" -or $Name -match "Moi nhat") {
                 $BestIndex = $i 
@@ -364,13 +375,18 @@ function Load-Cloud-BootKits {
         Log "Đã tải xong list ($($CbBootKits.Items.Count) bản)."
 
     } catch {
-        Log "Lỗi tải JSON! Dùng list dự phòng."
+        # In lỗi chi tiết nếu vẫn tạch
+        Log "Lỗi tải JSON: $($_.Exception.Message)"
+        if ($_.Exception.InnerException) {
+            Log "Chi tiết: $($_.Exception.InnerException.Message)"
+        }
+        
+        Log "-> Đang dùng list dự phòng."
         $Global:DefaultBootKits | ForEach-Object { $CbBootKits.Items.Add([PSCustomObject]$_) }
         $CbBootKits.SelectedIndex = 0
     }
     $Form.Cursor = "Default"
 }
-
 # --- WIM TO ISO (FIXED) ---
 function Wim-To-Iso {
     $Wim = $TxtWimIn.Text
