@@ -137,51 +137,97 @@ function Get-7Zip {
     Log "Đang tải 7-Zip..."; try { (New-Object System.Net.WebClient).DownloadFile("https://www.7-zip.org/a/7zr.exe", $7z); return $7z } catch { Log "Lỗi tải 7-Zip!"; return $null }
 }
 
+# --- [NEW v7.6] HÀM TẢI NHANH THÔNG MINH (HYBRID HTTP/WEBCLIENT) ---
 function Download-Fast ($Url, $DestFile) {
+    # 1. Cố gắng nạp thư viện HttpClient trước
     try {
-        $HttpClient = New-Object System.Net.Http.HttpClient
-        $HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        
-        Log "Kết nối Server..."
-        $Response = $HttpClient.GetAsync($Url).Result
-        if (!$Response.IsSuccessStatusCode) { throw "HTTP Error: $($Response.StatusCode)" }
+        Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
+    } catch {}
 
-        $TotalBytes = $Response.Content.Headers.ContentLength
-        $RemoteStream = $Response.Content.ReadAsStreamAsync().Result
-        $FileStream = [System.IO.File]::Create($DestFile)
-        
-        $BufferSize = 512 * 1024 
+    $UseWebClient = $false
+    
+    # 2. Kiểm tra xem máy có hỗ trợ HttpClient không
+    try {
+        $TestType = [System.Net.Http.HttpClient]
+    } catch {
+        Log "Máy thiếu HttpClient. Chuyển sang chế độ WebClient Stream (Vẫn nhanh)..."
+        $UseWebClient = $true
+    }
+
+    $FileStream = $null
+    $RemoteStream = $null
+    $Client = $null
+
+    try {
+        # [CẤU HÌNH CHUNG]
+        # Ép dùng TLS 1.2 để không bị GitHub chặn
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        $BufferSize = 512 * 1024 # 512 KB Buffer
         $Buffer = New-Object byte[] $BufferSize
+        $FileStream = [System.IO.File]::Create($DestFile)
+        $TotalBytes = -1
         $TotalRead = 0
         $LastPercent = 0
 
-        Log "Bắt đầu tải (Mode: Stream, Buffer: 512KB)..."
-        
+        if (-not $UseWebClient) {
+            # === CÁCH 1: DÙNG HTTP CLIENT (MODERN) ===
+            Log "Đang tải bằng: HttpClient..."
+            $Client = New-Object System.Net.Http.HttpClient
+            $Client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            
+            # Lấy Header để xem dung lượng trước
+            $Response = $Client.GetAsync($Url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).Result
+            if (!$Response.IsSuccessStatusCode) { throw "HTTP Error: $($Response.StatusCode)" }
+            
+            $TotalBytes = $Response.Content.Headers.ContentLength
+            $RemoteStream = $Response.Content.ReadAsStreamAsync().Result
+        } else {
+            # === CÁCH 2: DÙNG WEB CLIENT STREAM (LEGACY - CHO MÁY CŨ) ===
+            Log "Đang tải bằng: WebClient Stream..."
+            $Client = New-Object System.Net.WebClient
+            $Client.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            
+            # Mở luồng đọc dữ liệu (OpenRead) thay vì tải một cục
+            $RemoteStream = $Client.OpenRead($Url)
+            try { $TotalBytes = [long]$Client.ResponseHeaders["Content-Length"] } catch { $TotalBytes = -1 }
+        }
+
+        # === VÒNG LẶP TẢI DỮ LIỆU (CHUNG CHO CẢ 2 CÁCH) ===
+        Log "Bắt đầu nạp luồng (Buffer: 512KB)..."
         do {
             $Count = $RemoteStream.Read($Buffer, 0, $BufferSize)
             if ($Count -gt 0) {
                 $FileStream.Write($Buffer, 0, $Count)
                 $TotalRead += $Count
                 
+                # Tính % tiến trình
                 if ($TotalBytes -gt 0) {
                     $Percent = [Math]::Floor(($TotalRead / $TotalBytes) * 100)
                     if ($Percent -ge $LastPercent + 10) { 
-                        Log "Đang tải... $Percent% ($([Math]::Round($TotalRead/1MB, 2)) MB)"
+                        Log "Tiến độ: $Percent% ($([Math]::Round($TotalRead/1MB, 2)) MB)"
                         $LastPercent = $Percent
+                    }
+                } else {
+                    # Nếu không lấy được tổng dung lượng thì hiện số MB đã tải
+                    if ($TotalRead % (10MB) -eq 0) {
+                         Log "Đã tải: $([Math]::Round($TotalRead/1MB, 2)) MB..." 
                     }
                 }
             }
         } while ($Count -gt 0)
 
-        $FileStream.Close()
-        $RemoteStream.Close()
-        $HttpClient.Dispose()
         Log "Tải hoàn tất 100%."
         return $true
+
     } catch {
         Log "Lỗi tải file: $($_.Exception.Message)"
-        if ($FileStream) { $FileStream.Close() }
+        if ($_.Exception.InnerException) { Log "Chi tiết: $($_.Exception.InnerException.Message)" }
         return $false
+    } finally {
+        # Dọn dẹp bộ nhớ kỹ càng
+        if ($FileStream) { $FileStream.Close(); $FileStream.Dispose() }
+        if ($RemoteStream) { $RemoteStream.Close(); $RemoteStream.Dispose() }
+        if ($Client -and ($Client -is [IDisposable])) { $Client.Dispose() }
     }
 }
 
