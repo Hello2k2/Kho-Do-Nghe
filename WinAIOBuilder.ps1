@@ -351,7 +351,7 @@ function Load-Cloud-BootKits {
     $Form.Cursor = "WaitCursor"; Log "Đang tải danh sách Boot Kit..."
     $CbBootKits.Items.Clear()
     
-    # 1. FIX HIỂN THỊ: Chỉ hiện Tên, giấu Link đi cho gọn
+    # 1. FIX HIỂN THỊ
     $CbBootKits.DisplayMember = "Name"
 
     try {
@@ -363,26 +363,31 @@ function Load-Cloud-BootKits {
         $RawItems = $JsonContent | ConvertFrom-Json
         if ($RawItems -isnot [Array]) { $RawItems = @($RawItems) }
 
-        foreach ($Item in $RawItems) { $CbBootKits.Items.Add($Item) }
+        # --- BIẾN ĐỂ LƯU VỊ TRÍ TÌM THẤY ---
+        $BestIndex = 0 # Mặc định là 0 (Cái đầu tiên - thường là Win 10)
 
-        # --- 2. LOGIC TỰ CHỌN THÔNG MINH (AUTO SELECT) ---
-        if ($CbBootKits.Items.Count -gt 0) {
-            # Mặc định cứ chọn cái đầu tiên trước (Win 10)
-            $CbBootKits.SelectedIndex = 0 
+        # --- 2. VỪA THÊM VỪA SOI DỮ LIỆU GỐC ---
+        for ($i = 0; $i -lt $RawItems.Count; $i++) {
+            # Thêm vào giao diện
+            $CbBootKits.Items.Add($RawItems[$i])
+            
+            # Lấy tên từ dữ liệu gốc (Chính xác tuyệt đối)
+            $Name = $RawItems[$i].Name.ToString()
 
-            # Quét danh sách, nếu thấy "Windows 11" hoặc "GLIM" thì ưu tiên chọn ngay
-            for ($i = 0; $i -lt $CbBootKits.Items.Count; $i++) {
-                $Name = $CbBootKits.Items[$i].Name.ToString()
-                
-                # [CONFIG] Thích cái nào thì sửa từ khóa ở dòng dưới (Ví dụ: "Windows 11" hoặc "GLIM")
-                if ($Name -match "Windows 11" -or $Name -match "Moi nhat") {
-                    $CbBootKits.SelectedIndex = $i
-                    Log "Tự động đề xuất: $Name"
-                    break # Tìm thấy rồi thì dừng, không tìm nữa
-                }
+            # Logic tìm kiếm thông minh (Tìm chữ "Windows 11" hoặc "Gen 12"...)
+            # -match là tìm không phân biệt hoa thường
+            if ($Name -match "Windows 11" -or $Name -match "Gen 12" -or $Name -match "Moi nhat") {
+                $BestIndex = $i # Lưu lại vị trí này
             }
         }
-        
+
+        # --- 3. CHỐT ĐƠN ---
+        if ($CbBootKits.Items.Count -gt 0) {
+            $CbBootKits.SelectedIndex = $BestIndex
+            # Log ra để biết tại sao nó chọn cái đó
+            Log "Auto-Select: $($CbBootKits.Text)"
+        }
+
         Log "Đã tải xong list ($($CbBootKits.Items.Count) bản)."
 
     } catch {
@@ -391,6 +396,7 @@ function Load-Cloud-BootKits {
         $CbBootKits.SelectedIndex = 0
     }
     $Form.Cursor = "Default"
+}orm.Cursor = "Default"
 }
 # --- [FIXED] WIM TO ISO LOGIC (FIXED ESD & CRASH) ---
 # --- [FIXED v7.7] WIM TO ISO (DÙNG NATIVE WINDOWS UNZIP) ---
