@@ -48,7 +48,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WIN AIO BUILDER v7.5.4 - PHÁT TÂN PC (VIETNAMESE EDITION)"
+$Form.Text = "WIN AIO BUILDER v7.5.5 - PHÁT TÂN PC (VIETNAMESE EDITION)"
 $Form.Size = New-Object System.Drawing.Size(960, 860)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -350,18 +350,37 @@ function Build-Core ($CopyBoot) {
 function Load-Cloud-BootKits {
     $Form.Cursor = "WaitCursor"; Log "Đang tải danh sách Boot Kit..."
     $CbBootKits.Items.Clear()
+    
+    # [FIX QUAN TRỌNG] Dòng này giúp chỉ hiện Tên, giấu các thông tin rác đi
+    $CbBootKits.DisplayMember = "Name"
+
     try {
-        # Dùng HttpClient thay vì WebClient cho nhanh
+        # Dùng HttpClient (System.Net.Http) để tải JSON siêu tốc
         $HttpClient = New-Object System.Net.Http.HttpClient
+        # Fake User-Agent để Server GitHub không chặn
+        $HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        
+        # Tải JSON dạng chuỗi
         $JsonContent = $HttpClient.GetStringAsync($Global:JsonUrl).Result
         $HttpClient.Dispose()
 
+        # Parse JSON sang Object
         $RawItems = $JsonContent | ConvertFrom-Json
-        foreach ($Item in $RawItems) { $CbBootKits.Items.Add($Item) }
+        
+        # Đảm bảo nó là Mảng (Array) để không bị lỗi nếu chỉ có 1 Boot Kit
+        if ($RawItems -isnot [Array]) { $RawItems = @($RawItems) }
+
+        foreach ($Item in $RawItems) { 
+            # Thêm Object vào ComboBox (Nhờ dòng DisplayMember ở trên nên nó sẽ đẹp)
+            $CbBootKits.Items.Add($Item) 
+        }
+
         if ($CbBootKits.Items.Count -gt 0) { $CbBootKits.SelectedIndex = 0 }
         Log "Đã tải xong list ($($CbBootKits.Items.Count) bản)."
+
     } catch {
-        Log "Lỗi tải JSON! Dùng list dự phòng."
+        Log "Lỗi tải JSON hoặc sai cấu trúc! Dùng list dự phòng."
+        # List dự phòng cũng phải có property "Name"
         $Global:DefaultBootKits | ForEach-Object { $CbBootKits.Items.Add([PSCustomObject]$_) }
         $CbBootKits.SelectedIndex = 0
     }
