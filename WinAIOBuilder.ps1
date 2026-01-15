@@ -1,10 +1,9 @@
 <#
     WIN AIO BUILDER - PHAT TAN PC
-    Version: 7.5 (FIXED & VIETNAMESE)
-    - Fix: Crash 1 giây (do xung đột biến $Args).
-    - Fix: Hỗ trợ file .ESD chuẩn (không ép đổi tên thành .wim).
-    - Feature: Tiếng Việt có dấu đầy đủ.
-    - Feature: Chọn oscdimg.exe thủ công nếu không tải được.
+    Version: 7.5.6 (FINAL STABLE)
+    - Fix: Lỗi cú pháp do copy paste thừa dòng (orm.Cursor).
+    - Fix: Logic tìm kiếm Windows 11 thông minh.
+    - Fix: Tải file đa luồng 512KB Buffer.
 #>
 
 # --- 1. FORCE ADMIN (QUYỀN QUẢN TRỊ CAO NHẤT) ---
@@ -18,7 +17,7 @@ try {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop" # Đổi thành Stop để bắt lỗi chính xác hơn trong Try/Catch
 
 # --- GLOBAL VARIABLES ---
 $Global:IsoCache = @{} 
@@ -48,7 +47,7 @@ $Theme = @{
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WIN AIO BUILDER v7.5.5 - PHÁT TÂN PC (VIETNAMESE EDITION)"
+$Form.Text = "WIN AIO BUILDER v7.5.6 - PHÁT TÂN PC"
 $Form.Size = New-Object System.Drawing.Size(960, 860)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back; $Form.ForeColor = $Theme.Text
@@ -137,11 +136,10 @@ function Get-7Zip {
     $7z = "$env:TEMP\7zr.exe"; if (Test-Path $7z) { return $7z }
     Log "Đang tải 7-Zip..."; try { (New-Object System.Net.WebClient).DownloadFile("https://www.7-zip.org/a/7zr.exe", $7z); return $7z } catch { Log "Lỗi tải 7-Zip!"; return $null }
 }
-# --- [NEW] HÀM TẢI NHANH (BUFFER 512KB - NO FREEZE) ---
+
 function Download-Fast ($Url, $DestFile) {
     try {
         $HttpClient = New-Object System.Net.Http.HttpClient
-        # Fake User-Agent để Server không chặn
         $HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         
         Log "Kết nối Server..."
@@ -152,7 +150,6 @@ function Download-Fast ($Url, $DestFile) {
         $RemoteStream = $Response.Content.ReadAsStreamAsync().Result
         $FileStream = [System.IO.File]::Create($DestFile)
         
-        # [THEO YÊU CẦU] Buffer Size = 512 KB
         $BufferSize = 512 * 1024 
         $Buffer = New-Object byte[] $BufferSize
         $TotalRead = 0
@@ -166,7 +163,6 @@ function Download-Fast ($Url, $DestFile) {
                 $FileStream.Write($Buffer, 0, $Count)
                 $TotalRead += $Count
                 
-                # Tính % để Log đỡ trôi (Cập nhật mỗi 5%)
                 if ($TotalBytes -gt 0) {
                     $Percent = [Math]::Floor(($TotalRead / $TotalBytes) * 100)
                     if ($Percent -ge $LastPercent + 10) { 
@@ -188,12 +184,10 @@ function Download-Fast ($Url, $DestFile) {
         return $false
     }
 }
-# [FIX] HÀM GET-OSCDIMG MỚI: Tự tìm -> Tải -> Hỏi người dùng chọn thủ công
-# [FIXED v7.6] LOGIC TÌM TOOL THÔNG MINH: Auto -> GitHub -> Browse -> Tải ADK
+
 function Get-Oscdimg {
     $Tool = "$env:TEMP\oscdimg.exe"
 
-    # 1. QUÉT TRONG MÁY (Temp & Thư mục cài đặt mặc định)
     if (Test-Path $Tool) { return $Tool }
     $AdkPaths = @(
         "$env:ProgramFiles(x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
@@ -202,7 +196,6 @@ function Get-Oscdimg {
     )
     foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
 
-    # 2. TẢI TỪ GITHUB (Nhanh, gọn nhẹ)
     Log "Đang thử tải oscdimg.exe từ Server..."
     try { 
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
@@ -210,7 +203,6 @@ function Get-Oscdimg {
         if ((Get-Item $Tool).Length -gt 100kb) { return $Tool } 
     } catch { Log "Không tải được từ Server." }
     
-    # 3. HỎI NGƯỜI DÙNG CHỌN THỦ CÔNG (Browse)
     if ([System.Windows.Forms.MessageBox]::Show("Không tìm thấy 'oscdimg.exe'.`nBạn có muốn CHỌN FILE thủ công không?", "Thiếu Tool", "YesNo", "Question") -eq "Yes") {
         $O = New-Object System.Windows.Forms.OpenFileDialog
         $O.Title = "Chọn file oscdimg.exe"
@@ -218,21 +210,16 @@ function Get-Oscdimg {
         if ($O.ShowDialog() -eq "OK") { return $O.FileName }
     }
 
-    # 4. [MỚI] TẢI ADK SETUP TỪ MICROSOFT (Phương án cuối cùng)
     if ([System.Windows.Forms.MessageBox]::Show("Vẫn không có tool!`nBạn có muốn tải bộ cài Windows ADK từ Microsoft để cài đặt không?", "Tải ADK", "YesNo", "Warning") -eq "Yes") {
         Log "Đang tải ADK Setup (adksetup.exe)..."
         $AdkSetup = "$env:TEMP\adksetup.exe"
         try {
-            # Link tải ADK cho Windows 10/11
             (New-Object System.Net.WebClient).DownloadFile("https://go.microsoft.com/fwlink/?linkid=2196127", $AdkSetup)
             
             Log "Đang khởi chạy cài đặt ADK..."
             [System.Windows.Forms.MessageBox]::Show("Tool sẽ mở trình cài đặt ADK.`nVui lòng chọn cài 'Deployment Tools' rồi quay lại đây nhé!", "Hướng dẫn")
             
-            # Chạy file cài đặt và chờ người dùng cài xong
             Start-Process $AdkSetup -Wait
-            
-            # Quét lại lần nữa sau khi cài
             foreach ($P in $AdkPaths) { if (Test-Path $P) { return $P } }
         } catch {
             Log "Lỗi khi tải hoặc chạy ADK Setup!"
@@ -346,12 +333,10 @@ function Build-Core ($CopyBoot) {
     Log "HOÀN TẤT!"; [System.Windows.Forms.MessageBox]::Show("Đã xong!", "OK"); Invoke-Item $Dir; $BtnBuild.Enabled=$true
 }
 
-# --- LOAD BOOT KITS FROM JSON ---
+# --- LOAD BOOT KITS (FIXED SYNTAX & LOGIC) ---
 function Load-Cloud-BootKits {
     $Form.Cursor = "WaitCursor"; Log "Đang tải danh sách Boot Kit..."
     $CbBootKits.Items.Clear()
-    
-    # 1. FIX HIỂN THỊ
     $CbBootKits.DisplayMember = "Name"
 
     try {
@@ -363,31 +348,19 @@ function Load-Cloud-BootKits {
         $RawItems = $JsonContent | ConvertFrom-Json
         if ($RawItems -isnot [Array]) { $RawItems = @($RawItems) }
 
-        # --- BIẾN ĐỂ LƯU VỊ TRÍ TÌM THẤY ---
-        $BestIndex = 0 # Mặc định là 0 (Cái đầu tiên - thường là Win 10)
-
-        # --- 2. VỪA THÊM VỪA SOI DỮ LIỆU GỐC ---
+        $BestIndex = 0 
         for ($i = 0; $i -lt $RawItems.Count; $i++) {
-            # Thêm vào giao diện
             $CbBootKits.Items.Add($RawItems[$i])
-            
-            # Lấy tên từ dữ liệu gốc (Chính xác tuyệt đối)
             $Name = $RawItems[$i].Name.ToString()
-
-            # Logic tìm kiếm thông minh (Tìm chữ "Windows 11" hoặc "Gen 12"...)
-            # -match là tìm không phân biệt hoa thường
             if ($Name -match "Windows 11" -or $Name -match "Gen 12" -or $Name -match "Moi nhat") {
-                $BestIndex = $i # Lưu lại vị trí này
+                $BestIndex = $i 
             }
         }
 
-        # --- 3. CHỐT ĐƠN ---
         if ($CbBootKits.Items.Count -gt 0) {
             $CbBootKits.SelectedIndex = $BestIndex
-            # Log ra để biết tại sao nó chọn cái đó
             Log "Auto-Select: $($CbBootKits.Text)"
         }
-
         Log "Đã tải xong list ($($CbBootKits.Items.Count) bản)."
 
     } catch {
@@ -397,9 +370,8 @@ function Load-Cloud-BootKits {
     }
     $Form.Cursor = "Default"
 }
-}
-# --- [FIXED] WIM TO ISO LOGIC (FIXED ESD & CRASH) ---
-# --- [FIXED v7.7] WIM TO ISO (DÙNG NATIVE WINDOWS UNZIP) ---
+
+# --- WIM TO ISO (FIXED) ---
 function Wim-To-Iso {
     $Wim = $TxtWimIn.Text
     if (!$Wim -or !(Test-Path $Wim)) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file WIM hoặc ESD!", "Lỗi"); return }
@@ -411,9 +383,7 @@ function Wim-To-Iso {
     $Oscd = Get-Oscdimg
     if (!$Oscd) { [System.Windows.Forms.MessageBox]::Show("Không tìm thấy oscdimg.exe, hủy bỏ!", "Hủy"); return }
 
-    # === LOGIC CHỌN NGUỒN BOOT ===
     if ($RbUseLocal.Checked) {
-        # ... (GIỮ NGUYÊN CODE PHẦN LOCAL ISO) ...
         $BaseIso = $TxtBaseIso.Text
         if (!$BaseIso -or !(Test-Path $BaseIso)) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file ISO gốc!", "Lỗi"); return }
         Log "Mode: Local ISO. Đang trích xuất..."
@@ -428,7 +398,6 @@ function Wim-To-Iso {
              $7z = Get-7Zip; Start-Process $7z -ArgumentList "x `"$BaseIso`" -o`"$WorkDir`" -x!sources\install.wim -x!sources\install.esd -y" -NoNewWindow -Wait
         }
     } else {
-        # === [UPDATE v7.7] CLOUD JSON MODE (DÙNG WINDOWS EXPAND) ===
         if ($CbBootKits.SelectedItem -eq $null) { Load-Cloud-BootKits }
         if ($CbBootKits.SelectedItem -eq $null) { return }
         
@@ -437,39 +406,29 @@ function Wim-To-Iso {
         
         Log "Mode: Cloud Boot Kit ($KitName)"
         
-        # 1. Tải file (Nếu chưa có)
-        # 1. Tải file (Nếu chưa có)
         if (!(Test-Path $KitFile) -or (Get-Item $KitFile).Length -lt 1MB) {
-            # GỌI HÀM TẢI MỚI (BUFFER 512KB)
             $Success = Download-Fast $KitUrl $KitFile
             if (!$Success) { [System.Windows.Forms.MessageBox]::Show("Tải thất bại! Kiểm tra mạng.", "Lỗi"); return }
         } else { Log "Dùng Boot Kit từ Cache." }
         
-        # 2. GIẢI NÉN BẰNG WINDOWS (Expand-Archive) - CHUẨN HƠN 7ZIP
         Log "Đang giải nén Boot Kit (Dùng Windows Native)..."
         try {
-            # Lệnh này dùng trình giải nén có sẵn của Win 10/11 -> Bao chuẩn
             Expand-Archive -LiteralPath "$KitFile" -DestinationPath "$WorkDir" -Force -ErrorAction Stop
         } catch {
             Log "Windows không giải nén được. Đang thử lại bằng 7-Zip..."
-            # Fallback nếu Windows lỗi thì mới gọi 7-Zip
             $7z = Get-7Zip
             Start-Process $7z -ArgumentList "x `"$KitFile`" -o`"$WorkDir`" -y" -NoNewWindow -Wait
         }
     }
 
-    # === KIỂM TRA LẦN CUỐI & BÁO NGƯỜI DÙNG GIẢI NÉN TAY ===
     if (!(Test-Path "$WorkDir\boot\etfsboot.com")) {
         Log "Vẫn thiếu file Boot! Có thể file ZIP tải về bị lỗi cấu trúc."
-        # MỞ THƯ MỤC CHO BẠN TỰ GIẢI NÉN
         $Result = [System.Windows.Forms.MessageBox]::Show("Tool không tự giải nén được file ZIP này.`nTôi sẽ mở thư mục chứa file ZIP và thư mục đích lên.`nBạn hãy GIẢI NÉN TAY toàn bộ file trong ZIP vào thư mục đích nhé!`n`nLàm xong thì bấm OK để đóng gói.", "Cần Sức Cơm", "OKCancel", "Warning")
         
         if ($Result -eq "OK") {
-            Invoke-Item "$Global:BootKitCacheDir" # Mở nơi chứa Zip
-            Invoke-Item "$WorkDir"                # Mở nơi cần giải nén vào
+            Invoke-Item "$Global:BootKitCacheDir" 
+            Invoke-Item "$WorkDir"                
             [System.Windows.Forms.MessageBox]::Show("1. Mở file ZIP (BootKit...).`n2. Copy toàn bộ file bên trong.`n3. Paste vào thư mục 'Wim2Iso_Work' đang mở.`n4. Bấm OK ở đây khi đã làm xong.", "Hướng dẫn")
-            
-            # Kiểm tra lại lần nữa
             if (!(Test-Path "$WorkDir\boot\etfsboot.com")) {
                  [System.Windows.Forms.MessageBox]::Show("Vẫn chưa thấy file! Hủy bỏ.", "Thua"); return
             }
@@ -478,7 +437,6 @@ function Wim-To-Iso {
         }
     }
 
-    # === INJECT & BUILD ===
     $Save = New-Object System.Windows.Forms.SaveFileDialog; $Save.FileName = "MyCustomWin.iso"; $Save.Filter = "ISO|*.iso"
     if ($Save.ShowDialog() -eq "OK") {
         $TargetIso = $Save.FileName
