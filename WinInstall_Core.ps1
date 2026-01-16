@@ -1,10 +1,12 @@
 <#
-    WININSTALL CORE V9.3 (SETUP HUNTER)
+    WININSTALL CORE V10.0 (ULTIMATE HUNTER)
     Author: Phat Tan PC
-    Updates:
-    - XML Strict Mode: Encoded quotes (&quot;) perfectly to fix "Invalid Answer File".
-    - SETUP HUNTER: A background loop that kills Setup.exe instantly if it tries to run.
-    - Soft Format: Uses delete files instead of 'format' to prevent "Drive Locked" errors.
+    Updates V10.0:
+    - Dual Drive Select: Cho phép chọn riêng ổ Đích (Cài Win) và ổ Boot (Nạp BCD).
+    - Custom Unattend: Hỗ trợ nhập file XML bên ngoài.
+    - Headless Mode 2: Tối ưu Setup Hunter để giết sạch GUI Setup, chỉ hiện CMD.
+    - Post-Install Tweaks: Tùy chọn tắt GOS/Game Mode, bỏ qua thông báo Reboot.
+    - Registry Backup Center: Tự động sao lưu Registry Hives trước khi cài.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -12,435 +14,210 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- ENCODING SETUP ---
+# --- INIT ---
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# --- CONFIG ---
-$Global:WinToHDD_Url = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe"
-$Global:SevenZip_Url = "https://www.7-zip.org/a/7zr.exe"
-$Global:SelectedDisk = $null
-$Global:SelectedPart = $null
-$Global:SelectedLetter = $null
+$Global:SelectedInstall = $null
+$Global:SelectedBoot = $null
+$Global:CustomXmlPath = ""
 $Global:IsoMounted = $null
-$Global:WimFile = $null
 
 # --- THEME ---
-$Theme = @{ Bg=[System.Drawing.Color]::FromArgb(30,30,35); Panel=[System.Drawing.Color]::FromArgb(45,45,50); Text="White"; Cyan="Cyan"; Red="Salmon" }
+$Theme = @{ Bg=[System.Drawing.Color]::FromArgb(20,20,25); Panel=[System.Drawing.Color]::FromArgb(35,35,40); Text="White"; Cyan="DeepSkyBlue"; Red="Crimson" }
 
-# --- GUI INIT ---
+# --- GUI ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V9.3 - SETUP HUNTER"; $Form.Size = "950, 650"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "CORE INSTALLER V10.0 - ULTIMATE HUNTER (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
 
-$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "⚡ WINDOWS AUTO INSTALLER V9.3"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
+$LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V10.0"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
-# === LEFT: CONFIG ===
-$GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. CẤU HÌNH "; $GrpConfig.Location = "20, 60"; $GrpConfig.Size = "520, 430"; $GrpConfig.ForeColor = "Gold"; $Form.Controls.Add($GrpConfig)
+# === 1. CẤU HÌNH HỆ THỐNG ===
+$GrpConfig = New-Object System.Windows.Forms.GroupBox; $GrpConfig.Text = " 1. THIẾT LẬP BỘ CÀI & DRIVE "; $GrpConfig.Location = "20, 70"; $GrpConfig.Size = "550, 520"; $GrpConfig.ForeColor = "Yellow"; $Form.Controls.Add($GrpConfig)
 
-$LblISO = New-Object System.Windows.Forms.Label; $LblISO.Text = "File ISO:"; $LblISO.Location = "20,30"; $LblISO.AutoSize=$true; $LblISO.ForeColor="Silver"; $GrpConfig.Controls.Add($LblISO)
-$CbISO = New-Object System.Windows.Forms.ComboBox; $CbISO.Location = "20,50"; $CbISO.Size = "300,30"; $CbISO.DropDownStyle="DropDownList"; $GrpConfig.Controls.Add($CbISO)
+# ISO & Index
+$BtnISO = New-Object System.Windows.Forms.Button; $BtnISO.Text = "📂 CHỌN ISO"; $BtnISO.Location = "20,30"; $BtnISO.Size = "120,30"; $BtnISO.BackColor="DimGray"; $GrpConfig.Controls.Add($BtnISO)
+$TxtISO = New-Object System.Windows.Forms.TextBox; $TxtISO.Location = "150,32"; $TxtISO.Size = "260,25"; $TxtISO.ReadOnly=$true; $GrpConfig.Controls.Add($TxtISO)
+$BtnMount = New-Object System.Windows.Forms.Button; $BtnMount.Text = "💿 MOUNT"; $BtnMount.Location = "420,30"; $BtnMount.Size = "110,30"; $BtnMount.BackColor="DarkGreen"; $GrpConfig.Controls.Add($BtnMount)
 
-$BtnBrowse = New-Object System.Windows.Forms.Button; $BtnBrowse.Text = "📂..."; $BtnBrowse.Location = "330,49"; $BtnBrowse.Size = "50,25"; $BtnBrowse.BackColor="DimGray"; $GrpConfig.Controls.Add($BtnBrowse)
-$BtnMount = New-Object System.Windows.Forms.Button; $BtnMount.Text = "💿 MOUNT"; $BtnMount.Location = "390,49"; $BtnMount.Size = "110,25"; $BtnMount.BackColor="DarkGreen"; $BtnMount.ForeColor="White"; $GrpConfig.Controls.Add($BtnMount)
+$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "Phiên Bản:"; $LblVer.Location = "20,70"; $LblVer.AutoSize=$true; $GrpConfig.Controls.Add($LblVer)
+$CbIndex = New-Object System.Windows.Forms.ComboBox; $CbIndex.Location = "100,68"; $CbIndex.Size = "430,30"; $CbIndex.DropDownStyle="DropDownList"; $GrpConfig.Controls.Add($CbIndex)
 
-$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "Phiên Bản (Source):"; $LblVer.Location = "20,90"; $LblVer.AutoSize=$true; $LblVer.ForeColor="Silver"; $GrpConfig.Controls.Add($LblVer)
-$CbIndex = New-Object System.Windows.Forms.ComboBox; $CbIndex.Location = "20,110"; $CbIndex.Size = "480,30"; $CbIndex.DropDownStyle="DropDownList"; $GrpConfig.Controls.Add($CbIndex)
+# Partition Selection
+$LblGrid = New-Object System.Windows.Forms.Label; $LblGrid.Text = "DANH SÁCH PHÂN VÙNG (Chuột phải để chọn Ổ CÀI / Ổ BOOT):"; $LblGrid.Location = "20,110"; $LblGrid.AutoSize=$true; $LblGrid.ForeColor="Silver"; $GrpConfig.Controls.Add($LblGrid)
+$GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location = "20,135"; $GridPart.Size = "510,200"; $GridPart.BackgroundColor="Black"; $GridPart.ForeColor="Black"; $GridPart.RowHeadersVisible=$false; $GridPart.SelectionMode="FullRowSelect"; $GridPart.ReadOnly=$true; $GridPart.AutoSizeColumnsMode="Fill"
+$GridPart.Columns.Add("Dsk","D"); $GridPart.Columns.Add("Prt","P"); $GridPart.Columns.Add("Ltr","L"); $GridPart.Columns.Add("Size","Size"); $GridPart.Columns.Add("Role","Vai Trò"); $GrpConfig.Controls.Add($GridPart)
 
-$LblDsk = New-Object System.Windows.Forms.Label; $LblDsk.Text = "Chọn Ổ Cài Win (Sẽ bị Format):"; $LblDsk.Location = "20,150"; $LblDsk.AutoSize=$true; $LblDsk.ForeColor="Silver"; $GrpConfig.Controls.Add($LblDsk)
-$GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location = "20,170"; $GridPart.Size = "480,180"; $GridPart.BackgroundColor="Black"; $GridPart.ForeColor="Black"; $GridPart.AllowUserToAddRows=$false; $GridPart.RowHeadersVisible=$false; $GridPart.SelectionMode="FullRowSelect"; $GridPart.MultiSelect=$false; $GridPart.ReadOnly=$true; $GridPart.AutoSizeColumnsMode="Fill"
-$GridPart.Columns.Add("Disk","Disk"); $GridPart.Columns.Add("Part","Part"); $GridPart.Columns.Add("Letter","Ký Tự"); $GridPart.Columns.Add("Size","Size"); $GridPart.Columns.Add("Label","Nhãn"); 
-$GridPart.Columns[0].FillWeight=15; $GridPart.Columns[1].FillWeight=15; $GridPart.Columns[2].FillWeight=15; $GrpConfig.Controls.Add($GridPart)
+# Custom XML
+$BtnXml = New-Object System.Windows.Forms.Button; $BtnXml.Text = "📄 Nạp Unattend.xml"; $BtnXml.Location = "20,350"; $BtnXml.Size = "150,30"; $BtnXml.BackColor="SteelBlue"; $GrpConfig.Controls.Add($BtnXml)
+$TxtXml = New-Object System.Windows.Forms.TextBox; $TxtXml.Location = "180,352"; $TxtXml.Size = "350,25"; $TxtXml.ReadOnly=$true; $TxtXml.Text = "Mặc định (Auto)"; $GrpConfig.Controls.Add($TxtXml)
 
-$ChkDriver = New-Object System.Windows.Forms.CheckBox; $ChkDriver.Text = "Tự động Backup & Restore Driver (Giữ mạng)"; $ChkDriver.Location="20, 360"; $ChkDriver.AutoSize=$true; $ChkDriver.Checked=$true; $ChkDriver.ForeColor="LightGreen"; $GrpConfig.Controls.Add($ChkDriver)
-$ChkReboot = New-Object System.Windows.Forms.CheckBox; $ChkReboot.Text = "Tự động Reboot khi xong (Hands-free)"; $ChkReboot.Location="20, 390"; $ChkReboot.AutoSize=$true; $ChkReboot.Checked=$true; $GrpConfig.Controls.Add($ChkReboot)
+# === 2. TÙY CHỌN NÂNG CAO ===
+$GrpOption = New-Object System.Windows.Forms.GroupBox; $GrpOption.Text = " 2. OPTIMIZATION "; $GrpOption.Location = "590, 70"; $GrpOption.Size = "370, 280"; $GrpOption.ForeColor = "Lime"; $Form.Controls.Add($GrpOption)
 
-# === RIGHT: ACTIONS ===
-$GrpAction = New-Object System.Windows.Forms.GroupBox; $GrpAction.Text = " 2. CHỌN CHẾ ĐỘ "; $GrpAction.Location = "560, 60"; $GrpAction.Size = "350, 430"; $GrpAction.ForeColor = "Cyan"; $Form.Controls.Add($GrpAction)
+$ChkReg = New-Object System.Windows.Forms.CheckBox; $ChkReg.Text = "Backup Registry Hives (An toàn)"; $ChkReg.Location="20, 30"; $ChkReg.AutoSize=$true; $ChkReg.Checked=$true; $GrpOption.Controls.Add($ChkReg)
+$ChkGOS = New-Object System.Windows.Forms.CheckBox; $ChkGOS.Text = "Tắt Game Mode & Optimization (Tăng FPS)"; $ChkGOS.Location="20, 60"; $ChkGOS.AutoSize=$true; $ChkGOS.Checked=$true; $GrpOption.Controls.Add($ChkGOS)
+$ChkWarn = New-Object System.Windows.Forms.CheckBox; $ChkWarn.Text = "Tắt thông báo Reboot (Cài xong tự Restart)"; $ChkWarn.Location="20, 90"; $ChkWarn.AutoSize=$true; $ChkWarn.Checked=$false; $GrpOption.Controls.Add($ChkWarn)
+$ChkDriver = New-Object System.Windows.Forms.CheckBox; $ChkDriver.Text = "Auto Backup/Restore Driver"; $ChkDriver.Location="20, 120"; $ChkDriver.AutoSize=$true; $ChkDriver.Checked=$true; $GrpOption.Controls.Add($ChkDriver)
+
+# === 3. ACTIONS ===
+$GrpAction = New-Object System.Windows.Forms.GroupBox; $GrpAction.Text = " 3. EXECUTE "; $GrpAction.Location = "590, 360"; $GrpAction.Size = "370, 230"; $GrpAction.ForeColor = "Cyan"; $Form.Controls.Add($GrpAction)
 
 function New-BigBtn ($Parent, $Txt, $Y, $Color, $Event) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "310, 65"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Cursor = "Hand"; $B.Add_Click($Event); $Parent.Controls.Add($B); return $B
+    $B = New-Object System.Windows.Forms.Button; $B.Text = $Txt; $B.Location = "20, $Y"; $B.Size = "330, 60"; $B.BackColor = $Color; $B.ForeColor = "Black"; $B.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $B.FlatStyle = "Flat"; $B.Add_Click($Event); $Parent.Controls.Add($B)
 }
 
-New-BigBtn $GrpAction "MODE 2:  DISM (SIÊU TỐC)`n🚀 Format C -> Bung Win -> Nạp Driver`n✅ FIX: Auto-Kill Setup.exe" 40 "Orange" { Start-Auto-DISM }
+New-BigBtn $GrpAction "MODE 2: HEADLESS DISM`n(Format C -> CMD Only -> No GUI)" 30 "Orange" { Start-Headless-DISM }
+New-BigBtn $GrpAction "MODE 1: SETUP.EXE`n(Rollback Standard)" 100 "LightGray" { Start-Standard-Setup }
 
-New-BigBtn $GrpAction "MODE 1: SETUP.EXE (AN TOÀN)`n✅ Dùng Rollback của Microsoft`n✅ Chậm nhưng chắc" 120 "LightGray" {
-    if (!$Global:IsoMounted) { Log "Chưa Mount ISO!"; return }
-    $Setup = "$($Global:IsoMounted)\setup.exe"
-    if (Test-Path $Setup) { Start-Process $Setup; $Form.Close() } else { Log "Lỗi: Không thấy Setup.exe" }
-}
-
-New-BigBtn $GrpAction "MODE 3: WINTOHDD (DỰ PHÒNG)`n⬇️ Tải Tool WinToHDD Portable" 200 "LightBlue" {
-    $Dest = "$env:TEMP\WinToHDD.exe"
-    if (!(Test-Path $Dest)) {
-        Log "Đang tải WinToHDD..."
-        $Form.Cursor = "WaitCursor"
-        try { Import-Module BitsTransfer; Start-BitsTransfer -Source $Global:WinToHDD_Url -Destination $Dest -Priority Foreground } catch { Log "Lỗi tải: $_"; $Form.Cursor = "Default"; return }
-        $Form.Cursor = "Default"
-    }
-    Start-Process $Dest; $Form.Close()
-}
-
-$LblWarn = New-Object System.Windows.Forms.Label; $LblWarn.Text = "LOG TRẠNG THÁI:"; $LblWarn.Location = "20, 300"; $LblWarn.AutoSize=$true; $LblWarn.ForeColor="Silver"; $GrpAction.Controls.Add($LblWarn)
-
-$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Location = "20, 510"; $TxtLog.Size = "890, 80"; $TxtLog.Multiline=$true; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"; $Form.Controls.Add($TxtLog)
+# Log Box
+$TxtLog = New-Object System.Windows.Forms.TextBox; $TxtLog.Location = "20, 610"; $TxtLog.Size = "945, 80"; $TxtLog.Multiline=$true; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"; $Form.Controls.Add($TxtLog)
 
 function Log ($M) { $TxtLog.AppendText("[$([DateTime]::Now.ToString('HH:mm'))] $M`r`n"); $TxtLog.ScrollToCaret() }
 
-# --- HELPER FUNCTIONS ---
-function Get-7Zip {
-    $7z = "$env:TEMP\7zr.exe"; if (Test-Path $7z) { return $7z }
-    Log "Đang tải 7-Zip..."
-    try { (New-Object System.Net.WebClient).DownloadFile($Global:SevenZip_Url, $7z); return $7z } 
-    catch { Log "Lỗi tải 7-Zip. Kiểm tra mạng!"; return $null }
-}
+# --- CORE LOGIC ---
 
-function Check-Iso-Path ($Drv, $IsoPath) {
-    if ((Test-Path "$Drv\sources\install.wim") -or (Test-Path "$Drv\sources\install.esd")) { return $true }
-    return $false
-}
-
-function Get-DriveList-Robust {
-    $List = @()
-    try {
-        $Drives = Get-WmiObject Win32_LogicalDisk
-        foreach ($D in $Drives) { $List += $D.DeviceID }
-    } catch {
-        67..90 | ForEach-Object { $L = [char]$_ + ":"; if (Test-Path $L) { $List += $L } }
-    }
-    return $List
-}
-
-# --- ROBUST PARTITION LOADER ---
 function Load-Partitions {
-    $GridPart.Rows.Clear(); $SysDrive = $env:SystemDrive.Replace(":","")
-    $Loaded = $false
-
-    try {
-        if (Get-Command Get-Volume -ErrorAction SilentlyContinue) {
-            $Parts = Get-Volume | Where-Object {$_.DriveType -eq 'Fixed'} | Sort-Object DriveLetter -ErrorAction Stop
-            if ($Parts.Count -gt 0) {
-                foreach ($P in $Parts) {
-                    try { $Dsk = (Get-Partition -DriveLetter $P.DriveLetter).DiskNumber; $Prt = (Get-Partition -DriveLetter $P.DriveLetter).PartitionNumber } catch { $Dsk = "?"; $Prt = "?" }
-                    $Info = if ($P.DriveLetter -eq $SysDrive) { " (WIN CŨ)" } else { "" }
-                    $Row = $GridPart.Rows.Add($Dsk, $Prt, $P.DriveLetter, "$([math]::Round($P.Size/1GB,1)) GB", "$($P.FileSystemLabel)$Info")
-                    if ($P.DriveLetter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $P.DriveLetter }
-                }
-                if ($GridPart.Rows.Count -gt 0) { $Loaded = $true }
-            }
-        }
-    } catch { Log "Lỗi Cmdlet hiện đại. Chuyển WMI..." }
-
-    if (!$Loaded) {
-        Log "-> Đang dùng WMI để quét ổ (WinLite Mode)..."
-        try {
-            $Disks = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
-            foreach ($D in $Disks) {
-                $Letter = $D.DeviceID.Replace(":",""); $SizeGB = [math]::Round($D.Size / 1GB, 1)
-                $VolName = if ($D.VolumeName) { $D.VolumeName } else { "Local Disk" }
-                $Info = if ($Letter -eq $SysDrive) { " (WIN CŨ)" } else { "" }
-                $Row = $GridPart.Rows.Add("?", "?", $Letter, "$SizeGB GB", "$VolName$Info")
-                if ($Letter -eq $SysDrive) { $GridPart.Rows[$Row].Selected = $true; $Global:SelectedLetter = $Letter }
-            }
-        } catch { Log "Lỗi WMI! Không thể đọc danh sách ổ đĩa." }
-    }
-}
-
-# --- AGGRESSIVE UNMOUNT ---
-function Unmount-All ($Silent = $true) {
-    if (!$Silent) { Log "--- DỌN DẸP Ổ ẢO ---" }
-    $Form.Cursor = "WaitCursor"
-    if (Test-Path "$env:TEMP\WinInstall_Ext") { Remove-Item "$env:TEMP\WinInstall_Ext" -Recurse -Force -ErrorAction SilentlyContinue }
-    if (Get-Command Dismount-DiskImage -ErrorAction SilentlyContinue) {
-        try { Get-DiskImage -ImagePath "*" -ErrorAction SilentlyContinue | Dismount-DiskImage -ErrorAction SilentlyContinue | Out-Null } catch {}
-    }
-    try {
-        $CDs = Get-WmiObject Win32_CDROMDrive
-        foreach ($CD in $CDs) {
-            $Letter = $CD.Drive
-            if ($Letter -and ((Test-Path "$Letter\sources\install.wim") -or (Test-Path "$Letter\sources\install.esd"))) {
-                Start-Process "mountvol" -ArgumentList "$Letter /D" -NoNewWindow -Wait
-            }
-        }
-    } catch {}
-    $Global:IsoMounted = $null; $CbIndex.Items.Clear(); $Form.Cursor = "Default"
-}
-
-# --- ENABLE AUTOMOUNT & START SERVICES ---
-function Prepare-System-For-Mount {
-    Log "🔧 Chuẩn bị hệ thống (Fix Automount)..."
-    try {
-        $Script = "$env:TEMP\dp_automount.txt"
-        "automount enable`nautomount scrub" | Out-File $Script -Encoding ASCII
-        Start-Process "diskpart" -ArgumentList "/s `"$Script`"" -NoNewWindow -Wait
-        Remove-Item $Script -Force -ErrorAction SilentlyContinue
-    } catch { Log "Lỗi Diskpart Automount." }
-
-    try {
-        $S = Get-Service "ShellHWDetection" -ErrorAction SilentlyContinue
-        if ($S -and $S.Status -ne 'Running') {
-            Set-Service "ShellHWDetection" -StartupType Automatic; Start-Service "ShellHWDetection"
-            Log "-> ShellHWDetection: Started"
-        }
-        $V = Get-Service "vds" -ErrorAction SilentlyContinue
-        if ($V -and $V.Status -ne 'Running') {
-            Set-Service "vds" -StartupType Manual; Start-Service "vds"
-            Log "-> Virtual Disk: Started"
-        }
-    } catch {}
-    Start-Sleep 1
-}
-
-# --- SMART LETTER ASSIGN ---
-function Smart-Assign-Letter {
-    Log "⚠️ Đang tìm ổ bị ẩn..."
-    try {
-        $Vols = Get-WmiObject Win32_Volume | Where-Object { $_.DriveType -eq 5 -and $_.DriveLetter -eq $null }
-        foreach ($V in $Vols) {
-            $Available = 69..90 | ForEach-Object { [char]$_ + ":" } | Where-Object { !(Test-Path $_) } | Select-Object -First 1
-            if ($Available) {
-                Log "-> Gán ký tự $Available..."
-                $V.DriveLetter = $Available; $V.Put(); Start-Sleep 1
-                if (Test-Path $Available) { return $Available }
-            }
-        }
-    } catch { Log "Lỗi gán ký tự tự động." }
-    return $null
-}
-
-# --- 7-ZIP EXTRACT FALLBACK ---
-function Extract-ISO-With-7Zip ($IsoPath) {
-    Log "Unmount sạch sẽ trước khi xả nén..."
-    Unmount-All -Silent $true
-    Start-Sleep 2 
-
-    $7z = Get-7Zip
-    if (!$7z) { [System.Windows.Forms.MessageBox]::Show("Không thể tải 7-Zip!", "Lỗi"); return }
-    $ExtDir = "$env:TEMP\WinInstall_Ext"
-    if (!(Test-Path $ExtDir)) { New-Item -ItemType Directory -Path $ExtDir -Force | Out-Null }
-    
-    Get-ChildItem $ExtDir -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-    Log "⚠️ MODE CỨU HỘ: Đang giải nén file Install..."
-    
-    $Files = "sources/install.wim sources/install.esd sources/boot.wim boot/boot.sdi setup.exe"
-    $Proc = Start-Process $7z -ArgumentList "x `"$IsoPath`" $Files -o`"$ExtDir`" -y" -NoNewWindow -Wait -PassThru
-    
-    if ($Proc.ExitCode -eq 0 -and (Check-Iso-Path $ExtDir $null)) {
-        $Global:IsoMounted = $ExtDir
-        Log "-> Giải nén OK: $ExtDir"; Get-WimInfo
-    } else {
-        Log "Lỗi 7-Zip: Code $($Proc.ExitCode)"
-        [System.Windows.Forms.MessageBox]::Show("Giải nén thất bại. File ISO có thể bị hỏng hoặc bị khóa.", "Lỗi")
-    }
-}
-
-# --- MAIN MOUNT LOGIC ---
-function Mount-ISO {
-    $ISO = $CbISO.SelectedItem; if (!$ISO) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn file ISO!"); return }
-    $Form.Cursor = "WaitCursor"
-    
-    Unmount-All -Silent $true; Start-Sleep 1 
-    Prepare-System-For-Mount 
-    
-    Log "--- MOUNT ($ISO) ---"
-    $DrivesBefore = Get-DriveList-Robust
-    $CmdletExists = [bool](Get-Command Mount-DiskImage -ErrorAction SilentlyContinue)
-
-    if ($CmdletExists) {
-        try {
-            Mount-DiskImage -ImagePath $ISO -StorageType ISO -ErrorAction Stop | Out-Null
-            
-            Log "Đang quét ổ đĩa..."
-            for ($i=0; $i -lt 8; $i++) {
-                $AllDrives = Get-DriveList-Robust
-                foreach ($D in $AllDrives) {
-                    if ($DrivesBefore -notcontains $D) {
-                        if (Check-Iso-Path $D $ISO) {
-                            $Global:IsoMounted = $D; Log "-> Đã Mount tại: $D (OK)"; Get-WimInfo; $Form.Cursor = "Default"; return
-                        }
-                    }
-                }
-                Start-Sleep -Milliseconds 800
-            }
-            
-            $NewLetter = Smart-Assign-Letter
-            if ($NewLetter) {
-                $Global:IsoMounted = $NewLetter; Log "-> Fix OK: $NewLetter"; Get-WimInfo; $Form.Cursor = "Default"; return
-            }
-
-        } catch { Log "Native Mount lỗi." }
-    } else { Log "WinLite: Không có lệnh Mount-DiskImage." }
-
-    Log "Chuyển sang chế độ giải nén (7-Zip)..."
-    Extract-ISO-With-7Zip $ISO
-    $Form.Cursor = "Default"
-}
-
-function Get-WimInfo {
-    $Drive = $Global:IsoMounted; if (!$Drive) { return }
-    $Wim = "$Drive\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Drive\sources\install.esd" }
-    $Global:WimFile = $Wim
-    $CbIndex.Items.Clear()
-    
-    $DismPath = "$env:SystemRoot\System32\dism.exe"
-    if (Test-Path $DismPath) {
-        try {
-            $Info = & $DismPath /Get-WimInfo /WimFile:$Wim; if ($Info) {
-                $Indexes = $Info | Select-String "Index :"; $Names = $Info | Select-String "Name :"
-                for ($i=0; $i -lt $Indexes.Count; $i++) { $CbIndex.Items.Add($Indexes[$i].ToString().Split(":")[1].Trim() + " - " + $Names[$i].ToString().Split(":")[1].Trim()) }
-            }
-        } catch {}
-    } else { Log "Cảnh báo: Máy không có DISM.exe" }
-
-    if ($CbIndex.Items.Count -eq 0) { $CbIndex.Items.Add("1 - Auto (Default)"); }
-    $CbIndex.SelectedIndex = 0
-}
-
-# --- AUTO DISM (FIXED: DYNAMIC PATH & CLEAN ROOT) ---
-function Start-Auto-DISM {
-    if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
-    $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
-    
-    if (!(Test-Path "$env:SystemRoot\System32\dism.exe")) { [System.Windows.Forms.MessageBox]::Show("Lỗi: WinLite này đã bị lược bỏ DISM.exe!", "Error"); return }
-    if (!(Test-Path "$env:SystemRoot\System32\bcdboot.exe")) { [System.Windows.Forms.MessageBox]::Show("Lỗi: WinLite này đã bị lược bỏ BCDBOOT.exe!", "Error"); return }
-
-    if ([System.Windows.Forms.MessageBox]::Show("XÁC NHẬN CÀI WIN (MODE 2)?", "Cảnh Báo", "YesNo", "Warning") -ne "Yes") { return }
-
-    $Form.Cursor = "WaitCursor"; $Form.Text = "ĐANG XỬ LÝ..."
-    $WorkDir = "$env:SystemDrive\WinInstall_Temp"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
-    
-    # Chọn ổ đĩa an toàn (Safe Drive)
-    $SafeDrive = $null
+    $GridPart.Rows.Clear()
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) {
-        if ($D.DeviceID -ne "$env:SystemDrive" -and $D.FreeSpace -gt 5368709120) { $SafeDrive = $D.DeviceID; break }
+        $Letter = $D.DeviceID.Replace(":","")
+        $Row = $GridPart.Rows.Add("?", "?", $Letter, "$([math]::Round($D.Size/1GB,1)) GB", "Chưa chọn")
+        if ($Letter -eq $env:SystemDrive.Replace(":","")) { 
+            $Global:SelectedInstall = $Letter; $Global:SelectedBoot = $Letter
+            $GridPart.Rows[$Row].Cells[4].Value = "CÀI + BOOT"
+        }
     }
+}
+
+# Context Menu for Grid
+$Cms = New-Object System.Windows.Forms.ContextMenuStrip
+$miInstall = $Cms.Items.Add("Chọn làm Ổ CÀI WIN (Đích)")
+$miBoot = $Cms.Items.Add("Chọn làm Ổ BOOT (Nạp BCD)")
+$miInstall.Add_Click({ 
+    $L = $GridPart.SelectedRows[0].Cells[2].Value
+    $Global:SelectedInstall = $L; Log "Đã chọn ổ CÀI: $L"
+    foreach($R in $GridPart.Rows){ if($R.Cells[4].Value -match "CÀI"){ $R.Cells[4].Value = $R.Cells[4].Value.Replace("CÀI","").Trim("- ") } }
+    $GridPart.SelectedRows[0].Cells[4].Value = ($GridPart.SelectedRows[0].Cells[4].Value + " - CÀI").Trim("- ")
+})
+$miBoot.Add_Click({ 
+    $L = $GridPart.SelectedRows[0].Cells[2].Value
+    $Global:SelectedBoot = $L; Log "Đã chọn ổ BOOT: $L"
+    foreach($R in $GridPart.Rows){ if($R.Cells[4].Value -match "BOOT"){ $R.Cells[4].Value = $R.Cells[4].Value.Replace("BOOT","").Trim("- ") } }
+    $GridPart.SelectedRows[0].Cells[4].Value = ($GridPart.SelectedRows[0].Cells[4].Value + " - BOOT").Trim("- ")
+})
+$GridPart.ContextMenuStrip = $Cms
+
+function Start-Headless-DISM {
+    if (!$Global:IsoMounted) { [MessageBox]::Show("Chưa Mount ISO!"); return }
+    $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
+
+    if ([MessageBox]::Show("XÁC NHẬN CÀI WIN CHẾ ĐỘ HEADLESS?`nToàn bộ dữ liệu ổ $($Global:SelectedInstall) sẽ bị xóa!", "Phat Tan PC", "YesNo") -ne "Yes") { return }
+
+    $Form.Cursor = "WaitCursor"
+    $SafeDrive = $null
+    $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
+    foreach ($D in $Drives) { if ($D.DeviceID -ne "$($Global:SelectedInstall):" -and $D.FreeSpace -gt 5GB) { $SafeDrive = $D.DeviceID; break } }
     
-    if (!$SafeDrive) {
-        [System.Windows.Forms.MessageBox]::Show("Không tìm thấy ổ đĩa an toàn (Khác C:, trống > 5GB).", "Lỗi")
-        $Form.Cursor = "Default"; return 
+    if (!$SafeDrive) { [MessageBox]::Show("Cần 1 ổ khác ổ Cài trống > 5GB để lưu tạm!"); $Form.Cursor = "Default"; return }
+
+    $WorkDir = "$SafeDrive\WinSource_PhatTan"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+
+    # 1. Backup Registry
+    if ($ChkReg.Checked) {
+        Log "Backup Registry Hives..."
+        $RegDir = "$WorkDir\Reg_Backup"; New-Item $RegDir -Type Directory -Force | Out-Null
+        reg save HKLM\SYSTEM "$RegDir\SYSTEM.hiv" /y | Out-Null
+        reg save HKLM\SOFTWARE "$RegDir\SOFTWARE.hiv" /y | Out-Null
     }
-    
-    $SourceDir = "$SafeDrive\WinSource"; New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
-    Log "Lưu bộ cài tại: $SourceDir (Sẽ tự nhận diện trong WinPE)"
 
-    # [NEW] ĐÁNH DẤU Ổ ĐÍCH
-    Log "Đánh dấu ổ C thành 'WIN_TARGET'..."
-    try {
-        $CDrive = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'"
-        $CDrive.VolumeName = "WIN_TARGET"
-        $CDrive.Put()
-    } catch { Log "Lỗi đổi tên ổ C (Cần quyền Admin)." }
-
-    Log "Copying Install File..."
-    Copy-Item $Global:WimFile "$SourceDir\install.wim" -Force
-    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$WorkDir\boot.wim" -Force
-    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$WorkDir\boot.sdi" -Force
-
+    # 2. Driver Backup
     $DrvCmd = ""
     if ($ChkDriver.Checked) {
-        $DrvPath = "$SafeDrive\Drivers_Backup"; New-Item -ItemType Directory -Path $DrvPath -Force | Out-Null
         Log "Backup Driver..."
-        & "$env:SystemRoot\System32\dism.exe" /online /export-driver /destination:"$DrvPath" | Out-Null
-        # FIX PATH: Dùng %~d0 để lấy ổ đĩa chứa bộ cài trong WinPE
-        $DrvCmd = "echo [6/7] NAP DRIVER...`r`ndism /Image:%TARGET%:\ /Add-Driver /Driver:`"%~d0\Drivers_Backup`" /Recurse`r`n"
+        $DrvPath = "$WorkDir\Drivers_Backup"; New-Item $DrvPath -Type Directory -Force | Out-Null
+        & dism /online /export-driver /destination:"$DrvPath" | Out-Null
+        $DrvCmd = "echo [6/7] NAP DRIVER...`r`ndism /Image:%TARGET%:\ /Add-Driver /Driver:`"%~d0\WinSource_PhatTan\Drivers_Backup`" /Recurse`r`n"
     }
 
-    # 1. TẠO SCRIPT CÀI ĐẶT (DYNAMIC PATH FIXED)
-    # %~dp0 = Đường dẫn chứa file script này (Ví dụ E:\WinSource\)
-    $ScriptCmd = "@echo off`r`ntitle AUTO INSTALLER - PHAT TAN PC`r`ncolor 1f`r`ncls`r`n" +
-                 ":: SETUP HUNTER (KILL SETUP.EXE)`r`n" +
-                 "start /min cmd /c `"for /l %%i in (1,1,30) do (taskkill /F /IM setup.exe >nul 2>&1 & timeout /t 1 >nul)`"`r`n" +
-                 ":: TIM O DICH QUA LABEL`r`n" +
-                 "set TARGET=`r`n" +
-                 "for %%x in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (`r`n" +
-                 "  vol %%x: 2>nul | find `"WIN_TARGET`" >nul`r`n" +
-                 "  if not errorlevel 1 set TARGET=%%x`r`n)`r`n" +
-                 "if `"%TARGET%`"==`"`" (echo LOI: KHONG TIM THAY O DICH! & pause & exit)`r`n" +
-                 "echo -> DANG CAI VAO O: %TARGET%:`r`n" +
-                 "echo -> BO CAI NAM O: %~dp0`r`n" +
-                 "echo [2/7] DON DEP O DICH (SOFT FORMAT)...`r`n" +
-                 "rd /s /q %TARGET%:\Windows >nul 2>&1`r`nrd /s /q %TARGET%:\Program Files >nul 2>&1`r`n" +
-                 "rd /s /q %TARGET%:\Program Files (x86) >nul 2>&1`r`nrd /s /q %TARGET%:\Users >nul 2>&1`r`n" +
-                 ":: Clean Root Files (Fix Bootmgr Conflict)`r`n" +
-                 "del /f /q /a %TARGET%:\*.* >nul 2>&1`r`n" +
-                 "echo [3/7] BUNG FILE IMAGE...`r`ndism /Apply-Image /ImageFile:`"%~dp0install.wim`" /Index:$Idx /ApplyDir:%TARGET%:\`r`n" +
-                 "echo [4/7] FIX BOOT SECTOR...`r`nbootsect /nt60 %TARGET%: /force /mbr`r`n" +
-                 "echo [5/7] NAP BOOTLOADER...`r`nbcdboot %TARGET%:\Windows /f ALL`r`n" + 
-                 $DrvCmd + 
-                 "echo [7/7] HOAN TAT! REBOOT SAU 5S...`r`ntimeout /t 5`r`nwpeutil reboot"
+    # 3. Label Drive Đích
+    Log "Đánh dấu ổ cài..."
+    $TargetVol = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($Global:SelectedInstall):'"
+    $TargetVol.VolumeName = "WIN_TARGET"; $TargetVol.Put()
 
-    [IO.File]::WriteAllText("$SourceDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
+    # 4. Copy Files
+    Log "Copying core files..."
+    Copy-Item $Global:WimFile "$WorkDir\install.wim" -Force
+    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$($Global:SelectedInstall):\WinInstall.wim" -Force
+    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$($Global:SelectedInstall):\boot.sdi" -Force
 
-    # 2. TẠO FILE RUN.CMD (DYNAMIC PATH FIXED)
-    # %~d0 = Ký tự ổ đĩa hiện tại (Trong WinPE nó sẽ tự nhận là C:, D: hay E: tùy hoàn cảnh)
-    $RunCmd = "@echo off`r`nif exist `"%~d0\WinSource\AutoInstall.cmd`" call `"%~d0\WinSource\AutoInstall.cmd`""
-    [IO.File]::WriteAllText("$SafeDrive\Run.cmd", $RunCmd, [System.Text.Encoding]::ASCII)
+    # 5. Create Headless AutoInstall.cmd
+    $RebootTime = if ($ChkWarn.Checked) { "1" } else { "10" }
+    $GOS_Tweak = if ($ChkGOS.Checked) { "reg add `"HKLM\Software\Microsoft\PolicyManager\default\ApplicationManagement\AllowGameDVR`" /v value /t REG_DWORD /d 0 /f" } else { "echo Skip Tweaks" }
 
-    # 3. TẠO XML (STRICT SYNTAX)
-    $CommandsBlock = ""
-    $Order = 1
-    # Loop C-Z
-    for ($i=67; $i -le 90; $i++) {
-        $L = [char]$i
-        # XML Trigger: Chạy Run.cmd ở mọi ổ đĩa tìm thấy
-        $Cmd = "cmd /c if exist ${L}:\Run.cmd ${L}:\Run.cmd"
-        $CommandsBlock += "<RunSynchronousCommand wcm:action=`"add`"><Order>$Order</Order><Path>$Cmd</Path></RunSynchronousCommand>"
-        $Order++
+    $ScriptCmd = "@echo off`r`ntitle HEADLESS INSTALLER - PHAT TAN PC`r`ncolor 0b`r`ncls`r`n" +
+                 "echo ====================================================`r`n" +
+                 "echo    PHAT TAN PC - DANG CAI WIN HEADLESS (SIEU TOC)`r`n" +
+                 "echo ====================================================`r`n" +
+                 "start /min cmd /c `"for /l %%i in (1,1,60) do (taskkill /F /IM setup.exe >nul 2>&1 & timeout /t 1 >nul)`"`r`n" +
+                 "set TARGET=`r`nfor %%x in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (vol %%x: 2>nul | find `"WIN_TARGET`" >nul && set TARGET=%%x)`r`n" +
+                 "echo [2/7] SOFT FORMAT %TARGET%:...`r`n" +
+                 "for /d %%p in (%TARGET%:\*) do rd /s /q `"%%p`"`r`ndel /f /q /a %TARGET%:\*.*`r`n" +
+                 "echo [3/7] BUNG WIN (INDEX $Idx)...`r`ndism /Apply-Image /ImageFile:`"%~dp0install.wim`" /Index:$Idx /ApplyDir:%TARGET%:\`r`n" +
+                 "echo [4/7] FIX BOOT...`r`nbcdboot %TARGET%:\Windows /s $($Global:SelectedBoot): /f ALL`r`n" +
+                 $DrvCmd +
+                 "echo [7/7] OPTIMIZING...`r`n" + $GOS_Tweak + "`r`n" +
+                 "echo HOAN TAT! REBOOT TRONG $RebootTime GIAY...`r`ntimeout /t $RebootTime`r`nwpeutil reboot"
+
+    [IO.File]::WriteAllText("$WorkDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
+    
+    # 6. XML Trigger (Bypass Setup hoàn toàn)
+    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist %%d:\WinSource_PhatTan\AutoInstall.cmd call %%d:\WinSource_PhatTan\AutoInstall.cmd)</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
+    
+    # Nếu có file XML custom thì ưu tiên copy file đó
+    if ($Global:CustomXmlPath -and (Test-Path $Global:CustomXmlPath)) {
+        Log "Sử dụng Custom XML..."
+        Copy-Item $Global:CustomXmlPath "$($Global:SelectedInstall):\autounattend.xml" -Force
+    } else {
+        [IO.File]::WriteAllText("$($Global:SelectedInstall):\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
     }
 
-    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous>$CommandsBlock</RunSynchronous></component></settings></unattend>"
-
-    Log "Injecting Boot Triggers..."
-    $AllDrives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
-    foreach ($D in $AllDrives) { 
-        try { [IO.File]::WriteAllText("$($D.DeviceID)\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8) } catch {}
-    }
-
-    Log "Moving Boot Files..."
-    Move-Item "$WorkDir\boot.wim" "$env:SystemDrive\WinInstall.wim" -Force
-    Move-Item "$WorkDir\boot.sdi" "$env:SystemDrive\boot.sdi" -Force
-    Remove-Item $WorkDir -Recurse -Force
-
-    # --- [BOOT MANAGER FIX V6] ---
+    # 7. Nạp Boot Entry
     Log "Cấu hình Boot Manager..."
+    & bcdedit /create "{ramdiskoptions}" /d "PhatTan Ramdisk" /f
+    & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$($Global:SelectedInstall):"
+    & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
+    $Guid = "{$( [Guid]::NewGuid().ToString() )}"
+    & bcdedit /create $Guid /d "AUTO INSTALLER (Phat Tan PC)" /application osloader
+    & bcdedit /set $Guid device "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
+    & bcdedit /set $Guid osdevice "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
+    & bcdedit /set $Guid path "\windows\system32\boot\winload.efi"
+    & bcdedit /set $Guid systemroot "\windows"
+    & bcdedit /set $Guid winpe yes
+    & bcdedit /set $Guid detecthal yes
+    & bcdedit /bootsequence $Guid
     
-    $BootInfo = & "$env:SystemRoot\System32\bcdedit.exe" /enum "{current}"
-    $IsUEFI = ($BootInfo | Select-String "winload.efi") -ne $null
-    $LoaderPath = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\boot\winload.exe" }
-    
-    & "$env:SystemRoot\System32\bcdedit.exe" /delete "{ramdiskoptions}" /f 2>$null 
-    & "$env:SystemRoot\System32\bcdedit.exe" /create "{ramdiskoptions}" /d "WinInstall Ramdisk" 2>$null
-    & "$env:SystemRoot\System32\bcdedit.exe" /set "{ramdiskoptions}" ramdisksdidevice "partition=$env:SystemDrive"
-    & "$env:SystemRoot\System32\bcdedit.exe" /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
-
-    $Guid = [Guid]::NewGuid().ToString("B")
-    & "$env:SystemRoot\System32\bcdedit.exe" /create $Guid /d "AUTO INSTALLER (Phat Tan PC)" /application osloader
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid device "ramdisk=[$env:SystemDrive]\WinInstall.wim,{ramdiskoptions}"
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid osdevice "ramdisk=[$env:SystemDrive]\WinInstall.wim,{ramdiskoptions}"
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid path $LoaderPath
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid systemroot "\windows"
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid winpe yes
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid detecthal yes
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid nointegritychecks yes 
-    & "$env:SystemRoot\System32\bcdedit.exe" /set $Guid testsigning yes
-
-    & "$env:SystemRoot\System32\bcdedit.exe" /displayorder $Guid /addlast
-    & "$env:SystemRoot\System32\bcdedit.exe" /bootsequence $Guid
-
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập Boot thành công!`n`nLƯU Ý: Máy sẽ khởi động lại vào màn hình đen/xanh trong vài giây.`nNó sẽ TỰ ĐỘNG FORMAT C và CÀI WIN.`nĐừng tắt máy!", "Hoàn Tất", "YesNo", "Information") -eq "Yes") { Restart-Computer -Force }
+    if ([MessageBox]::Show("Đã thiết lập thành công! Khởi động lại ngay?", "Hoàn Tất", "YesNo") -eq "Yes") { Restart-Computer -Force }
 }
 
 # --- EVENTS ---
-$BtnBrowse.Add_Click({ $OFD = New-Object System.Windows.Forms.OpenFileDialog; $OFD.Filter = "ISO|*.iso"; if ($OFD.ShowDialog() -eq "OK") { $CbISO.Items.Insert(0, $OFD.FileName); $CbISO.SelectedIndex = 0 } })
-$BtnMount.Add_Click({ Mount-ISO })
-$GridPart.Add_CellClick({ if ($_.RowIndex -ge 0) { $R = $GridPart.Rows[$_.RowIndex]; $Global:SelectedDisk = $R.Cells[0].Value; $Global:SelectedPart = $R.Cells[1].Value; $Global:SelectedLetter = $R.Cells[2].Value } })
+$BtnISO.Add_Click({ $OFD = New-Object OpenFileDialog; $OFD.Filter = "ISO|*.iso"; if($OFD.ShowDialog() -eq "OK") { $TxtISO.Text = $OFD.FileName } })
+$BtnXml.Add_Click({ $OFD = New-Object OpenFileDialog; $OFD.Filter = "XML|*.xml"; if($OFD.ShowDialog() -eq "OK") { $Global:CustomXmlPath = $OFD.FileName; $TxtXml.Text = $OFD.FileName } })
+$BtnMount.Add_Click({ 
+    Log "Mounting ISO..."
+    Mount-DiskImage -ImagePath $TxtISO.Text -StorageType ISO | Out-Null
+    Start-Sleep 2
+    $D = (Get-DiskImage -ImagePath $TxtISO.Text | Get-Volume).DriveLetter + ":"
+    $Global:IsoMounted = $D
+    $Wim = "$D\sources\install.wim"; if(!(Test-Path $Wim)){ $Wim = "$D\sources\install.esd" }
+    $Global:WimFile = $Wim
+    $CbIndex.Items.Clear()
+    & dism /Get-WimInfo /WimFile:$Wim | Select-String "Name :" | ForEach { $CbIndex.Items.Add($_.ToString().Split(":")[1].Trim()) }
+    $CbIndex.SelectedIndex = 0
+    Log "Mount thành công ổ $D"
+})
 
 Load-Partitions
-$Scan = @("$env:USERPROFILE\Downloads", "D:", "E:", "F:"); foreach ($P in $Scan) { if(Test-Path $P){ Get-ChildItem $P -Filter "*.iso" -Recurse -Depth 1 | Where {$_.Length -gt 1GB} | ForEach { $CbISO.Items.Add($_.FullName) } } }
-if ($CbISO.Items.Count -gt 0) { $CbISO.SelectedIndex = 0 }
-
 $Form.ShowDialog() | Out-Null
