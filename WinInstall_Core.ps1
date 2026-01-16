@@ -225,20 +225,49 @@ $BtnXml.Add_Click({
 
 $BtnMount.Add_Click({ 
     if ([string]::IsNullOrEmpty($TxtISO.Text)) { [MessageBox]::Show("Chưa chọn file ISO!"); return }
-    Log "Mounting ISO..."
+    Log "Đang kiểm tra và Mount ISO..."
     try {
-        Mount-DiskImage -ImagePath $TxtISO.Text -StorageType ISO | Out-Null
-        Start-Sleep 2
-        $D = (Get-DiskImage -ImagePath $TxtISO.Text | Get-Volume).DriveLetter + ":"
-        $Global:IsoMounted = $D
-        $Wim = "$D\sources\install.wim"; if(!(Test-Path $Wim)){ $Wim = "$D\sources\install.esd" }
-        $Global:WimFile = $Wim
-        $CbIndex.Items.Clear()
-        & dism /Get-WimInfo /WimFile:$Wim | Select-String "Name :" | ForEach { $CbIndex.Items.Add($_.ToString().Split(":")[1].Trim()) }
-        $CbIndex.SelectedIndex = 0
-        Log "Mount thành công ổ $D"
-    } catch { Log "Lỗi khi Mount ISO!" }
-})
+        # 1. Kiểm tra xem ISO đã được Mount chưa để tránh lỗi
+        $Img = Get-DiskImage -ImagePath $TxtISO.Text
+        if ($Img.Attached -eq $false) {
+            Mount-DiskImage -ImagePath $TxtISO.Text -StorageType ISO -ErrorAction Stop | Out-Null
+            Log "Đang đợi hệ thống gán ổ đĩa..."
+            Start-Sleep -Seconds 3 # Đợi 3s cho chắc ăn
+        }
 
+        # 2. Cơ chế quét tìm Drive Letter "Lì lợm" (Vòng lặp 5 lần)
+        $D = $null
+        for ($i = 1; $i -le 5; $i++) {
+            # Truy xuất Drive Letter qua lớp Disk & Partition để đảm bảo không hụt
+            $D = (Get-DiskImage -ImagePath $TxtISO.Text | Get-Disk | Get-Partition | Get-Volume).DriveLetter
+            if ($D) { break }
+            Start-Sleep -Milliseconds 800
+        }
+
+        if (-not $D) { throw "Không tìm thấy ký tự ổ đĩa sau khi Mount!" }
+
+        $Global:IsoMounted = "$D`:"
+        Log "Mount thành công ổ $($Global:IsoMounted)"
+
+        # 3. Load Index (Wim/Esd)
+        $Wim = "$($Global:IsoMounted)\sources\install.wim"
+        if(!(Test-Path $Wim)){ $Wim = "$($Global:IsoMounted)\sources\install.esd" }
+        
+        if (Test-Path $Wim) {
+            $Global:WimFile = $Wim
+            $CbIndex.Items.Clear()
+            # Dùng lệnh dism trực tiếp để lấy Index cho chuẩn
+            & dism /Get-WimInfo /WimFile:$Wim | Select-String "Name :" | ForEach { 
+                $CbIndex.Items.Add($_.ToString().Split(":")[1].Trim()) 
+            }
+            if ($CbIndex.Items.Count -gt 0) { $CbIndex.SelectedIndex = 0 }
+        } else {
+            Log "Lỗi: Không tìm thấy file install.wim/esd trong ổ $D"
+        }
+    } catch { 
+        Log "Lỗi Mount: $($_.Exception.Message)" 
+        [MessageBox]::Show("Lỗi Mount ISO! Hãy thử Mount thủ công hoặc kiểm tra file ISO.", "Error")
+    }
+})
 Load-Partitions
 $Form.ShowDialog() | Out-Null
