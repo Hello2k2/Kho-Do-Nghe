@@ -27,7 +27,7 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(20,20,25); Panel=[System.Drawing
 
 # --- GUI ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V10.2.1  (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
+$Form.Text = "CORE INSTALLER V10.2.2  (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
 
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V10.2"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
@@ -157,28 +157,36 @@ function Start-Headless-DISM {
     [IO.File]::WriteAllText("$WorkDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
     
     # 5. Cấu hình BCD (Fix treo - Bắt GUID tự động)
-    Log "Cấu hình Boot Manager (Fix Treo)..."
+    # 5. Cấu hình BCD (Tự động nhận diện BIOS/UEFI để tránh treo VirtualBox)
+    Log "Cấu hình Boot Manager (Flexible Mode)..."
     try {
-        & bcdedit /create "{ramdiskoptions}" /d "PhatTan Ramdisk" /f 2>$null
+        # Kiểm tra môi trường là UEFI hay Legacy
+        $BootInfo = & bcdedit /enum "{current}"
+        $IsUEFI = ($BootInfo -match "winload.efi") -or ($env:Firmware_Type -eq "UEFI")
+        $LoaderPath = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\boot\winload.exe" }
+        Log "-> Phat hien che do: $(if($IsUEFI){"UEFI"}else{"Legacy"})"
+
+        # Xóa và tạo mới ramdiskoptions để tránh lỗi trùng lặp
+        & bcdedit /delete "{ramdiskoptions}" /f 2>$null
+        & bcdedit /create "{ramdiskoptions}" /d "PhatTan Ramdisk" /f | Out-Null
         & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$($Global:SelectedInstall):"
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
-        # Bắt GUID thực tế từ hệ thống thay vì tự tạo
+        # Tạo Boot Entry và bắt GUID thực tế
         $BcdOutput = & bcdedit /create /d "AUTO INSTALLER (Phat Tan PC)" /application osloader
         $RealGuid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($RealGuid) {
             & bcdedit /set $RealGuid device "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
             & bcdedit /set $RealGuid osdevice "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
-            & bcdedit /set $RealGuid path "\windows\system32\boot\winload.efi"
+            & bcdedit /set $RealGuid path $LoaderPath # Su dung duong dan linh hoat
             & bcdedit /set $RealGuid systemroot "\windows"
             & bcdedit /set $RealGuid winpe yes
             & bcdedit /set $RealGuid detecthal yes
-            & bcdedit /bootsequence $RealGuid # Ưu tiên boot vào tool ngay lập tức
-            Log "Nạp Boot thành công với GUID: $RealGuid"
+            & bcdedit /bootsequence $RealGuid
+            Log "Nạp Boot thành công! Loader: $LoaderPath"
         } else { throw "Không thể tạo Boot Entry!" }
     } catch { Log "Lỗi BCD: $($_.Exception.Message)" }
-
     $Form.Cursor = "Default"
     if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập thành công! Khởi động lại ngay?", "Hoàn Tất", "YesNo") -eq "Yes") { Restart-Computer -Force }
 }
