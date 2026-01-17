@@ -121,93 +121,73 @@ function Start-Headless-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
 
-    if ([System.Windows.Forms.MessageBox]::Show("XÁC NHẬN CÀI WIN?`nỔ $($Global:SelectedInstall) sẽ bị xóa dữ liệu!", "Phat Tan PC", "YesNo") -ne "Yes") { return }
+    if ([System.Windows.Forms.MessageBox]::Show("XÁC NHẬN CÀI WIN?`nỔ ĐÍCH ($($Global:SelectedInstall)) SẼ BỊ XÓA!", "Phat Tan PC", "YesNo") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "Đang khởi tạo môi trường..."
+    Log "--- KHOI TAO HE THONG ---"
 
-    # 1. Tìm ổ đĩa an toàn để lưu bộ cài
+    # 1. Đánh dấu ổ cài là WIN_TARGET (Tránh lộn xì ngầu ổ C:)
+    try {
+        $TargetVol = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($Global:SelectedInstall):'"
+        $TargetVol.VolumeName = "WIN_TARGET"
+        $TargetVol.Put()
+        Log "-> Da gan nhan WIN_TARGET cho o $($Global:SelectedInstall):"
+    } catch { Log "Loi gan nhan o dia!" }
+
+    # 2. Tìm ổ an toàn (Khác WIN_TARGET) để lưu bộ cài tạm
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
-    foreach ($D in $Drives) { if ($D.DeviceID -ne "$($Global:SelectedInstall):" -and $D.FreeSpace -gt 5GB) { $SafeDrive = $D.DeviceID; break } }
-    if (!$SafeDrive) { [System.Windows.Forms.MessageBox]::Show("Cần ổ đĩa khác ổ Cài trống > 5GB!"); $Form.Cursor = "Default"; return }
-
+    foreach ($D in $Drives) { if ($D.VolumeName -ne "WIN_TARGET" -and $D.FreeSpace -gt 5GB) { $SafeDrive = $D.DeviceID; break } }
+    if (!$SafeDrive) { [MessageBox]::Show("Cần 1 ổ cứng khác (D, E...) trống > 5GB!"); $Form.Cursor = "Default"; return }
+    
     $WorkDir = "$SafeDrive\WinSource_PhatTan"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
-
-    # 2. Xử lý phần mở rộng (WIM hay ESD)
     $Ext = [System.IO.Path]::GetExtension($Global:WimFile)
-    Log "Phát hiện định dạng bộ cài: $Ext"
 
-    # 3. Copy files & Backup (Giữ nguyên logic của bác)
-    Log "Copying core files... (Vui lòng đợi)"
-    Copy-Item $Global:WimFile "$WorkDir\install$Ext" -Force # Lưu đúng đuôi file
+    # 3. Copy file hệ thống (Lưu thẳng vào WIN_TARGET để nạp Boot)
+    Log "Copying files to WIN_TARGET..."
+    Copy-Item $Global:WimFile "$WorkDir\install$Ext" -Force
     Copy-Item "$Global:IsoMounted\sources\boot.wim" "$($Global:SelectedInstall):\WinInstall.wim" -Force
     Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$($Global:SelectedInstall):\boot.sdi" -Force
 
-    # 4. Tạo AutoInstall.cmd (Headless Mode)
-    $ScriptCmd = "@echo off`r`ntitle HEADLESS INSTALLER - PHAT TAN PC`r`ncolor 0b`r`ncls`r`n" +
-                 "start /min cmd /c `"for /l %%i in (1,1,100) do (taskkill /F /IM setup.exe >nul 2>&1 & timeout /t 1 >nul)`"`r`n" +
-                 "set TARGET=`r`nfor %%x in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (vol %%x: 2>nul | find `"WIN_TARGET`" >nul && set TARGET=%%x)`r`n" +
-                 "echo [2/7] SOFT FORMAT %TARGET%:...`r`n" +
-                 "for /d %%p in (%TARGET%:\*) do rd /s /q `"%%p`"`r`ndel /f /q /a %TARGET%:\*.*`r`n" +
-                 "echo [3/7] BUNG WIN (INDEX $Idx)...`r`ndism /Apply-Image /ImageFile:`"%~dp0install$Ext`" /Index:$Idx /ApplyDir:%TARGET%:\`r`n" +
-                 "echo [4/7] FIX BOOT...`r`nbcdboot %TARGET%:\Windows /s $($Global:SelectedBoot): /f ALL`r`n" +
-                 "wpeutil reboot"
+    # 4. Xử lý autounattend.xml (Trigger nạp CMD)
+    # Mẹo: Nạp vào ổ SafeDrive (ổ D/E) để khi format WIN_TARGET (ổ C) không bị mất file XML
+    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist %%d:\WinSource_PhatTan\AutoInstall.cmd call %%d:\WinSource_PhatTan\AutoInstall.cmd)</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
+    [IO.File]::WriteAllText("$SafeDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
+    Log "-> Luu XML tai $SafeDrive (Chong format)"
 
-    [IO.File]::WriteAllText("$WorkDir\AutoInstall.cmd", $ScriptCmd, [System.Text.Encoding]::ASCII)
-    
-    # 5. Cấu hình BCD (Fix treo - Bắt GUID tự động)
-    # 5. Cấu hình BCD (Tự động nhận diện BIOS/UEFI để tránh treo VirtualBox)
-    # 5. Cấu hình BCD (Bản V10.5 - Chống Dump xanh Unmountable Boot Volume)
-    Log "Cấu hình Boot Manager (Refined Mode)..."
+    # 5. CẤU HÌNH BCD (CHỐNG DUMP XANH)
+    Log "Cấu hình Boot Manager (Locate Mode)..."
     try {
-        # 5.1. Kiểm tra sự tồn tại của tệp tin trước khi nạp (Tránh nạp đường dẫn ma)
-        $WimPath = "$($Global:SelectedInstall):\WinInstall.wim"
-        $SdiPath = "$($Global:SelectedInstall):\boot.sdi"
-        if (!(Test-Path $WimPath) -or !(Test-Path $SdiPath)) { throw "Thiếu file hệ thống tại $WimPath hoặc $SdiPath!" }
-
-        # 5.2. Nhận diện môi trường BIOS/UEFI chuẩn xác
         $BootInfo = & bcdedit /enum "{current}"
         $IsUEFI = ($BootInfo -match "winload.efi") -or ($env:Firmware_Type -eq "UEFI")
-        # Legacy thường nằm ở system32, UEFI bắt buộc ở system32\boot
-        $LoaderPath = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
-        Log "-> Moi truong: $(if($IsUEFI){"UEFI"}else{"Legacy"}) | Loader: $LoaderPath"
+        $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # 5.3. Xử lý ramdiskoptions (Gốc rễ của lỗi Unmountable)
         & bcdedit /delete "{ramdiskoptions}" /f 2>$null
         & bcdedit /create "{ramdiskoptions}" /d "PhatTan Ramdisk" /f | Out-Null
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$($Global:SelectedInstall):"
-        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi" # SDI phai o root cua device
+        # Dùng 'locate' để BCD tự tìm tệp tin theo Label WIN_TARGET
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "boot" 
+        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
-        # 5.4. Tạo và cấu hình Boot Entry (Dùng Regex bắt GUID chuẩn)
-        $BcdOutput = & bcdedit /create /d "AUTO INSTALLER (Phat Tan PC)" /application osloader
+        $BcdOutput = & bcdedit /create /d "PHAT TAN PC - AUTO INSTALL" /application osloader
         $RealGuid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($RealGuid) {
-            # Thiết lập thiết bị chứa Ramdisk (Đảm bảo định dạng [C:]\Path)
+            # Sử dụng cú pháp Ramdisk chuẩn với ID phân vùng hiện tại
             $DeviceStr = "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
             & bcdedit /set $RealGuid device $DeviceStr
             & bcdedit /set $RealGuid osdevice $DeviceStr
-            & bcdedit /set $RealGuid path $LoaderPath
+            & bcdedit /set $RealGuid path $Loader
             & bcdedit /set $RealGuid systemroot "\windows"
             & bcdedit /set $RealGuid winpe yes
             & bcdedit /set $RealGuid detecthal yes
-            # Tắt kiểm tra chữ ký (Quan trọng cho Win Lite/Custom WIM)
-            & bcdedit /set $RealGuid nointegritychecks yes
-            & bcdedit /set $RealGuid testsigning yes
-            
-            # Đẩy lên đầu danh sách boot cho lần sau
             & bcdedit /bootsequence $RealGuid
-            Log "-> Nap BCD thanh cong! GUID: $RealGuid"
-        } else { throw "Khong the tao GUID cho Boot Entry!" }
-    } catch { 
-        Log "LOI NGHIEP TRONG: $($_.Exception.Message)" 
-        [System.Windows.Forms.MessageBox]::Show("Lỗi cấu hình BCD! Chi tiết: $($_.Exception.Message)", "Phat Tan PC")
-    }
-    $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã thiết lập thành công! Khởi động lại ngay?", "Hoàn Tất", "YesNo") -eq "Yes") { Restart-Computer -Force }
-}
+            Log "-> Nap BCD OK! GUID: $RealGuid"
+        }
+    } catch { Log "Loi BCD nghiem trong!" }
 
+    $Form.Cursor = "Default"
+    if ([System.Windows.Forms.MessageBox]::Show("Thiết lập hoàn tất! Restart ngay?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force }
+}
 # --- EVENTS (FIXED TypeNotFound) ---
 $BtnISO.Add_Click({ 
     $OFD = New-Object System.Windows.Forms.OpenFileDialog
