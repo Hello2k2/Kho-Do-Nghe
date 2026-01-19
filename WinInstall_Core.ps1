@@ -156,7 +156,7 @@ function Start-Headless-DISM {
     Log "-> Luu XML tai $SafeDrive (Chong format)"
 
     # 5. CẤU HÌNH BCD (CHỐNG DUMP XANH)
-    L# 5. CẤU HÌNH BCD SIÊU CẤP (ANTI-BSOD & VIRTUALBOX COMPATIBLE)
+    # 5. CẤU HÌNH BCD SIÊU CẤP (ANTI-BSOD & VIRTUALBOX COMPATIBLE)
     Log "Cấu hình BCD (Trị lỗi Unmountable Boot Volume)..."
     try {
         # 5.1 Kiểm tra firmware UEFI hay BIOS
