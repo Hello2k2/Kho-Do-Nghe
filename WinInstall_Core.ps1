@@ -156,23 +156,28 @@ function Start-Headless-DISM {
     Log "-> Luu XML tai $SafeDrive (Chong format)"
 
     # 5. CẤU HÌNH BCD (CHỐNG DUMP XANH)
-    Log "Cấu hình Boot Manager (Locate Mode)..."
+    L# 5. CẤU HÌNH BCD SIÊU CẤP (ANTI-BSOD & VIRTUALBOX COMPATIBLE)
+    Log "Cấu hình BCD (Trị lỗi Unmountable Boot Volume)..."
     try {
+        # 5.1 Kiểm tra firmware UEFI hay BIOS
         $BootInfo = & bcdedit /enum "{current}"
         $IsUEFI = ($BootInfo -match "winload.efi") -or ($env:Firmware_Type -eq "UEFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
+        Log "-> Moi truong: $(if($IsUEFI){"UEFI"}else{"Legacy"})"
 
+        # 5.2 Làm sạch và cấu hình ramdiskoptions
+        # SDI phai nam o cung phan vung voi file WIM de tranh loi nap thiet bi
         & bcdedit /delete "{ramdiskoptions}" /f 2>$null
-        & bcdedit /create "{ramdiskoptions}" /d "PhatTan Ramdisk" /f | Out-Null
-        # Dùng 'locate' để BCD tự tìm tệp tin theo Label WIN_TARGET
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "boot" 
+        & bcdedit /create "{ramdiskoptions}" /d "PhatTan SDI Options" /f | Out-Null
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$($Global:SelectedInstall):"
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
+        # 5.3 Tạo OS Loader và bắt GUID thuc te
         $BcdOutput = & bcdedit /create /d "PHAT TAN PC - AUTO INSTALL" /application osloader
         $RealGuid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($RealGuid) {
-            # Sử dụng cú pháp Ramdisk chuẩn với ID phân vùng hiện tại
+            # Cu phap nap Ramdisk phai co ngoac vuong [] bao quanh o dia
             $DeviceStr = "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
             & bcdedit /set $RealGuid device $DeviceStr
             & bcdedit /set $RealGuid osdevice $DeviceStr
@@ -180,10 +185,19 @@ function Start-Headless-DISM {
             & bcdedit /set $RealGuid systemroot "\windows"
             & bcdedit /set $RealGuid winpe yes
             & bcdedit /set $RealGuid detecthal yes
+            
+            # Vo hieu hoa kiem tra chu ky de bao ve VirtualBox khong bi Critical Error
+            & bcdedit /set $RealGuid nointegritychecks yes
+            & bcdedit /set $RealGuid testsigning yes
+            
+            # Thiet lap sequence de boot vao ngay lap tuc
             & bcdedit /bootsequence $RealGuid
-            Log "-> Nap BCD OK! GUID: $RealGuid"
-        }
-    } catch { Log "Loi BCD nghiem trong!" }
+            Log "-> Nap BCD OK! Chuan bi Restart..."
+        } else { throw "Khong lay duoc GUID tu he thong!" }
+    } catch { 
+        Log "LOI BCD: $($_.Exception.Message)" 
+        [System.Windows.Forms.MessageBox]::Show("Lỗi nạp Boot! Hãy kiểm tra quyền Admin hoặc BCD.", "Error")
+    }
 
     $Form.Cursor = "Default"
     if ([System.Windows.Forms.MessageBox]::Show("Thiết lập hoàn tất! Restart ngay?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force }
