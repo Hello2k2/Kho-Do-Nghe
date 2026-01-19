@@ -159,31 +159,28 @@ function Start-Headless-DISM {
     # 5. CẤU HÌNH BCD SIÊU CẤP (ANTI-BSOD & VIRTUALBOX COMPATIBLE)
     # 5. CẤU HÌNH BCD SIÊU CẤP (UID TRACKING - MULTI-SCAN MODE)
     # 5. CẤU HÌNH BCD SIÊU CẤP V11.0 (FORCE BOOT PE MODE)
-    Log "Cấu hình BCD (Chế độ cưỡng chế nạp PE)..."
+    # 5. CẤU HÌNH BCD SIÊU CẤP V11.2 (PHYSICAL PATH MODE)
+    Log "Cấu hình BCD (Chế độ đường dẫn vật lý)..."
     try {
-        # 5.1 Tìm Volume GUID (UID) - Giữ nguyên cơ chế quét 3 tầng của bác
-        $VolId = $null
-        $TargetVolume = Get-Volume -FileSystemLabel "WIN_TARGET" -ErrorAction SilentlyContinue
-        if ($TargetVolume) { $VolId = $TargetVolume.UniqueId }
-        if (-not $VolId) {
-            $WmiVol = Get-WmiObject Win32_Volume -Filter "Label = 'WIN_TARGET'" -ErrorAction SilentlyContinue
-            $VolId = $WmiVol.DeviceID
-        }
-        if (-not $VolId) {
-            $WmiVol = Get-WmiObject Win32_Volume -Filter "DriveLetter = '$($Global:SelectedInstall):'" -ErrorAction SilentlyContinue
-            $VolId = $WmiVol.DeviceID
-        }
-        if (!$VolId) { throw "Không tìm thấy UID của WIN_TARGET!" }
+        # 5.1 Lấy đường dẫn thiết bị vật lý của WIN_TARGET
+        # Dùng WMI để lấy DeviceID chuẩn (dạng \Device\HarddiskVolumeX)
+        $DriveLtr = "$($Global:SelectedInstall):"
+        $WmiVol = Get-WmiObject Win32_Volume -Filter "DriveLetter = '$DriveLtr'"
+        if (!$WmiVol) { $WmiVol = Get-WmiObject Win32_Volume -Filter "Label = 'WIN_TARGET'" }
+        
+        # Bắt lấy đường dẫn DeviceID (VD: \\?\Volume{...}\ -> BCD cần dạng DeviceID)
+        $PhysPath = $WmiVol.DeviceID.TrimEnd('\') 
+        Log "-> Bat duoc Physical Path: $PhysPath"
 
-        # 5.2 Nhận diện Loader chuẩn xác
+        # 5.2 Nhận diện Loader (UEFI/Legacy)
         $BootInfo = & bcdedit /enum "{current}"
         $IsUEFI = ($BootInfo -match "winload.efi") -or ($env:Firmware_Type -eq "UEFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # 5.3 Làm sạch Ramdisk Options
+        # 5.3 Làm sạch và thiết lập ramdiskoptions
         & bcdedit /delete "{ramdiskoptions}" /f 2>$null
         & bcdedit /create "{ramdiskoptions}" /d "PhatTan SDI Options" /f | Out-Null
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "device:$VolId"
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "device:$PhysPath"
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
         # 5.4 Tạo Entry OS Loader
@@ -191,7 +188,9 @@ function Start-Headless-DISM {
         $RealGuid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($RealGuid) {
-            $DeviceStr = "ramdisk=[device:$VolId]\WinInstall.wim,{ramdiskoptions}"
+            # Nạp Ramdisk qua đường dẫn vật lý
+            $DeviceStr = "ramdisk=[$PhysPath]\WinInstall.wim,{ramdiskoptions}"
+            
             & bcdedit /set $RealGuid device $DeviceStr
             & bcdedit /set $RealGuid osdevice $DeviceStr
             & bcdedit /set $RealGuid path $Loader
@@ -201,30 +200,24 @@ function Start-Headless-DISM {
             & bcdedit /set $RealGuid nointegritychecks yes
             & bcdedit /set $RealGuid testsigning yes
             
-            # --- CHIÊU MỚI: CƯỠNG CHẾ BOOT ---
-            Log "-> Đang cưỡng chế ưu tiên nạp PE..."
-            # 1. Thiết lập Timeout để Boot Manager có thời gian xử lý
-            & bcdedit /timeout 5 | Out-Null
-            
-            # 2. Đưa lên đầu danh sách hiển thị
+            # --- CHIÊU MỚI: ÉP BOOT TUYỆT ĐỐI ---
+            Log "-> Đang ép máy nạp PE làm mặc định..."
+            & bcdedit /timeout 10 | Out-Null # Tăng lên 10s cho bác kịp nhìn
+            & bcdedit /default $RealGuid | Out-Null # Set làm mặc định luôn!
             & bcdedit /displayorder $RealGuid /addfirst | Out-Null
-            
-            # 3. Ép Boot vào ngay lần tới (BootSequence)
             & bcdedit /bootsequence $RealGuid | Out-Null
 
-            # 4. Nếu là UEFI, nạp vào Firmware Boot Manager cho chắc ăn
             if ($IsUEFI) {
                 & bcdedit /set "{fwbootmgr}" displayorder $RealGuid /addfirst 2>$null
             }
 
-            # 5. Tắt Fast Startup (Nguyên nhân chính gây vô thẳng Win cũ)
+            # Tắt Fast Startup (Force Shutdown)
             reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f 2>$null | Out-Null
 
-            Log "-> Nap BCD OK! Máy sẽ khởi động lại vào PE sau 5s."
+            Log "-> Nap BCD OK! Entry đã được set làm MẶC ĐỊNH."
         }
     } catch { 
         Log "LOI BCD: $($_.Exception.Message)" 
-        [System.Windows.Forms.MessageBox]::Show("Lỗi: $($_.Exception.Message)", "Error")
     }
     $Form.Cursor = "Default"
     if ([System.Windows.Forms.MessageBox]::Show("Thiết lập hoàn tất! Restart ngay?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force }
