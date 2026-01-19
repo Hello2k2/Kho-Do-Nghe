@@ -157,27 +157,48 @@ function Start-Headless-DISM {
 
     # 5. CẤU HÌNH BCD (CHỐNG DUMP XANH)
     # 5. CẤU HÌNH BCD SIÊU CẤP (ANTI-BSOD & VIRTUALBOX COMPATIBLE)
-    Log "Cấu hình BCD (Chế độ truy vết UID - Anti BSOD)..."
+    # 5. CẤU HÌNH BCD SIÊU CẤP (UID TRACKING - MULTI-SCAN MODE)
+    Log "Cấu hình BCD (Chế độ truy vết UID)..."
     try {
-        # 5.1 Lấy Volume GUID của phân vùng WIN_TARGET
-        # Đây là ID "độc bản", không bao giờ sai lệch như Drive Letter
-        $TargetVolume = Get-Volume -FileSystemLabel "WIN_TARGET"
-        if (!$TargetVolume) { throw "Không tìm thấy phân vùng WIN_TARGET!" }
-        $VolId = $TargetVolume.UniqueId
-        Log "-> Bat duoc UID: $VolId"
+        # 5.1 Tìm Volume GUID (UID) - QUÉT 3 TẦNG
+        $VolId = $null
+        Log "-> Đang lùng sục UID của WIN_TARGET..."
+
+        # Tầng 1: Thử bằng Get-Volume (Hiện đại)
+        try { 
+            $TargetVolume = Get-Volume -FileSystemLabel "WIN_TARGET" -ErrorAction SilentlyContinue
+            $VolId = $TargetVolume.UniqueId 
+        } catch {}
+
+        # Tầng 2: Fallback sang WMI theo Label (Dành cho Win Lite)
+        if (-not $VolId) {
+            Log "-> Tầng 1 hụt! Quét WMI theo nhãn..."
+            $WmiVol = Get-WmiObject Win32_Volume -Filter "Label = 'WIN_TARGET'" -ErrorAction SilentlyContinue
+            $VolId = $WmiVol.DeviceID
+        }
+
+        # Tầng 3: Fallback cuối cùng theo ký tự ổ đĩa (Chắc chắn ra)
+        if (-not $VolId) {
+            Log "-> Tầng 2 hụt! Quét WMI theo Drive Letter $($Global:SelectedInstall):"
+            $WmiVol = Get-WmiObject Win32_Volume -Filter "DriveLetter = '$($Global:SelectedInstall):'" -ErrorAction SilentlyContinue
+            $VolId = $WmiVol.DeviceID
+        }
+
+        if (!$VolId) { throw "Không thể xác định định danh (UID) của ổ cài!" }
+        Log "-> Đã xích được UID: $VolId"
 
         # 5.2 Nhận diện Loader (UEFI/Legacy)
         $BootInfo = & bcdedit /enum "{current}"
         $IsUEFI = ($BootInfo -match "winload.efi") -or ($env:Firmware_Type -eq "UEFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # 5.3 Cấu hình ramdiskoptions dùng UID
+        # 5.3 Cấu hình ramdiskoptions dùng UID chuẩn
         & bcdedit /delete "{ramdiskoptions}" /f 2>$null
         & bcdedit /create "{ramdiskoptions}" /d "PhatTan SDI Options" /f | Out-Null
         & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "device:$VolId"
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
-        # 5.4 Tạo OS Loader và bắt GUID thực tế
+        # 5.4 Tạo OS Loader và bắt GUID thực tế qua Regex
         $BcdOutput = & bcdedit /create /d "PHAT TAN PC - AUTO INSTALL" /application osloader
         $RealGuid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
@@ -190,19 +211,15 @@ function Start-Headless-DISM {
             & bcdedit /set $RealGuid systemroot "\windows"
             & bcdedit /set $RealGuid winpe yes
             & bcdedit /set $RealGuid detecthal yes
-            
-            # Tắt kiểm tra toàn vẹn (Cho Win Lite)
             & bcdedit /set $RealGuid nointegritychecks yes
             & bcdedit /set $RealGuid testsigning yes
-            
             & bcdedit /bootsequence $RealGuid
-            Log "-> Nap BCD UID Mode OK!"
+            Log "-> Nap BCD UID Mode OK! San sang ve dich."
         }
     } catch { 
-        Log "LOI BCD: $($_.Exception.Message)" 
+        Log "LOI BCD NGHIEM TRONG: $($_.Exception.Message)" 
         [System.Windows.Forms.MessageBox]::Show("Lỗi: $($_.Exception.Message)", "Error")
     }
-
     $Form.Cursor = "Default"
     if ([System.Windows.Forms.MessageBox]::Show("Thiết lập hoàn tất! Restart ngay?", "Success", "YesNo") -eq "Yes") { Restart-Computer -Force }
 }
