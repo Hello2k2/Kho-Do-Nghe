@@ -157,28 +157,33 @@ function Start-Headless-DISM {
 
     # 5. CẤU HÌNH BCD (CHỐNG DUMP XANH)
     # 5. CẤU HÌNH BCD SIÊU CẤP (ANTI-BSOD & VIRTUALBOX COMPATIBLE)
-    Log "Cấu hình BCD (Trị lỗi Unmountable Boot Volume)..."
+    Log "Cấu hình BCD (Chế độ truy vết UID - Anti BSOD)..."
     try {
-        # 5.1 Kiểm tra firmware UEFI hay BIOS
+        # 5.1 Lấy Volume GUID của phân vùng WIN_TARGET
+        # Đây là ID "độc bản", không bao giờ sai lệch như Drive Letter
+        $TargetVolume = Get-Volume -FileSystemLabel "WIN_TARGET"
+        if (!$TargetVolume) { throw "Không tìm thấy phân vùng WIN_TARGET!" }
+        $VolId = $TargetVolume.UniqueId
+        Log "-> Bat duoc UID: $VolId"
+
+        # 5.2 Nhận diện Loader (UEFI/Legacy)
         $BootInfo = & bcdedit /enum "{current}"
         $IsUEFI = ($BootInfo -match "winload.efi") -or ($env:Firmware_Type -eq "UEFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
-        Log "-> Moi truong: $(if($IsUEFI){"UEFI"}else{"Legacy"})"
 
-        # 5.2 Làm sạch và cấu hình ramdiskoptions
-        # SDI phai nam o cung phan vung voi file WIM de tranh loi nap thiet bi
+        # 5.3 Cấu hình ramdiskoptions dùng UID
         & bcdedit /delete "{ramdiskoptions}" /f 2>$null
         & bcdedit /create "{ramdiskoptions}" /d "PhatTan SDI Options" /f | Out-Null
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$($Global:SelectedInstall):"
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "device:$VolId"
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
-        # 5.3 Tạo OS Loader và bắt GUID thuc te
+        # 5.4 Tạo OS Loader và bắt GUID thực tế
         $BcdOutput = & bcdedit /create /d "PHAT TAN PC - AUTO INSTALL" /application osloader
         $RealGuid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($RealGuid) {
-            # Cu phap nap Ramdisk phai co ngoac vuong [] bao quanh o dia
-            $DeviceStr = "ramdisk=[$($Global:SelectedInstall):]\WinInstall.wim,{ramdiskoptions}"
+            # Nạp thiết bị theo UID (Cú pháp: [device:ID]\Path)
+            $DeviceStr = "ramdisk=[device:$VolId]\WinInstall.wim,{ramdiskoptions}"
             & bcdedit /set $RealGuid device $DeviceStr
             & bcdedit /set $RealGuid osdevice $DeviceStr
             & bcdedit /set $RealGuid path $Loader
@@ -186,17 +191,16 @@ function Start-Headless-DISM {
             & bcdedit /set $RealGuid winpe yes
             & bcdedit /set $RealGuid detecthal yes
             
-            # Vo hieu hoa kiem tra chu ky de bao ve VirtualBox khong bi Critical Error
+            # Tắt kiểm tra toàn vẹn (Cho Win Lite)
             & bcdedit /set $RealGuid nointegritychecks yes
             & bcdedit /set $RealGuid testsigning yes
             
-            # Thiet lap sequence de boot vao ngay lap tuc
             & bcdedit /bootsequence $RealGuid
-            Log "-> Nap BCD OK! Chuan bi Restart..."
-        } else { throw "Khong lay duoc GUID tu he thong!" }
+            Log "-> Nap BCD UID Mode OK!"
+        }
     } catch { 
         Log "LOI BCD: $($_.Exception.Message)" 
-        [System.Windows.Forms.MessageBox]::Show("Lỗi nạp Boot! Hãy kiểm tra quyền Admin hoặc BCD.", "Error")
+        [System.Windows.Forms.MessageBox]::Show("Lỗi: $($_.Exception.Message)", "Error")
     }
 
     $Form.Cursor = "Default"
