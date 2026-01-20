@@ -163,33 +163,105 @@ $BtnFix.Add_Click({ $BtnFix.Enabled=$false; Install-Environment $StatusLbl $Form
 
 $BtnSearch.Add_Click({
     $Kw = $TxtSearch.Text; if (!$Kw) { return }
-    if (!(Get-Command choco -ErrorAction SilentlyContinue) -or !(Get-Command scoop -ErrorAction SilentlyContinue)) { Install-Environment $StatusLbl $Form }
-    $Grid.Rows.Clear(); $BtnSearch.Text="..."; $StatusLbl.Text="Đang tìm..."; $Form.Refresh()
-    $SrcFilter = $CbSource.SelectedItem; $StatFilter = $CbStatus.SelectedItem
+    
+    # Tự động cài môi trường nếu thiếu
+    if (!(Get-Command choco -ErrorAction SilentlyContinue) -or !(Get-Command scoop -ErrorAction SilentlyContinue)) { 
+        Install-Environment $StatusLbl $Form 
+    }
 
-    # CHOCO
-    if (($SrcFilter -match "All|Choco") -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+    $Grid.Rows.Clear(); $BtnSearch.Text="..."; $StatusLbl.Text="Đang tìm..."; $Form.Refresh()
+    
+    $SrcFilter = $CbSource.SelectedItem
+    $StatFilter = $CbStatus.SelectedItem
+
+    # ==========================================
+    # 1. XỬ LÝ CHOCO (Sửa lỗi logic "All" -> "Tất cả")
+    # ==========================================
+    # Logic cũ: "All|Choco" -> Sai vì menu là "Nguồn: Tất cả"
+    # Logic mới: "Tất cả|Chocolatey" -> Đúng với menu
+    if (($SrcFilter -match "Tất cả|Chocolatey") -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        # Thêm --limit-output để output ra dạng: tên|phiên_bản (dễ xử lý hơn)
         $Raw = choco search "$Kw" --limit-output --order-by-popularity
         foreach ($L in $Raw) {
             if ($L -match "^(.*?)\|(.*?)$") { 
-                $P = $L -split "\|"; $Stat = "Chưa cài"
-                if (Test-Path "$env:ChocolateyInstall\lib\$($P[0])") { $Stat = "Đã cài" }
-                if ($StatFilter -eq "Trạng thái: Tất cả" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Choco", $P[0], $P[0], $P[1], $Stat) | Out-Null }
+                $P = $L -split "\|"
+                $Name = $P[0]
+                $Ver = $P[1]
+                
+                $Stat = "Chưa cài"
+                if (Test-Path "$env:ChocolateyInstall\lib\$Name") { $Stat = "Đã cài" }
+                
+                if ($StatFilter -eq "Trạng thái: Tất cả" -or $StatFilter -match $Stat) { 
+                    $Grid.Rows.Add($false, "Choco", $Name, $Name, $Ver, $Stat) | Out-Null 
+                }
             }
         }
     }
-    # SCOOP
-    if (($SrcFilter -match "All|Scoop") -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
-        $RawS = scoop search "$Kw"; $RawList = $RawS -split "`r`n"
-        foreach ($Line in $RawList) {
-            if ($Line -match "^(\S+)\s+(\S+)\s+(\S+)") {
-               $Parts = $Line -split "\s+"; $Stat = "Chưa cài"
-               if ($Parts -contains "*global*") { $Stat = "Đã cài" }
-               if ($StatFilter -eq "Trạng thái: Tất cả" -or $StatFilter -match $Stat) { $Grid.Rows.Add($false, "Scoop", $Parts[0], $Parts[0], $Parts[1], $Stat) | Out-Null }
+
+    # ==========================================
+    # 2. XỬ LÝ SCOOP (Sửa lỗi logic "All" -> "Tất cả")
+    # ==========================================
+    if (($SrcFilter -match "Tất cả|Scoop") -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        $RawS = scoop search "$Kw"
+        if ($RawS) {
+            $RawList = $RawS -split "`r`n"
+            foreach ($Line in $RawList) {
+                # Scoop output dạng: Name Version Source Binaries...
+                # Regex bắt tên và version
+                if ($Line -match "^(\S+)\s+(\S+)") {
+                    $Parts = $Line -split "\s+"
+                    $Name = $Parts[0]
+                    $Ver = $Parts[1]
+                    
+                    $Stat = "Chưa cài"
+                    # Scoop đánh dấu app đã cài bằng *global* hoặc * trong output, nhưng check path chuẩn hơn
+                    if (Test-Path "$env:USERPROFILE\scoop\apps\$Name") { $Stat = "Đã cài" }
+                    
+                    if ($StatFilter -eq "Trạng thái: Tất cả" -or $StatFilter -match $Stat) { 
+                        $Grid.Rows.Add($false, "Scoop", $Name, $Name, $Ver, $Stat) | Out-Null 
+                    }
+                }
             }
         }
     }
-    $BtnSearch.Text="TÌM KIẾM"; $StatusLbl.Text="Tìm thấy $($Grid.Rows.Count) kết quả."; if ($Grid.Rows.Count -gt 0) { $BtnInstall.Enabled=$true }
+
+    # ==========================================
+    # 3. XỬ LÝ WINGET (Bổ sung thêm vì menu có mà code thiếu)
+    # ==========================================
+    if (($SrcFilter -match "Tất cả|Winget") -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+        # Dùng mã UTF8 để đọc tiếng Việt/ký tự đặc biệt từ Winget
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        # Tìm kiếm winget
+        $RawW = winget search "$Kw" --accept-source-agreements
+        if ($RawW) {
+            $Lines = $RawW -split "`r`n"
+            # Bỏ qua 2 dòng đầu (header)
+            for ($i = 2; $i -lt $Lines.Count; $i++) {
+                $Line = $Lines[$i].Trim()
+                if ($Line.Length -gt 0 -and $Line -notmatch "^-") {
+                    # Cắt chuỗi theo khoảng trắng lớn (2 space trở lên) để tách cột
+                    $Cols = $Line -split "\s{2,}"
+                    if ($Cols.Count -ge 2) {
+                        $Name = $Cols[0]
+                        $ID = $Cols[1]
+                        $Ver = if ($Cols.Count -ge 3) { $Cols[2] } else { "?" }
+                        
+                        # Check đơn giản nếu winget list có ID đó
+                        $Stat = "Chưa cài"
+                        # (Phần check đã cài cho Winget hơi chậm nên tạm bỏ qua hoặc xử lý sau)
+                        
+                        if ($StatFilter -eq "Trạng thái: Tất cả" -or $StatFilter -match $Stat) { 
+                            $Grid.Rows.Add($false, "Winget", $Name, $ID, $Ver, $Stat) | Out-Null 
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $BtnSearch.Text="TÌM KIẾM"; 
+    $StatusLbl.Text="Tìm thấy $($Grid.Rows.Count) kết quả."
+    if ($Grid.Rows.Count -gt 0) { $BtnInstall.Enabled=$true }
 })
 
 $BtnInstall.Add_Click({
