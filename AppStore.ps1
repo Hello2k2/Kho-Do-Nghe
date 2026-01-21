@@ -128,7 +128,7 @@ function Install-Environment {
 
 # --- GUI SETUP (GIỮ NGUYÊN) ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "KHO PHẦN MỀM - PHÁT TÂN PC (V15.0 SMART CHECK)"
+$Form.Text = "KHO PHẦN MỀM - PHÁT TÂN PC (V15.1 SMART CHECK)"
 $Form.Size = New-Object System.Drawing.Size(1000, 600)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $Form.ForeColor = "White"
