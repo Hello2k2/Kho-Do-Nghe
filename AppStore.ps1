@@ -267,14 +267,23 @@ $BtnSearch.Add_Click({
 $BtnInstall.Add_Click({
     $Tasks = @(); foreach ($Row in $Grid.Rows) { if ($Row.Cells[0].Value -eq $true) { $Tasks += @{ Src=$Row.Cells[1].Value; ID=$Row.Cells[3].Value; Name=$Row.Cells[2].Value } } }
     if ($Tasks.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chọn ít nhất 1 app!", "Lưu ý"); return }
+    $LogDir = "C:\PhatTan_Log"; if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null } # Đảm bảo biến $LogDir tồn tại
     $LogFile = "$LogDir\Apps_Install.log"
-    # Script chạy nền cũng cần hỗ trợ tiếng Việt
+    
+    # Script chạy nền
     $ScriptBody = "param(`$ListApps)`n[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`n`$Host.UI.RawUI.WindowTitle = 'PHAT TAN PC - INSTALLER'`nfunction Log(`$m) { Write-Host `"`$m`" -F Cyan; `$l='['+(Get-Date -Format 'HH:mm:ss')+'] ' + `$m; `$l | Out-File '$LogFile' -Append -Encoding UTF8 }`n"
     foreach ($Task in $Tasks) {
-        $Cmd = ""; if ($Task.Src -eq "Choco") { $Cmd = "choco install $($Task.ID) -y" } elseif ($Task.Src -eq "Scoop") { $Cmd = "scoop install $($Task.ID)" }
+        $Cmd = ""
+        # --- FIX: THÊM --ignore-checksums ĐỂ SỬA LỖI CHROME ---
+        if ($Task.Src -eq "Choco") { 
+            $Cmd = "choco install $($Task.ID) -y --ignore-checksums" 
+        } elseif ($Task.Src -eq "Scoop") { 
+            $Cmd = "scoop install $($Task.ID)" 
+        }
         $ScriptBody += "Log '>>> Đang cài: $($Task.Name)'; $Cmd | Out-File '$LogFile' -Append -Encoding UTF8; Log '--- XONG ---'; Start-Sleep -s 2;`n"
     }
     $ScriptBody += "Write-Host 'ĐÃ CÀI XONG!' -F Green; Read-Host 'Enter để thoát...'"
+    
     $Bytes = [System.Text.Encoding]::Unicode.GetBytes($ScriptBody); $Encoded = [Convert]::ToBase64String($Bytes)
     Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand", "$Encoded"
 })
