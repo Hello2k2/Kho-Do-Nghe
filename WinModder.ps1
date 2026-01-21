@@ -279,6 +279,18 @@ $BtnStartCap.Add_Click({
 
 # --- MODDING LOGIC (GIỮ NGUYÊN) ---
 $BtnIsoSrc.Add_Click({ $O=New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO|*.iso"; if($O.ShowDialog()-eq"OK"){$TxtIsoSrc.Text=$O.FileName; $GbAct.Enabled=$true} })
+function Grant-FullAccess ($Path) { 
+    if (Test-Path $Path) { 
+        # Log $TxtLogMod "Unlocking files in $Path..." # (Optional logging)
+        
+        # 1. Gỡ bỏ thuộc tính Read-Only (Trị lỗi 0xc1510111)
+        # Dùng attrib của CMD cho nhanh và mạnh hơn loop Powershell
+        $Proc = Start-Process "cmd.exe" -ArgumentList "/c attrib -r -s -h `"$Path\*.*`" /s /d" -Wait -NoNewWindow -PassThru
+        
+        # 2. Cấp quyền NTFS Full Control cho Everyone
+        Start-Process "icacls" -ArgumentList "`"$Path`" /grant Everyone:F /T /C /Q" -Wait -NoNewWindow 
+    } 
+}
 function Force-Cleanup {
     Start-Process "dism" -ArgumentList "/Cleanup-Wim" -Wait -NoNewWindow
     Start-Process "dism" -ArgumentList "/Unmount-Image /MountDir:`"$Global:MountDir`" /Discard" -Wait -NoNewWindow
@@ -299,33 +311,26 @@ function Start-Mount {
     
     $IsoDrive = $null
     
-    # -- Vòng lặp quét 5 lần (mỗi lần 1s) --
+    # -- Vòng lặp quét 5 lần --
     for ($i=1; $i -le 5; $i++) {
-        # CÁCH 1: Thử Get-Volume (Win Full)
         try {
             $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume -ErrorAction Stop
             if ($Vol.DriveLetter) { $IsoDrive = "$($Vol.DriveLetter):"; break }
         } catch {}
 
-        # CÁCH 2: Fallback sang WMI (Win Lite / Win Cổ)
         if (!$IsoDrive) {
-            # Quét tất cả ổ CD-ROM (DriveType=5) xem ổ nào chứa bộ cài
             $Cds = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=5"
             foreach ($Cd in $Cds) {
                 if ((Test-Path "$($Cd.DeviceID)\sources\install.wim") -or (Test-Path "$($Cd.DeviceID)\sources\install.esd")) {
-                    $IsoDrive = $Cd.DeviceID
-                    break
+                    $IsoDrive = $Cd.DeviceID; break
                 }
             }
         }
-        
-        if ($IsoDrive) { break }
-        Start-Sleep -Seconds 1
+        if ($IsoDrive) { break }; Start-Sleep -Seconds 1
     }
 
     if (!$IsoDrive) { 
-        Log $TxtLogMod "Lỗi: Không tìm thấy ổ đĩa ảo! (Win Lite bị lỗi Mount?)" "ERR"
-        $Form.Cursor="Default"; return 
+        Log $TxtLogMod "Lỗi: Không tìm thấy ổ đĩa ảo!" "ERR"; $Form.Cursor="Default"; return 
     }
     
     Log $TxtLogMod "Phát hiện bộ cài tại ổ: $IsoDrive" "INFO"
@@ -334,6 +339,10 @@ function Start-Mount {
     Log $TxtLogMod "Copying data from $IsoDrive..."
     Copy-Item "$IsoDrive\*" $Global:ExtractDir -Recurse -Force
     
+    # [FIX QUAN TRỌNG] CẤP QUYỀN VÀ GỠ READ-ONLY NGAY SAU KHI COPY
+    Log $TxtLogMod "Fixing Permissions & Attributes (Trị lỗi 0xc1510111)..."
+    Grant-FullAccess $Global:ExtractDir
+
     # 4. XỬ LÝ ESD (ESD CONVERTER)
     $SourceWim = "$Global:ExtractDir\sources\install.wim"
     $SourceEsd = "$Global:ExtractDir\sources\install.esd"
@@ -341,24 +350,25 @@ function Start-Mount {
 
     if (Test-Path $SourceEsd) {
         Log $TxtLogMod "Phát hiện ESD (Read-Only). Đang Convert sang WIM..."
-        # Export ESD -> WIM để có quyền Ghi (Read-Write)
         $Proc = Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$SourceEsd`" /SourceIndex:1 /DestinationImageFile:`"$SourceWim`" /Compress:max" -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
             Log $TxtLogMod "Convert ESD -> WIM thành công." "INFO"
-            Remove-Item $SourceEsd -Force # Xóa file ESD gốc cho nhẹ
+            Remove-Item $SourceEsd -Force 
             $TargetImage = $SourceWim
         } else {
             Log $TxtLogMod "Lỗi Convert ESD! (Code $($Proc.ExitCode))" "ERR"
             $Form.Cursor="Default"; return
         }
     } elseif (!(Test-Path $SourceWim)) {
-        Log $TxtLogMod "Lỗi: ISO không chứa install.wim hoặc install.esd" "ERR"
-        $Form.Cursor="Default"; return
+        Log $TxtLogMod "Lỗi: ISO không chứa install.wim hoặc install.esd" "ERR"; $Form.Cursor="Default"; return
     }
 
     # 5. MOUNT WIM (RW MODE)
     Log $TxtLogMod "Mounting WIM để Modding..."
+    # Đảm bảo file WIM mục tiêu cũng được unlock lần cuối cho chắc
+    Grant-FullAccess $TargetImage
+
     $ProcMount = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$TargetImage`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow -PassThru
     
     if ($ProcMount.ExitCode -eq 0) {
