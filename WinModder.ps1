@@ -286,14 +286,94 @@ function Force-Cleanup {
     Log $TxtLogMod "Cleaned."
 }
 function Start-Mount {
-    $Iso = $TxtIsoSrc.Text; Update-Workspace; Prepare-Dirs; $Form.Cursor="WaitCursor"; Force-Cleanup; Ensure-Dir $Global:ExtractDir; Ensure-Dir $Global:MountDir
-    Log $TxtLogMod "Mounting ISO..."; Mount-DiskImage -ImagePath $Iso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
-    $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume; if (!$Vol) { Log $TxtLogMod "ISO Error" "ERR"; $Form.Cursor="Default"; return }
-    Copy-Item "$($Vol.DriveLetter):\*" $Global:ExtractDir -Recurse -Force
-    $Wim = "$Global:ExtractDir\sources\install.wim"; if (!(Test-Path $Wim)) { $Wim = "$Global:ExtractDir\sources\install.esd" }
-    Log $TxtLogMod "Mounting WIM..."; Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$Wim`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow
-    $LblInfo.Text="MOUNTED"; $LblInfo.ForeColor="Lime"; $BtnBuild.Enabled=$true; Log $TxtLogMod "OK" "INFO"; $Form.Cursor="Default"
+    $Iso = $TxtIsoSrc.Text
+    if (!(Test-Path $Iso)) { Log $TxtLogMod "Không tìm thấy file ISO!" "ERR"; return }
+
+    # 1. Chuẩn bị môi trường
+    Update-Workspace; Prepare-Dirs; $Form.Cursor="WaitCursor"; Force-Cleanup
+    Ensure-Dir $Global:ExtractDir; Ensure-Dir $Global:MountDir
+    
+    # 2. MOUNT ISO & QUÉT DRIVE LETTER (HYBRID MODE)
+    Log $TxtLogMod "Mounting ISO..."
+    Mount-DiskImage -ImagePath $Iso -StorageType ISO -ErrorAction SilentlyContinue | Out-Null
+    
+    $IsoDrive = $null
+    
+    # -- Vòng lặp quét 5 lần (mỗi lần 1s) --
+    for ($i=1; $i -le 5; $i++) {
+        # CÁCH 1: Thử Get-Volume (Win Full)
+        try {
+            $Vol = Get-DiskImage -ImagePath $Iso | Get-Volume -ErrorAction Stop
+            if ($Vol.DriveLetter) { $IsoDrive = "$($Vol.DriveLetter):"; break }
+        } catch {}
+
+        # CÁCH 2: Fallback sang WMI (Win Lite / Win Cổ)
+        if (!$IsoDrive) {
+            # Quét tất cả ổ CD-ROM (DriveType=5) xem ổ nào chứa bộ cài
+            $Cds = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=5"
+            foreach ($Cd in $Cds) {
+                if ((Test-Path "$($Cd.DeviceID)\sources\install.wim") -or (Test-Path "$($Cd.DeviceID)\sources\install.esd")) {
+                    $IsoDrive = $Cd.DeviceID
+                    break
+                }
+            }
+        }
+        
+        if ($IsoDrive) { break }
+        Start-Sleep -Seconds 1
+    }
+
+    if (!$IsoDrive) { 
+        Log $TxtLogMod "Lỗi: Không tìm thấy ổ đĩa ảo! (Win Lite bị lỗi Mount?)" "ERR"
+        $Form.Cursor="Default"; return 
+    }
+    
+    Log $TxtLogMod "Phát hiện bộ cài tại ổ: $IsoDrive" "INFO"
+
+    # 3. COPY DỮ LIỆU
+    Log $TxtLogMod "Copying data from $IsoDrive..."
+    Copy-Item "$IsoDrive\*" $Global:ExtractDir -Recurse -Force
+    
+    # 4. XỬ LÝ ESD (ESD CONVERTER)
+    $SourceWim = "$Global:ExtractDir\sources\install.wim"
+    $SourceEsd = "$Global:ExtractDir\sources\install.esd"
+    $TargetImage = $SourceWim 
+
+    if (Test-Path $SourceEsd) {
+        Log $TxtLogMod "Phát hiện ESD (Read-Only). Đang Convert sang WIM..."
+        # Export ESD -> WIM để có quyền Ghi (Read-Write)
+        $Proc = Start-Process "dism" -ArgumentList "/Export-Image /SourceImageFile:`"$SourceEsd`" /SourceIndex:1 /DestinationImageFile:`"$SourceWim`" /Compress:max" -Wait -NoNewWindow -PassThru
+        
+        if ($Proc.ExitCode -eq 0) {
+            Log $TxtLogMod "Convert ESD -> WIM thành công." "INFO"
+            Remove-Item $SourceEsd -Force # Xóa file ESD gốc cho nhẹ
+            $TargetImage = $SourceWim
+        } else {
+            Log $TxtLogMod "Lỗi Convert ESD! (Code $($Proc.ExitCode))" "ERR"
+            $Form.Cursor="Default"; return
+        }
+    } elseif (!(Test-Path $SourceWim)) {
+        Log $TxtLogMod "Lỗi: ISO không chứa install.wim hoặc install.esd" "ERR"
+        $Form.Cursor="Default"; return
+    }
+
+    # 5. MOUNT WIM (RW MODE)
+    Log $TxtLogMod "Mounting WIM để Modding..."
+    $ProcMount = Start-Process "dism" -ArgumentList "/Mount-Image /ImageFile:`"$TargetImage`" /Index:1 /MountDir:`"$Global:MountDir`" /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow -PassThru
+    
+    if ($ProcMount.ExitCode -eq 0) {
+        $LblInfo.Text="MOUNTED (RW)"; $LblInfo.ForeColor="Lime"
+        $BtnBuild.Enabled=$true
+        Log $TxtLogMod "Mount OK! Sẵn sàng thêm Soft/Driver." "INFO"
+    } else {
+        Log $TxtLogMod "Lỗi Mount DISM (Code $($ProcMount.ExitCode))." "ERR"
+    }
+    
+    $Form.Cursor="Default"
 }
+
+# Đảm bảo hàm này có tồn tại (vì bác dùng trong Start-Mount)
+function Ensure-Dir($path) { if (!(Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force | Out-Null } }
 function Add-Folder { $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { Copy-Item $FBD.SelectedPath $Global:MountDir -Recurse -Force; Log $TxtLogMod "Copied" } }
 function Add-Driver { $FBD = New-Object System.Windows.Forms.FolderBrowserDialog; if ($FBD.ShowDialog() -eq "OK") { Log $TxtLogMod "Adding Drivers..."; Start-Process "dism" -ArgumentList "/Image:`"$Global:MountDir`" /Add-Driver /Driver:`"$($FBD.SelectedPath)`" /Recurse /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow; Log $TxtLogMod "Done" } }
 function Add-DesktopFile { $O = New-Object System.Windows.Forms.OpenFileDialog; if ($O.ShowDialog() -eq "OK") { Copy-Item $O.FileName "$Global:MountDir\Users\Public\Desktop" -Force; Log $TxtLogMod "Added" } }
