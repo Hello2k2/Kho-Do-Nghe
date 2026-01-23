@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V5.7 AUTO-UPDATE & LITE FIX)
+    VENTOY BOOT MAKER - PHAT TAN PC (V5.8 DISKPART ULTIMATE FIX)
     Updates:
-    - [FIX] Sửa lỗi Get-Partition crash trên Win Lite (Fallback sang WMI).
-    - [AUTO] Tự động check và tải Ventoy mới nhất từ GitHub API.
-    - [INFO] Hiển thị phiên bản Ventoy đang dùng.
+    - [FIX CRITICAL] Thêm phương pháp DiskPart Parser để tìm ổ đĩa trên Win Super Lite.
+    - [LOGIC] 3 lớp check: Get-Partition -> WMI -> DiskPart (Không thể trượt).
+    - [AUTO] Giữ nguyên tính năng tự tải Ventoy mới nhất.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -19,8 +19,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-# 2. CONFIG GLOBAL
-# Link dự phòng nếu không lấy được bản mới nhất
+# 2. CONFIG
 $Global:VentoyFallbackUrl = "https://github.com/ventoy/Ventoy/releases/download/v1.0.97/ventoy-1.0.97-windows.zip"
 $Global:ThemeJsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/themes_ventoy.json" 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
@@ -63,7 +62,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V5.7 (AUTO UPDATE)"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V5.8 (DISKPART FIX)"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -77,7 +76,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto Update Latest Version | Win Lite Fix | JSON Config"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Win Super Lite Support (DiskPart) | Auto Update | Themes"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -151,22 +150,37 @@ $BtnStart = New-Object System.Windows.Forms.Button; $BtnStart.Text = "THỰC HI�
 $MainTable.Controls.Add($BtnStart, 0, 4)
 
 # ==========================================
-# HYBRID USB DETECTION LOGIC
+# ⚡ ULTIMATE USB DETECTION LOGIC
 # ==========================================
 
+# Phương pháp 1: WMI Legacy (Win Lite thường)
 function Get-DriveLetter-WMI ($DiskIndex) {
     try {
-        # Fix cho Win Lite: Truy vấn WMI để lấy Drive Letter từ Disk Index
-        # Win32_DiskDrive -> Win32_DiskDriveToDiskPartition -> Win32_DiskPartition -> Win32_LogicalDiskToPartition -> Win32_LogicalDisk
-        
         $EscapedIndex = "\\\\.\\PHYSICALDRIVE$DiskIndex"
         $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$EscapedIndex'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
         $Partitions = Get-WmiObject -Query $Query -ErrorAction SilentlyContinue
-        
         foreach ($Part in $Partitions) {
             $Query2 = "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($Part.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
             $LogDisk = Get-WmiObject -Query $Query2 -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($LogDisk.DeviceID) { return $LogDisk.DeviceID }
+        }
+    } catch {}
+    return $null
+}
+
+# Phương pháp 2: DiskPart Parsing (Win Super Lite - Bất tử)
+function Get-DriveLetter-DiskPart ($DiskIndex) {
+    try {
+        $DpScript = "$env:TEMP\dp_vol_check.txt"
+        "select disk $DiskIndex`ndetail disk" | Out-File $DpScript -Encoding ASCII -Force
+        $Output = & diskpart /s $DpScript
+        
+        # Regex tìm dòng "Volume X   E   Label..."
+        # Cột Ltr thường là cột thứ 3 hoặc được bao quanh bởi khoảng trắng
+        foreach ($Line in $Output) {
+            if ($Line -match "Volume \d+\s+([A-Z])\s+") {
+                return "$($Matches[1]):"
+            }
         }
     } catch {}
     return $null
@@ -190,7 +204,7 @@ function Load-USB {
         } catch { Log-Msg "Get-Disk lỗi, thử WMI..." "Warn" }
     }
 
-    # CÁCH 2: WMI (Win Lite)
+    # CÁCH 2: WMI / DiskPart (Win Lite)
     if (-not $Found) {
         try {
             $WmiDisks = Get-WmiObject Win32_DiskDrive | Where-Object { $_.InterfaceType -eq "USB" -or $_.MediaType -match "Removable" }
@@ -201,7 +215,7 @@ function Load-USB {
                     $CbUSB.Items.Add("Disk $($d.Index): $($d.Model) - $SizeGB GB")
                 }
                 $Found = $true
-                Log-Msg "Đã tìm thấy USB qua WMI (Chế độ tương thích)." "Cyan"
+                Log-Msg "Đã tìm thấy USB qua WMI/Legacy." "Cyan"
             }
         } catch { Log-Msg "Lỗi WMI: $($_.Exception.Message)" "Red" }
     }
@@ -213,18 +227,13 @@ function Load-USB {
 function Show-UsbDetails {
     if ($CbUSB.SelectedItem -match "Disk (\d+)") {
         $ID = $Matches[1]
-        if (Get-Command Get-Disk -ErrorAction SilentlyContinue) {
-            try {
-                $D = Get-Disk -Number $ID -ErrorAction Stop
-                $Msg = "--- INFO (GET-DISK) ---`nModel: $($D.FriendlyName)`nStyle: $($D.PartitionStyle)`nSize: $([Math]::Round($D.Size/1GB, 2)) GB"
-                [System.Windows.Forms.MessageBox]::Show($Msg, "Chi tiết USB"); return
-            } catch {}
-        }
+        # Hiển thị thông tin đơn giản cho Win Lite để tránh crash
         try {
             $D = Get-WmiObject Win32_DiskDrive | Where-Object { $_.Index -eq $ID }
-            $Msg = "--- INFO (WMI) ---`nModel: $($D.Model)`nInterface: $($D.InterfaceType)`nSize: $([Math]::Round($D.Size/1GB, 2)) GB"
-            [System.Windows.Forms.MessageBox]::Show($Msg, "Chi tiết USB")
-        } catch { [System.Windows.Forms.MessageBox]::Show("Không đọc được thông tin!", "Lỗi") }
+            $DL = Get-DriveLetter-DiskPart $ID
+            $Msg = "Model: $($D.Model)`nSize: $([Math]::Round($D.Size/1GB, 2)) GB`nDrive Letter: $DL"
+            [System.Windows.Forms.MessageBox]::Show($Msg, "Chi tiết")
+        } catch { [System.Windows.Forms.MessageBox]::Show("Không đọc được chi tiết!", "Lỗi") }
     }
 }
 
@@ -266,7 +275,7 @@ function Load-Themes {
 function Process-Ventoy {
     param($DiskID, $Mode, $Style, $Label)
     
-    # 1. DOWNLOAD VENTOY (AUTO UPDATE LOGIC)
+    # 1. DOWNLOAD VENTOY
     $DownloadUrl = Get-LatestVentoyVersion
     $ZipFile = "$Global:WorkDir\ventoy.zip"
     $ExtractPath = "$Global:WorkDir\Extracted"
@@ -276,7 +285,6 @@ function Process-Ventoy {
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             (New-Object Net.WebClient).DownloadFile($DownloadUrl, $ZipFile)
-            
             if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
             [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
             
@@ -290,28 +298,33 @@ function Process-Ventoy {
         $Global:VentoyDir = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.DirectoryName}
     }
 
-    # 2. GET DRIVE LETTER (FIX CRASH FOR WIN LITE)
+    # 2. GET DRIVE LETTER (TRIPLE CHECK)
     Log-Msg "Đang tìm ký tự ổ đĩa (Drive Letter)..." "Yellow"
     $DL = $null
     
-    # Thử cách chuẩn (Get-Partition) - Bọc trong Try/Catch để không crash
+    # Check 1: Get-Partition (Standard)
     try {
         if (Get-Command Get-Partition -ErrorAction SilentlyContinue) {
             $Part = Get-Partition -DiskNumber $DiskID -ErrorAction Stop | Where-Object { $_.DriveLetter } | Select -First 1
             if ($Part) { $DL = "$($Part.DriveLetter):" }
         }
-    } catch {
-        Log-Msg "Get-Partition thất bại, chuyển sang WMI..." "Warn"
-    }
+    } catch {}
 
-    # Nếu thất bại, thử cách WMI (Win Lite Safe)
+    # Check 2: WMI (Legacy)
     if (!$DL) {
+        Log-Msg "Thử WMI..." "Warn"
         $DL = Get-DriveLetter-WMI $DiskID
     }
 
+    # Check 3: DiskPart (Ultimate Fix)
+    if (!$DL) {
+        Log-Msg "Thử DiskPart (Phương pháp cuối)..." "Warn"
+        $DL = Get-DriveLetter-DiskPart $DiskID
+    }
+
     if (!$DL) { 
-        Log-Msg "LỖI NGHIÊM TRỌNG: Không lấy được ký tự ổ đĩa (Drive Letter)!" "Red"
-        Log-Msg "Giải pháp: Vào Disk Management, Format USB và gán tên ổ (VD: E:) rồi thử lại." "Red"
+        Log-Msg "LỖI: Không tìm thấy ký tự ổ đĩa (Drive Letter)!" "Red"
+        Log-Msg "Vui lòng vào Disk Management kiểm tra xem USB có hiện ổ (VD: E:, F:) không." "Red"
         return 
     }
 
@@ -337,18 +350,17 @@ function Process-Ventoy {
     
     if ($P.ExitCode -eq 0) {
         Log-Msg "Thành công!" "Success"
-        
-        # 4. POST CONFIG
         Start-Sleep 3
-        # Cố gắng lấy lại Drive Letter (Phòng trường hợp Ventoy format xong bị đổi tên ổ)
-        $NewDL = Get-DriveLetter-WMI $DiskID
-        if ($NewDL) { $UsbRoot = $NewDL } else { $UsbRoot = $DL } # Fallback old DL
+        
+        # Thử lấy lại Drive Letter (sau khi format có thể bị mất/đổi)
+        $NewDL = Get-DriveLetter-DiskPart $DiskID
+        if ($NewDL) { $UsbRoot = $NewDL } else { $UsbRoot = $DL }
         
         if (Test-Path $UsbRoot) {
             $VentoyDir = "$UsbRoot\ventoy"
             if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory | Out-Null }
 
-            # Cấu hình Theme
+            # Install Theme
             $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
             if ($SelTheme -ne "Mặc định (Ventoy)") {
                 $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
@@ -364,7 +376,7 @@ function Process-Ventoy {
                 }
             }
 
-            # Tạo JSON
+            # Generate JSON
             $J = @{
                 "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
                 "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" }
@@ -377,9 +389,8 @@ function Process-Ventoy {
             Log-Msg "Cấu hình hoàn tất. Copy ISO vào ổ $UsbRoot." "Success"
             Invoke-Item $UsbRoot
         } else {
-            Log-Msg "Không thể mở ổ USB (Có thể cần rút ra cắm lại)." "Warn"
+            Log-Msg "Không thể truy cập USB để chép config (Cần rút ra cắm lại)." "Warn"
         }
-
     } else {
         Log-Msg "Lỗi Ventoy2Disk. Mã lỗi: $($P.ExitCode)" "Red"; return
     }
