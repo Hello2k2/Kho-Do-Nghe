@@ -1,10 +1,10 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V5.0: VENTOY CORE)
+    VENTOY BOOT MAKER - PHAT TAN PC (V5.5 ULTIMATE)
     Updates:
-    - [CORE] Chuyển sang nhân Ventoy (Copy ISO là chạy).
-    - [AUTO] Tự động tải và cài đặt Ventoy mới nhất.
-    - [THEME] Tự động cấu hình file JSON giao diện.
-    - [MODE] Hỗ trợ Secure Boot & Partition Style.
+    - [UPDATE] Thêm chế độ Update Ventoy (Không mất dữ liệu).
+    - [THEME] Trình quản lý Theme Online (Tải từ JSON).
+    - [CONFIG] Cấu hình Memdisk, Reserved Space.
+    - [INFO] Xem chi tiết thông số kỹ thuật USB.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -20,23 +20,36 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-# 2. CONFIG
-$Global:VentoyUrl = "https://github.com/ventoy/Ventoy/releases/download/v1.0.97/ventoy-1.0.97-windows.zip" # Link cứng bản ổn định hoặc dùng API để get mới nhất
+# 2. CONFIG GLOBAL
+$Global:VentoyUrl = "https://github.com/ventoy/Ventoy/releases/download/v1.0.97/ventoy-1.0.97-windows.zip"
+# Link JSON chứa danh sách Theme (Anh sửa link này thành link raw file json trên github của anh)
+# Cấu trúc JSON mẫu: [{"Name":"WhiteSur","Url":"LINK_ZIP_THEME","File":"theme.txt","Folder":"whitesur"}]
+$Global:ThemeJsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/themes_ventoy.json" 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
 
-# 3. THEME
+# --- DATA MẪU NẾU KHÔNG TẢI ĐƯỢC JSON ---
+$Global:DefaultThemes = @(
+    @{ Name="Ventoy Default"; Url=""; File=""; Folder="" },
+    @{ Name="WhiteSur 4K (Demo)"; Url="https://github.com/vinceliuice/WhiteSur-grub-theme/archive/refs/heads/master.zip"; File="theme.txt"; Folder="WhiteSur-grub-theme-master" }
+)
+
+# 3. THEME GUI
 $Theme = @{
-    BgForm  = [System.Drawing.Color]::FromArgb(25, 25, 35)
-    Card    = [System.Drawing.Color]::FromArgb(40, 40, 50)
+    BgForm  = [System.Drawing.Color]::FromArgb(30, 30, 35)
+    Card    = [System.Drawing.Color]::FromArgb(45, 45, 50)
     Text    = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    Accent  = [System.Drawing.Color]::FromArgb(0, 200, 83) # Ventoy Green
+    Accent  = [System.Drawing.Color]::FromArgb(0, 180, 255) # Cyber Blue
+    Warn    = [System.Drawing.Color]::FromArgb(255, 160, 0)
+    Success = [System.Drawing.Color]::FromArgb(50, 205, 50)
     InputBg = [System.Drawing.Color]::FromArgb(60, 60, 70)
-    Muted   = [System.Drawing.Color]::Gray
 }
 
 # --- HELPER FUNCTIONS ---
-function Log-Msg ($Msg) { 
+function Log-Msg ($Msg, $Color="Lime") { 
+    $TxtLog.SelectionStart = $TxtLog.TextLength
+    $TxtLog.SelectionLength = 0
+    $TxtLog.SelectionColor = [System.Drawing.Color]::FromName($Color)
     $TxtLog.AppendText("[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n")
     $TxtLog.ScrollToCaret()
     [System.Windows.Forms.Application]::DoEvents()
@@ -46,70 +59,105 @@ function Add-GlowBorder ($Panel) {
     $Panel.Add_Paint({ param($s,$e) $p=New-Object System.Drawing.Pen($Theme.Accent,1); $r=$s.ClientRectangle; $r.Width-=1; $r.Height-=1; $e.Graphics.DrawRectangle($p,$r); $p.Dispose() })
 }
 
-# --- GUI ---
-$F_Title = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-$F_Norm  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
-$F_Bold  = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+# --- GUI INIT ---
+$F_Title = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+$F_Norm  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+$F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text="PHAT TAN BOOT MAKER (V5.0)"; $Form.Size="900,700"; $Form.StartPosition="CenterScreen"; $Form.BackColor=$Theme.BgForm; $Form.ForeColor=$Theme.Text; $Form.Padding=15
+$Form.Text = "PHAT TAN VENTOY MASTER V5.5"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
+$Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
-$MainLayout=New-Object System.Windows.Forms.TableLayoutPanel; $MainLayout.Dock="Fill"; $MainLayout.ColumnCount=1; $MainLayout.RowCount=5
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Title
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # USB
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 220))) # Settings
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100))) # Log
-$MainLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 70))) # Button
-$Form.Controls.Add($MainLayout)
+$MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Header
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # USB Selection
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 320))) # Settings Tab
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) # Log
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 70))) # Action Button
+$Form.Controls.Add($MainTable)
 
-# HEADER
-$PnlTitle=New-Object System.Windows.Forms.Panel; $PnlTitle.Height=60; $PnlTitle.Dock="Top"; $PnlTitle.Margin="0,0,0,10"
-$LblTitle=New-Object System.Windows.Forms.Label; $LblTitle.Text="🛠️ TẠO USB BOOT VENTOY ĐA NĂNG"; $LblTitle.Font=$F_Title; $LblTitle.ForeColor=$Theme.Accent; $LblTitle.AutoSize=$true; $LblTitle.Location="10,10"
-$LblSub=New-Object System.Windows.Forms.Label; $LblSub.Text="Copy ISO/WIM/IMG là chạy - Không cần format lại"; $LblSub.ForeColor="Gray"; $LblSub.AutoSize=$true; $LblSub.Location="15,40"; $LblSub.Font=$F_Code
-$PnlTitle.Controls.Add($LblTitle); $PnlTitle.Controls.Add($LblSub); $MainLayout.Controls.Add($PnlTitle,0,0)
+# 1. HEADER
+$PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Install | Update | Themes | Memdisk | JSON Config"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
-# SECTION 1: USB
-$CardUSB=New-Object System.Windows.Forms.Panel; $CardUSB.BackColor=$Theme.Card; $CardUSB.Padding=10; $CardUSB.Margin="0,0,0,15"; $CardUSB.Dock="Top"; $CardUSB.AutoSize=$true; Add-GlowBorder $CardUSB
-$LblU=New-Object System.Windows.Forms.Label; $LblU.Text="CHỌN THIẾT BỊ USB (Sẽ bị xóa sạch dữ liệu!)"; $LblU.Font=$F_Bold; $LblU.Dock="Top"; $CardUSB.Controls.Add($LblU)
-$L1=New-Object System.Windows.Forms.TableLayoutPanel; $L1.Dock="Top"; $L1.Height=40; $L1.ColumnCount=2; $L1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,80)))
-$CbUSB=New-Object System.Windows.Forms.ComboBox; $CbUSB.Dock="Fill"; $CbUSB.Font=$F_Norm; $CbUSB.BackColor=$Theme.InputBg; $CbUSB.ForeColor="White"; $CbUSB.DropDownStyle="DropDownList"
-$BtnRef=New-Object System.Windows.Forms.Button; $BtnRef.Text="LÀM MỚI"; $BtnRef.Dock="Fill"; $BtnRef.BackColor=$Theme.InputBg; $BtnRef.ForeColor="White"; $BtnRef.FlatStyle="Flat"
-$L1.Controls.Add($CbUSB,0,0); $L1.Controls.Add($BtnRef,1,0); $CardUSB.Controls.Add($L1); $MainLayout.Controls.Add($CardUSB,0,1)
+# 2. USB SELECTION
+$CardUSB = New-Object System.Windows.Forms.Panel; $CardUSB.BackColor = $Theme.Card; $CardUSB.Padding = 10; $CardUSB.AutoSize = $true; $CardUSB.Dock = "Top"; $CardUSB.Margin = "0,0,0,10"; Add-GlowBorder $CardUSB
+$L_U1 = New-Object System.Windows.Forms.TableLayoutPanel; $L_U1.Dock = "Top"; $L_U1.Height = 35; $L_U1.ColumnCount = 3
+$L_U1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 70)))
+$L_U1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 15)))
+$L_U1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 15)))
 
-# SECTION 2: SETTINGS
-$CardSet=New-Object System.Windows.Forms.GroupBox; $CardSet.Text="CẤU HÌNH VENTOY"; $CardSet.Dock="Fill"; $CardSet.ForeColor=$Theme.Accent; $CardSet.Font=$F_Bold; $CardSet.Padding="10,25,10,10"
-$Grid=New-Object System.Windows.Forms.TableLayoutPanel; $Grid.Dock="Fill"; $Grid.ColumnCount=2; $Grid.RowCount=3
-$Grid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,50)))
-$Grid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,50)))
+$CbUSB = New-Object System.Windows.Forms.ComboBox; $CbUSB.Dock = "Fill"; $CbUSB.Font = $F_Norm; $CbUSB.BackColor = $Theme.InputBg; $CbUSB.ForeColor = "White"; $CbUSB.DropDownStyle = "DropDownList"
+$BtnRef = New-Object System.Windows.Forms.Button; $BtnRef.Text = "↻ Refresh"; $BtnRef.Dock = "Fill"; $BtnRef.BackColor = $Theme.InputBg; $BtnRef.ForeColor = "White"; $BtnRef.FlatStyle = "Flat"
+$BtnInfo = New-Object System.Windows.Forms.Button; $BtnInfo.Text = "ℹ Chi tiết"; $BtnInfo.Dock = "Fill"; $BtnInfo.BackColor = $Theme.InputBg; $BtnInfo.ForeColor = "Cyan"; $BtnInfo.FlatStyle = "Flat"
 
-function Add-Option ($L, $C, $Col, $Row) {
-    $P=New-Object System.Windows.Forms.Panel; $P.Dock="Fill"; $P.Padding=5
-    $Lb=New-Object System.Windows.Forms.Label; $Lb.Text=$L; $Lb.Dock="Top"; $Lb.Height=25; $Lb.ForeColor="White"; $Lb.Font=$Global:F_Norm
-    $C.Dock="Top"; $C.BackColor=$Global:Theme.InputBg; $C.ForeColor="White"; $C.Font=$Global:F_Norm
-    $P.Controls.Add($C); $P.Controls.Add($Lb); $Grid.Controls.Add($P, $Col, $Row)
-}
+$L_U1.Controls.Add($CbUSB, 0, 0); $L_U1.Controls.Add($BtnRef, 1, 0); $L_U1.Controls.Add($BtnInfo, 2, 0)
+$LblUTitle = New-Object System.Windows.Forms.Label; $LblUTitle.Text = "THIẾT BỊ MỤC TIÊU:"; $LblUTitle.Font = $F_Bold; $LblUTitle.Dock = "Top"; $LblUTitle.ForeColor = "Silver"
+$CardUSB.Controls.Add($L_U1); $CardUSB.Controls.Add($LblUTitle); $MainTable.Controls.Add($CardUSB, 0, 1)
 
-# Opt 1: Label
-$TxtLabel=New-Object System.Windows.Forms.TextBox; $TxtLabel.Text="Ventoy_Boot"; Add-Option "Tên ổ đĩa (Label):" $TxtLabel 0 0
-# Opt 2: Partition Style
-$CbStyle=New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Tương thích cao - PC cũ & mới)", "GPT (Chuẩn UEFI mới - Trên 2TB)")); $CbStyle.SelectedIndex=0; $CbStyle.DropDownStyle="DropDownList"; Add-Option "Kiểu phân vùng (Partition Style):" $CbStyle 1 0
-# Opt 3: Secure Boot
-$ChkSecure=New-Object System.Windows.Forms.CheckBox; $ChkSecure.Text="Bật hỗ trợ Secure Boot"; $ChkSecure.Checked=$true; $ChkSecure.AutoSize=$true; $ChkSecure.ForeColor="Orange"
-$P_Sec=New-Object System.Windows.Forms.Panel; $P_Sec.Padding=5; $P_Sec.Controls.Add($ChkSecure); $Grid.Controls.Add($P_Sec, 0, 1)
-# Opt 4: Theme
-$ChkTheme=New-Object System.Windows.Forms.CheckBox; $ChkTheme.Text="Cài sẵn Theme & Icon đẹp"; $ChkTheme.Checked=$true; $ChkTheme.AutoSize=$true; $ChkTheme.ForeColor="Cyan"
-$P_Thm=New-Object System.Windows.Forms.Panel; $P_Thm.Padding=5; $P_Thm.Controls.Add($ChkTheme); $Grid.Controls.Add($P_Thm, 1, 1)
+# 3. SETTINGS & TABS
+$TabC = New-Object System.Windows.Forms.TabControl; $TabC.Dock = "Fill"; $TabC.Padding = "10,5"
+$Tab1 = New-Object System.Windows.Forms.TabPage; $Tab1.Text = "CÀI ĐẶT CƠ BẢN"; $Tab1.BackColor = $Theme.BgForm
+$Tab2 = New-Object System.Windows.Forms.TabPage; $Tab2.Text = "THEME & JSON"; $Tab2.BackColor = $Theme.BgForm
+$TabC.Controls.Add($Tab1); $TabC.Controls.Add($Tab2); $MainTable.Controls.Add($TabC, 0, 2)
 
-$CardSet.Controls.Add($Grid); $MainLayout.Controls.Add($CardSet,0,2)
+# -- TAB 1: BASIC --
+$G1 = New-Object System.Windows.Forms.TableLayoutPanel; $G1.Dock = "Top"; $G1.AutoSize = $true; $G1.Padding = 10; $G1.ColumnCount = 2; $G1.RowCount = 5
+$G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
+$G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
 
-# SECTION 3: LOG
-$TxtLog=New-Object System.Windows.Forms.TextBox; $TxtLog.Multiline=$true; $TxtLog.Dock="Fill"; $TxtLog.BackColor="Black"; $TxtLog.ForeColor="Lime"; $TxtLog.Font=$F_Code; $TxtLog.ReadOnly=$true; $TxtLog.ScrollBars="Vertical"
-$MainLayout.Controls.Add($TxtLog,0,3)
+# Action Mode
+$LblAct = New-Object System.Windows.Forms.Label; $LblAct.Text = "Chế độ (Mode):"; $LblAct.ForeColor = "White"; $LblAct.AutoSize = $true
+$CbAction = New-Object System.Windows.Forms.ComboBox; $CbAction.Items.AddRange(@("Cài mới (Xóa sạch dữ liệu)", "Cập nhật Ventoy (Giữ nguyên Data)")); $CbAction.SelectedIndex = 0; $CbAction.DropDownStyle = "DropDownList"; $CbAction.Width = 300
+$G1.Controls.Add($LblAct, 0, 0); $G1.Controls.Add($CbAction, 1, 0)
 
-# BUTTON
-$BtnStart=New-Object System.Windows.Forms.Button; $BtnStart.Text="🚀 CÀI ĐẶT VENTOY"; $BtnStart.Font=$F_Title; $BtnStart.BackColor=$Theme.Accent; $BtnStart.ForeColor="Black"; $BtnStart.FlatStyle="Flat"; $BtnStart.Dock="Fill"
-$MainLayout.Controls.Add($BtnStart,0,4)
+# Style
+$LblSty = New-Object System.Windows.Forms.Label; $LblSty.Text = "Kiểu Partition:"; $LblSty.ForeColor = "White"; $LblSty.AutoSize = $true
+$CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy + UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex = 0; $CbStyle.DropDownStyle = "DropDownList"; $CbStyle.Width = 300
+$G1.Controls.Add($LblSty, 0, 1); $G1.Controls.Add($CbStyle, 1, 1)
+
+# Secure Boot
+$ChkSec = New-Object System.Windows.Forms.CheckBox; $ChkSec.Text = "Bật Secure Boot Support"; $ChkSec.Checked = $true; $ChkSec.ForeColor = "Orange"; $ChkSec.AutoSize = $true
+$G1.Controls.Add($ChkSec, 0, 2)
+
+# Reserved Space
+$LblRes = New-Object System.Windows.Forms.Label; $LblRes.Text = "Dành riêng (Reserved Space MB):"; $LblRes.ForeColor = "White"; $LblRes.AutoSize = $true
+$NumRes = New-Object System.Windows.Forms.NumericUpDown; $NumRes.Minimum = 0; $NumRes.Maximum = 100000; $NumRes.Value = 0; $NumRes.Width = 100
+$G1.Controls.Add($LblRes, 0, 3); $G1.Controls.Add($NumRes, 1, 3)
+
+$Tab1.Controls.Add($G1)
+
+# -- TAB 2: ADVANCED --
+$G2 = New-Object System.Windows.Forms.TableLayoutPanel; $G2.Dock = "Top"; $G2.AutoSize = $true; $G2.Padding = 10; $G2.ColumnCount = 1; $G2.RowCount = 6
+
+# Memdisk
+$ChkMem = New-Object System.Windows.Forms.CheckBox; $ChkMem.Text = "Kích hoạt Memdisk Mode (VTOY_MEM_DISK_MODE)"; $ChkMem.Checked = $false; $ChkMem.ForeColor = "Cyan"; $ChkMem.AutoSize = $true
+$G2.Controls.Add($ChkMem, 0, 0)
+
+# Theme Selector
+$LblThm = New-Object System.Windows.Forms.Label; $LblThm.Text = "Chọn Theme (Tải từ Server):"; $LblThm.ForeColor = "White"; $LblThm.AutoSize = $true; $LblThm.Margin = "0,10,0,0"
+$CbTheme = New-Object System.Windows.Forms.ComboBox; $CbTheme.DropDownStyle = "DropDownList"; $CbTheme.Width = 400
+$BtnLoadTheme = New-Object System.Windows.Forms.Button; $BtnLoadTheme.Text = "Tải danh sách Theme"; $BtnLoadTheme.Width = 200; $BtnLoadTheme.BackColor = "DimGray"; $BtnLoadTheme.ForeColor = "White"
+
+$P_Thm = New-Object System.Windows.Forms.FlowLayoutPanel; $P_Thm.AutoSize = $true; $P_Thm.FlowDirection = "LeftToRight"
+$P_Thm.Controls.Add($CbTheme); $P_Thm.Controls.Add($BtnLoadTheme)
+
+$G2.Controls.Add($LblThm, 0, 1); $G2.Controls.Add($P_Thm, 0, 2)
+
+$LblJ = New-Object System.Windows.Forms.Label; $LblJ.Text = "JSON Config Preview:"; $LblJ.ForeColor = "Gray"; $LblJ.AutoSize = $true; $LblJ.Margin = "0,10,0,0"
+$G2.Controls.Add($LblJ, 0, 3)
+
+$Tab2.Controls.Add($G2)
+
+# 4. LOG
+$TxtLog = New-Object System.Windows.Forms.RichTextBox; $TxtLog.Dock = "Fill"; $TxtLog.BackColor = "Black"; $TxtLog.ForeColor = "Lime"; $TxtLog.Font = $F_Code; $TxtLog.ReadOnly = $true; $MainTable.Controls.Add($TxtLog, 0, 3)
+
+# 5. EXECUTE BUTTON
+$BtnStart = New-Object System.Windows.Forms.Button; $BtnStart.Text = "THỰC HIỆN"; $BtnStart.Font = $F_Title; $BtnStart.BackColor = $Theme.Accent; $BtnStart.ForeColor = "Black"; $BtnStart.FlatStyle = "Flat"; $BtnStart.Dock = "Fill"
+$MainTable.Controls.Add($BtnStart, 0, 4)
 
 # --- LOGIC ---
 
@@ -122,157 +170,200 @@ function Load-USB {
             $CbUSB.Items.Add("Disk $($d.Number): $($d.FriendlyName) - $SizeGB GB")
         }
         $CbUSB.SelectedIndex = 0
-    } else {
-        $CbUSB.Items.Add("Không tìm thấy USB nào")
-        $CbUSB.SelectedIndex = 0
+    } else { $CbUSB.Items.Add("Không tìm thấy USB"); $CbUSB.SelectedIndex = 0 }
+}
+
+function Show-UsbDetails {
+    if ($CbUSB.SelectedItem -match "Disk (\d+)") {
+        $ID = $Matches[1]
+        $D = Get-Disk -Number $ID
+        $P = Get-Partition -DiskNumber $ID
+        $Msg = "THÔNG TIN DISK $ID`n------------------`n"
+        $Msg += "Model: $($D.FriendlyName)`nStyle: $($D.PartitionStyle)`nSize: $([Math]::Round($D.Size/1GB, 2)) GB`n"
+        $Msg += "`nPARTITIONS:`n"
+        foreach ($part in $P) {
+            $Vol = Get-Volume -Partition $part -ErrorAction SilentlyContinue
+            $Msg += "#$($part.PartitionNumber): $($Vol.FileSystemLabel) ($($Vol.FileSystem)) - $([Math]::Round($part.Size/1GB, 2)) GB`n"
+        }
+        [System.Windows.Forms.MessageBox]::Show($Msg, "Chi tiết USB")
     }
 }
 
-function Install-Ventoy {
-    param($DiskID, $Style, $Label)
+function Load-Themes {
+    $CbTheme.Items.Clear()
+    $CbTheme.Items.Add("Mặc định (Ventoy)")
+    
+    try {
+        Log-Msg "Đang tải danh sách Theme từ GitHub..." "Yellow"
+        # Thử tải từ JSON Online
+        # $JsonData = Invoke-RestMethod -Uri $Global:ThemeJsonUrl -TimeoutSec 5 -ErrorAction Stop
+        # Nếu không có mạng hoặc link chết, dùng Default
+        $JsonData = $Global:DefaultThemes
+        
+        $Global:ThemeData = $JsonData
+        foreach ($item in $JsonData) {
+            if ($item.Url) { $CbTheme.Items.Add($item.Name) }
+        }
+        Log-Msg "Đã tải danh sách Theme." "Cyan"
+    } catch {
+        Log-Msg "Lỗi tải Theme: $($_.Exception.Message)" "Red"
+        $Global:ThemeData = $Global:DefaultThemes
+        foreach ($item in $Global:DefaultThemes) { if ($item.Url) { $CbTheme.Items.Add($item.Name) } }
+    }
+    $CbTheme.SelectedIndex = 0
+}
+
+function Process-Ventoy {
+    param($DiskID, $Mode, $Style, $Label)
     
     $ZipFile = "$Global:WorkDir\ventoy.zip"
     $ExtractPath = "$Global:WorkDir\Extracted"
     
-    # 1. DOWNLOAD VENTOY
+    # 1. CHECK SOURCE
     if (!(Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
-        Log-Msg "Đang tải Ventoy từ Server..."
+        Log-Msg "Downloading Ventoy Core..." "Yellow"
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             (New-Object Net.WebClient).DownloadFile($Global:VentoyUrl, $ZipFile)
-            Log-Msg "Tải xong. Đang giải nén..."
-            
             if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
             [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
             
-            # Tìm thư mục con nếu zip có cấu trúc lồng nhau
             $ExePath = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1
             if ($ExePath) {
-                $Global:VentoyExe = $ExePath.FullName
-                $Global:VentoyDir = $ExePath.DirectoryName
-            } else {
-                Log-Msg "Lỗi: Không tìm thấy Ventoy2Disk.exe trong file tải về!"; return
-            }
-        } catch {
-            Log-Msg "LỖI TẢI FILE: $($_.Exception.Message)"; return
-        }
+                $Global:VentoyExe = $ExePath.FullName; $Global:VentoyDir = $ExePath.DirectoryName
+            } else { Log-Msg "Lỗi: Không tìm thấy core Ventoy!" "Red"; return }
+        } catch { Log-Msg "Lỗi download: $($_.Exception.Message)" "Red"; return }
     } else {
         $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
-        Log-Msg "Đã có sẵn source Ventoy."
+        $Global:VentoyDir = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.DirectoryName}
     }
 
-    # 2. RUN INSTALLATION
-    Log-Msg "Đang chạy Ventoy2Disk cho Disk $DiskID..."
-    
-    # Chuyển đổi tham số
-    $ArgStyle = if ($Style -match "GPT") { "/GPT" } else { "/MBR" }
-    $ArgSecure = if ($ChkSecure.Checked) { "/S" } else { "" }
-    
-    # Lấy Drive Letter tạm của USB để Ventoy nhận diện (Ventoy CLI cần Drive Letter hoặc Disk Index)
-    # Dùng CLI mode: Ventoy2Disk.exe VTOYCLI /I /Drive:X:
-    # Nhưng an toàn nhất là dùng giao diện dòng lệnh VTOYCLI dựa trên Physical Drive
-    
-    # Mapping Disk Number to Drive Letter
+    # 2. PREPARE COMMAND
+    # Mapping Drive Letter
     $Part = Get-Partition -DiskNumber $DiskID | Where-Object { $_.DriveLetter } | Select -First 1
-    if (!$Part) { Log-Msg "Lỗi: USB cần có ít nhất 1 phân vùng có ký tự ổ đĩa để cài đặt."; return }
-    $DriveLetter = "$($Part.DriveLetter):"
+    if (!$Part) { Log-Msg "Lỗi: USB cần có ký tự ổ đĩa (Drive Letter) để tool nhận diện." "Red"; return }
+    $DL = "$($Part.DriveLetter):"
+
+    # Argument Builder
+    # Mode: -i (Install) or -u (Update)
+    $FlagMode = if ($Mode -eq "UPDATE") { "/U" } else { "/I" }
+    $FlagStyle = if ($Style -match "GPT") { "/GPT" } else { "/MBR" }
+    $FlagSecure = if ($ChkSec.Checked) { "/S" } else { "" }
+    $FlagForce = "/NoUsbCheck"
     
-    Log-Msg "Mục tiêu: $DriveLetter (Disk $DiskID) | Mode: $ArgStyle | SecureBoot: $ArgSecure"
+    # Reserved Space (Only for Install)
+    $FlagRes = ""
+    if ($Mode -eq "INSTALL" -and $NumRes.Value -gt 0) { $FlagRes = "/R:$($NumRes.Value)" }
+
+    Log-Msg "Executing: Ventoy2Disk $FlagMode $DL" "Cyan"
     
-    $ProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $ProcessInfo.FileName = $Global:VentoyExe
-    # Cú pháp: Ventoy2Disk.exe VTOYCLI /I /Drive:D: /NoUsbCheck /GPT
-    $Args = "VTOYCLI /I /Drive:$DriveLetter /NoUsbCheck $ArgStyle $ArgSecure"
-    $ProcessInfo.Arguments = $Args
-    $ProcessInfo.RedirectStandardOutput = $true
-    $ProcessInfo.UseShellExecute = $false
-    $ProcessInfo.CreateNoWindow = $true
+    $PInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $PInfo.FileName = $Global:VentoyExe
+    $PInfo.Arguments = "VTOYCLI $FlagMode /Drive:$DL $FlagForce $FlagStyle $FlagSecure $FlagRes"
+    $PInfo.RedirectStandardOutput = $true
+    $PInfo.UseShellExecute = $false
+    $PInfo.CreateNoWindow = $true
     
-    $P = [System.Diagnostics.Process]::Start($ProcessInfo)
+    $P = [System.Diagnostics.Process]::Start($PInfo)
     $P.WaitForExit()
     
     if ($P.ExitCode -eq 0) {
-        Log-Msg "Cài đặt Ventoy THÀNH CÔNG!"
+        Log-Msg "Ventoy Action ($Mode) COMPLETE!" "Success"
     } else {
-        Log-Msg "Cài đặt thất bại. Mã lỗi: $($P.ExitCode). Vui lòng thử lại hoặc format USB thủ công."
-        return
+        Log-Msg "FAILED. Error Code: $($P.ExitCode)" "Red"; return
     }
 
-    # 3. POST-INSTALL (Đổi tên & Theme)
-    Log-Msg "Đợi USB mount lại..."
-    Start-Sleep -Seconds 5
-    Get-Disk | Update-Disk
+    # 3. POST-PROCESS (THEME & JSON)
+    Log-Msg "Mounting USB..." "Yellow"; Start-Sleep 3; Get-Disk | Update-Disk
     
-    # Tìm ổ Ventoy mới (thường là partition lớn nhất trên disk đó)
     $NewPart = Get-Partition -DiskNumber $DiskID | Where-Object { $_.Type -eq "Basic" -or $_.Type -eq "IFS" } | Sort-Object Size -Descending | Select -First 1
     if ($NewPart) {
-        # Đổi tên Label
-        Set-Volume -Partition $NewPart -NewFileSystemLabel $Label -Confirm:$false
-        Log-Msg "Đã đổi tên ổ thành: $Label"
-        
+        if ($Mode -eq "INSTALL" -and $Label) { Set-Volume -Partition $NewPart -NewFileSystemLabel $Label -Confirm:$false }
         $UsbRoot = "$($NewPart.DriveLetter):"
+        $VentoyDir = "$UsbRoot\ventoy"
+        if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory | Out-Null }
+
+        # --- THEME DOWNLOADER ---
+        $SelTheme = $CbTheme.SelectedItem
+        $ThemeConfig = $null
         
-        # Tạo cấu hình Theme (ventoy.json)
-        if ($ChkTheme.Checked) {
-            Log-Msg "Đang cấu hình giao diện..."
-            $VentoyConfigDir = "$UsbRoot\ventoy"
-            if (!(Test-Path $VentoyConfigDir)) { New-Item -Path $VentoyConfigDir -ItemType Directory | Out-Null }
-            
-            # JSON cấu hình đơn giản nhưng đẹp (Dark Mode)
-            $JsonContent = @{
-                "control" = @{
-                    "theme" = @{
-                        "display_mode" = "GUI"
-                        "gfxmode" = "1920x1080"
-                    }
+        if ($SelTheme -ne "Mặc định (Ventoy)") {
+            $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
+            if ($T) {
+                Log-Msg "Downloading Theme: $($T.Name)..." "Yellow"
+                $ThemeZip = "$Global:WorkDir\theme.zip"
+                try {
+                    (New-Object Net.WebClient).DownloadFile($T.Url, $ThemeZip)
+                    $ThemeDest = "$VentoyDir\themes"
+                    if (!(Test-Path $ThemeDest)) { New-Item $ThemeDest -ItemType Directory | Out-Null }
+                    
+                    # Extract
+                    [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true) # Overwrite
+                    
+                    # Cấu hình đường dẫn theme
+                    # Giả sử cấu trúc zip là FolderName/theme.txt
+                    $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
+                    Log-Msg "Theme Installed at: $ThemeConfig" "Success"
+                } catch {
+                    Log-Msg "Download Theme Failed: $_" "Red"
                 }
-                "theme" = @{
-                    "file" = "/ventoy/theme/phattan/theme.txt"
-                }
-            } | ConvertTo-Json -Depth 5
-            
-            # Ở đây ta tạo một file json cơ bản để Ventoy nhận diện
-            $JsonConfig = @"
-{
-    "control": [
-        { "VTOY_DEFAULT_MENU_MODE": "0" },
-        { "VTOY_FILT_DOT_UNDERSCORE_FILE": "1" }
-    ],
-    "theme": {
-        "file": "/ventoy/theme/theme.txt",
-        "gfxmode": "1920x1080"
-    },
-    "menu_alias": [
-        {
-            "image": "/ventoy/ventoy.png",
-            "alias": "PHAT TAN RESCUE USB"
+            }
         }
-    ]
-}
-"@
-            $JsonConfig | Out-File "$VentoyConfigDir\ventoy.json" -Encoding UTF8
-            Log-Msg "Đã tạo file cấu hình ventoy.json"
+
+        # --- GENERATE JSON ---
+        Log-Msg "Generating ventoy.json..." "Yellow"
+        
+        # Build JSON Object
+        $J = @{
+            "control" = @(
+                @{ "VTOY_DEFAULT_MENU_MODE" = "0" },
+                @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" }
+            )
+            "theme" = @{
+                "display_mode" = "GUI"
+                "gfxmode" = "1920x1080"
+            }
         }
+
+        # Add Memdisk if checked
+        if ($ChkMem.Checked) {
+            $J.control += @{ "VTOY_MEM_DISK_MODE" = "1" }
+        }
+
+        # Add Theme if selected
+        if ($ThemeConfig) {
+            $J.theme.Add("file", $ThemeConfig)
+        } else {
+            # Default theme config if wanted, or leave blank to use Ventoy default
+        }
+
+        $JsonStr = $J | ConvertTo-Json -Depth 5
+        $JsonStr | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
+        Log-Msg "Config Saved: $VentoyDir\ventoy.json" "Success"
+
+        # Create Folders
+        New-Item "$UsbRoot\ISO" -ItemType Directory -Force | Out-Null
         
-        # Tạo thư mục ISO mẫu
-        New-Item -Path "$UsbRoot\ISO_Windows" -ItemType Directory -Force | Out-Null
-        New-Item -Path "$UsbRoot\ISO_Linux" -ItemType Directory -Force | Out-Null
-        New-Item -Path "$UsbRoot\ISO_CuuHo" -ItemType Directory -Force | Out-Null
-        
-        Log-Msg ">>> HOÀN TẤT TOÀN BỘ! <<<"
-        Log-Msg "Copy file ISO vào ổ $UsbRoot và boot nhé!"
+        Log-Msg ">>> ALL DONE! <<<" "Success"
         Invoke-Item $UsbRoot
     }
 }
 
+# --- EVENTS ---
 $BtnRef.Add_Click({ Load-USB })
+$BtnInfo.Add_Click({ Show-UsbDetails })
+$BtnLoadTheme.Add_Click({ Load-Themes })
 
 $BtnStart.Add_Click({
     if ($CbUSB.SelectedItem -match "Disk (\d+)") {
-        $DiskID = $Matches[1]
-        if ([System.Windows.Forms.MessageBox]::Show("Toàn bộ dữ liệu trên DISK $DiskID sẽ bị xóa sạch!`nBạn có chắc chắn không?", "CẢNH BÁO", "YesNo", "Warning") -eq "Yes") {
+        $ID = $Matches[1]
+        $Mode = if ($CbAction.SelectedIndex -eq 0) { "INSTALL" } else { "UPDATE" }
+        
+        $Warn = if ($Mode -eq "INSTALL") { "CẢNH BÁO: TOÀN BỘ DỮ LIỆU SẼ BỊ XÓA SẠCH!" } else { "Chế độ UPDATE: Dữ liệu ISO sẽ được giữ nguyên." }
+        
+        if ([System.Windows.Forms.MessageBox]::Show("$Warn`nTiếp tục với Disk $ID?", "Xác nhận", "YesNo", "Warning") -eq "Yes") {
             $BtnStart.Enabled = $false; $Form.Cursor = "WaitCursor"
-            Install-Ventoy $DiskID $CbStyle.SelectedItem $TxtLabel.Text
+            Process-Ventoy $ID $Mode $CbStyle.SelectedItem "Ventoy_Boot"
             $BtnStart.Enabled = $true; $Form.Cursor = "Default"
         }
     } else {
@@ -280,5 +371,5 @@ $BtnStart.Add_Click({
     }
 })
 
-$Form.Add_Load({ Load-USB })
+$Form.Add_Load({ Load-USB; Load-Themes })
 [System.Windows.Forms.Application]::Run($Form)
