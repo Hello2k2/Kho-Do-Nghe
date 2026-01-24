@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V5.9 REAL-TIME LOG)
+    VENTOY BOOT MAKER - PHAT TAN PC (V6.0 SMART AUTO-UPDATE)
     Updates:
-    - [FIX] Sửa lỗi treo (Hang) khi chạy lệnh Ventoy.
-    - [LOG] Hiển thị tiến trình % cài đặt trực tiếp lên màn hình.
-    - [CORE] Giữ nguyên cơ chế tìm ổ đĩa DiskPart mạnh mẽ của V5.8.
+    - [SMART UPDATE] Tự động so sánh version: Nếu Server có bản mới hơn -> Tải lại.
+    - [FIX] DiskPart & WMI Hybrid Detection (Giữ nguyên từ V5.9).
+    - [UI] Hiển thị rõ phiên bản đang dùng.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -20,10 +20,11 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
-$Global:VentoyFallbackUrl = "https://github.com/ventoy/Ventoy/releases/download/v1.0.97/ventoy-1.0.97-windows.zip"
+$Global:VentoyFallbackUrl = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
 $Global:ThemeJsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/themes_ventoy.json" 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
+$Global:VersionFile = "$Global:WorkDir\current_version.txt"
 
 $Global:DefaultThemes = @(
     @{ Name="Ventoy Default"; Url=""; File=""; Folder="" },
@@ -62,7 +63,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V5.9 (REAL-TIME LOG)"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V6.0 (SMART UPDATE)"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -76,7 +77,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Win Super Lite Support | Real-time Logging | JSON Config"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Smart Auto-Update (Check Version) | Win Lite Fix | JSON Config"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -158,13 +159,8 @@ function Get-DriveLetter-DiskPart ($DiskIndex) {
         $DpScript = "$env:TEMP\dp_vol_check.txt"
         "select disk $DiskIndex`ndetail disk" | Out-File $DpScript -Encoding ASCII -Force
         $Output = & diskpart /s $DpScript
-        
-        # Regex tìm dòng "Volume X   E   Label..."
-        # Cột Ltr thường là cột thứ 3 hoặc được bao quanh bởi khoảng trắng
         foreach ($Line in $Output) {
-            if ($Line -match "Volume \d+\s+([A-Z])\s+") {
-                return "$($Matches[1]):"
-            }
+            if ($Line -match "Volume \d+\s+([A-Z])\s+") { return "$($Matches[1]):" }
         }
     } catch {}
     return $null
@@ -173,7 +169,6 @@ function Get-DriveLetter-DiskPart ($DiskIndex) {
 function Load-USB {
     $CbUSB.Items.Clear()
     $Found = $false
-
     # CÁCH 1: Get-Disk (Win Full)
     if (Get-Command Get-Disk -ErrorAction SilentlyContinue) {
         try {
@@ -187,7 +182,6 @@ function Load-USB {
             }
         } catch { Log-Msg "Get-Disk lỗi, thử WMI..." "Warn" }
     }
-
     # CÁCH 2: WMI / DiskPart (Win Lite)
     if (-not $Found) {
         try {
@@ -203,7 +197,6 @@ function Load-USB {
             }
         } catch { Log-Msg "Lỗi WMI: $($_.Exception.Message)" "Red" }
     }
-
     if (-not $Found) { $CbUSB.Items.Add("Không tìm thấy USB"); $CbUSB.SelectedIndex = 0 }
     else { $CbUSB.SelectedIndex = 0 }
 }
@@ -220,19 +213,44 @@ function Show-UsbDetails {
     }
 }
 
-function Get-LatestVentoyVersion {
-    Log-Msg "Đang check version Ventoy mới nhất từ GitHub..." "Yellow"
+# --- SMART UPDATE FUNCTION ---
+function Get-Ventoy-Smart {
+    Log-Msg "--- KIỂM TRA PHIÊN BẢN VENTOY ---" "Yellow"
+    $LocalVer = "0.0.0"
+    if (Test-Path $Global:VersionFile) { $LocalVer = Get-Content $Global:VersionFile }
+    
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $ApiUrl = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
         $Response = Invoke-RestMethod -Uri $ApiUrl -UseBasicParsing -TimeoutSec 10
+        $OnlineVer = $Response.tag_name # Ex: v1.0.99
+        
         $Asset = $Response.assets | Where-Object { $_.name -match "windows.zip" } | Select-Object -First 1
-        if ($Asset) {
-            Log-Msg "Tìm thấy bản mới: $($Response.tag_name)" "Cyan"
-            return $Asset.browser_download_url
+        $DownloadUrl = if ($Asset) { $Asset.browser_download_url } else { $Global:VentoyFallbackUrl }
+
+        Log-Msg "Server: $OnlineVer | Local: $LocalVer" "Cyan"
+
+        # Nếu version khác nhau -> Tải mới
+        if ($OnlineVer -ne $LocalVer) {
+            Log-Msg ">> Phát hiện bản mới! Đang cập nhật..." "Success"
+            $ZipFile = "$Global:WorkDir\ventoy.zip"
+            $ExtractPath = "$Global:WorkDir\Extracted"
+            
+            # Clean old files
+            if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
+            
+            (New-Object Net.WebClient).DownloadFile($DownloadUrl, $ZipFile)
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
+            
+            # Save new version
+            $OnlineVer | Out-File $Global:VersionFile -Force
+            Log-Msg "Cập nhật thành công: $OnlineVer" "Success"
+        } else {
+            Log-Msg "Core Ventoy đã là mới nhất. Sẵn sàng!" "Gray"
         }
-    } catch { Log-Msg "Lỗi check update (hoặc hết lượt request). Dùng link mặc định." "Warn" }
-    return $Global:VentoyFallbackUrl
+    } catch {
+        Log-Msg "Không check được Update (Lỗi mạng). Dùng bản Offline." "Warn"
+    }
 }
 
 function Load-Themes {
@@ -254,28 +272,13 @@ function Load-Themes {
 function Process-Ventoy {
     param($DiskID, $Mode, $Style, $Label)
     
-    # 1. DOWNLOAD VENTOY
-    $DownloadUrl = Get-LatestVentoyVersion
-    $ZipFile = "$Global:WorkDir\ventoy.zip"
-    $ExtractPath = "$Global:WorkDir\Extracted"
+    # 1. AUTO UPDATE CHECK
+    Get-Ventoy-Smart
     
-    if (!(Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
-        Log-Msg "Đang tải Ventoy..." "Yellow"
-        try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            (New-Object Net.WebClient).DownloadFile($DownloadUrl, $ZipFile)
-            if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
-            
-            $ExePath = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1
-            if ($ExePath) {
-                $Global:VentoyExe = $ExePath.FullName; $Global:VentoyDir = $ExePath.DirectoryName
-            } else { Log-Msg "Lỗi: Không tìm thấy Ventoy2Disk.exe!" "Red"; return }
-        } catch { Log-Msg "Lỗi tải: $($_.Exception.Message)" "Red"; return }
-    } else {
-        $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
-        $Global:VentoyDir = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.DirectoryName}
-    }
+    $ExtractPath = "$Global:WorkDir\Extracted"
+    $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
+    
+    if (!$Global:VentoyExe) { Log-Msg "LỖI: Không tìm thấy file Ventoy2Disk.exe!" "Red"; return }
 
     # 2. GET DRIVE LETTER (TRIPLE CHECK)
     Log-Msg "Đang tìm ký tự ổ đĩa (Drive Letter)..." "Yellow"
@@ -297,7 +300,7 @@ function Process-Ventoy {
 
     Log-Msg "Mục tiêu xác định: $DL (Disk $DiskID)" "Cyan"
 
-    # 3. RUN COMMAND (REAL-TIME LOGGING FIX)
+    # 3. RUN COMMAND (REAL-TIME LOGGING)
     $FlagMode = if ($Mode -eq "UPDATE") { "/U" } else { "/I" }
     $FlagStyle = if ($Style -match "GPT") { "/GPT" } else { "/MBR" }
     $FlagSecure = if ($ChkSec.Checked) { "/S" } else { "" }
@@ -314,7 +317,7 @@ function Process-Ventoy {
     
     $P = [System.Diagnostics.Process]::Start($PInfo)
     
-    # --- LOOP ĐỌC OUTPUT ĐỂ KHÔNG BỊ TREO GUI ---
+    # --- LOOP ĐỌC OUTPUT ---
     while (!$P.StandardOutput.EndOfStream) {
         $Line = $P.StandardOutput.ReadLine()
         if ($Line) { Log-Msg ">> $Line" "Gray" }
