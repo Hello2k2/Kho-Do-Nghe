@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V6.0 SMART AUTO-UPDATE)
+    VENTOY BOOT MAKER - PHAT TAN PC (V6.1 ASYNC LOGGING)
     Updates:
-    - [SMART UPDATE] Tự động so sánh version: Nếu Server có bản mới hơn -> Tải lại.
-    - [FIX] DiskPart & WMI Hybrid Detection (Giữ nguyên từ V5.9).
-    - [UI] Hiển thị rõ phiên bản đang dùng.
+    - [FIX CRITICAL] Sửa lỗi treo GUI khi đọc log từ Ventoy (Chuyển sang Async Events).
+    - [SMART] Tự động cuộn xuống dòng cuối cùng của Log.
+    - [CORE] Giữ nguyên các tính năng Hybrid Fix DiskPart/WMI/Auto-Update.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -44,12 +44,13 @@ $Theme = @{
 
 # --- HELPER FUNCTIONS ---
 function Log-Msg ($Msg, $Color="Lime") { 
-    $TxtLog.SelectionStart = $TxtLog.TextLength
-    $TxtLog.SelectionLength = 0
-    $TxtLog.SelectionColor = [System.Drawing.Color]::FromName($Color)
-    $TxtLog.AppendText("[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n")
-    $TxtLog.ScrollToCaret()
-    [System.Windows.Forms.Application]::DoEvents()
+    $Form.Invoke([Action]{
+        $TxtLog.SelectionStart = $TxtLog.TextLength
+        $TxtLog.SelectionLength = 0
+        $TxtLog.SelectionColor = [System.Drawing.Color]::FromName($Color)
+        $TxtLog.AppendText("[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n")
+        $TxtLog.ScrollToCaret()
+    })
 }
 
 function Add-GlowBorder ($Panel) {
@@ -63,7 +64,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V6.0 (SMART UPDATE)"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V6.1 (ASYNC LOG)"; $Form.Size = "900,780"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -77,7 +78,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Smart Auto-Update (Check Version) | Win Lite Fix | JSON Config"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Async Logging (No Freeze) | Win Lite Fix | JSON Config"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -230,19 +231,16 @@ function Get-Ventoy-Smart {
 
         Log-Msg "Server: $OnlineVer | Local: $LocalVer" "Cyan"
 
-        # Nếu version khác nhau -> Tải mới
         if ($OnlineVer -ne $LocalVer) {
             Log-Msg ">> Phát hiện bản mới! Đang cập nhật..." "Success"
             $ZipFile = "$Global:WorkDir\ventoy.zip"
             $ExtractPath = "$Global:WorkDir\Extracted"
             
-            # Clean old files
             if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
             
             (New-Object Net.WebClient).DownloadFile($DownloadUrl, $ZipFile)
             [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
             
-            # Save new version
             $OnlineVer | Out-File $Global:VersionFile -Force
             Log-Msg "Cập nhật thành công: $OnlineVer" "Success"
         } else {
@@ -280,7 +278,7 @@ function Process-Ventoy {
     
     if (!$Global:VentoyExe) { Log-Msg "LỖI: Không tìm thấy file Ventoy2Disk.exe!" "Red"; return }
 
-    # 2. GET DRIVE LETTER (TRIPLE CHECK)
+    # 2. GET DRIVE LETTER
     Log-Msg "Đang tìm ký tự ổ đĩa (Drive Letter)..." "Yellow"
     $DL = $null
     
@@ -300,7 +298,7 @@ function Process-Ventoy {
 
     Log-Msg "Mục tiêu xác định: $DL (Disk $DiskID)" "Cyan"
 
-    # 3. RUN COMMAND (REAL-TIME LOGGING)
+    # 3. RUN COMMAND (ASYNC MODE)
     $FlagMode = if ($Mode -eq "UPDATE") { "/U" } else { "/I" }
     $FlagStyle = if ($Style -match "GPT") { "/GPT" } else { "/MBR" }
     $FlagSecure = if ($ChkSec.Checked) { "/S" } else { "" }
@@ -312,65 +310,80 @@ function Process-Ventoy {
     $PInfo.FileName = $Global:VentoyExe
     $PInfo.Arguments = "VTOYCLI $FlagMode /Drive:$DL /NoUsbCheck $FlagStyle $FlagSecure $FlagRes"
     $PInfo.RedirectStandardOutput = $true
+    $PInfo.RedirectStandardError = $true
     $PInfo.UseShellExecute = $false
     $PInfo.CreateNoWindow = $true
     
-    $P = [System.Diagnostics.Process]::Start($PInfo)
+    $P = New-Object System.Diagnostics.Process
+    $P.StartInfo = $PInfo
     
-    # --- LOOP ĐỌC OUTPUT ---
-    while (!$P.StandardOutput.EndOfStream) {
-        $Line = $P.StandardOutput.ReadLine()
-        if ($Line) { Log-Msg ">> $Line" "Gray" }
-        [System.Windows.Forms.Application]::DoEvents()
-    }
+    # Event Handlers for Real-time Log
+    $P.Add_OutputDataReceived({ 
+        if (![string]::IsNullOrEmpty($_.Data)) { Log-Msg ">> $($_.Data)" "Gray" } 
+    })
+    $P.Add_ErrorDataReceived({ 
+        if (![string]::IsNullOrEmpty($_.Data)) { Log-Msg "ERR: $($_.Data)" "Red" } 
+    })
     
-    $P.WaitForExit()
+    $P.EnableRaisingEvents = $true
     
-    if ($P.ExitCode -eq 0) {
-        Log-Msg "Thành công!" "Success"
-        Start-Sleep 2
-        
-        $NewDL = Get-DriveLetter-DiskPart $DiskID
-        if ($NewDL) { $UsbRoot = $NewDL } else { $UsbRoot = $DL }
-        
-        if (Test-Path $UsbRoot) {
-            $VentoyDir = "$UsbRoot\ventoy"
-            if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory | Out-Null }
+    # KHI VENTOY CHẠY XONG
+    $P.Add_Exited({
+        $ExitCode = $P.ExitCode
+        $Form.Invoke([Action]{
+            if ($ExitCode -eq 0) {
+                Log-Msg "VENTOY SUCCESS!" "Success"
+                Start-Sleep 2
+                
+                # 4. POST CONFIG
+                $NewDL = Get-DriveLetter-DiskPart $DiskID
+                if ($NewDL) { $UsbRoot = $NewDL } else { $UsbRoot = $DL }
+                
+                if (Test-Path $UsbRoot) {
+                    $VentoyDir = "$UsbRoot\ventoy"
+                    if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory | Out-Null }
 
-            # Install Theme
-            $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
-            if ($SelTheme -ne "Mặc định (Ventoy)") {
-                $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
-                if ($T) {
-                    $ThemeZip = "$Global:WorkDir\theme.zip"
-                    try {
-                        (New-Object Net.WebClient).DownloadFile($T.Url, $ThemeZip)
-                        $ThemeDest = "$VentoyDir\themes"
-                        if (!(Test-Path $ThemeDest)) { New-Item $ThemeDest -ItemType Directory | Out-Null }
-                        [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
-                        $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
-                    } catch {}
+                    # Install Theme
+                    $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
+                    if ($SelTheme -ne "Mặc định (Ventoy)") {
+                        $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
+                        if ($T) {
+                            $ThemeZip = "$Global:WorkDir\theme.zip"
+                            try {
+                                (New-Object Net.WebClient).DownloadFile($T.Url, $ThemeZip)
+                                $ThemeDest = "$VentoyDir\themes"
+                                if (!(Test-Path $ThemeDest)) { New-Item $ThemeDest -ItemType Directory | Out-Null }
+                                [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
+                                $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
+                            } catch {}
+                        }
+                    }
+
+                    # Generate JSON
+                    $J = @{
+                        "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
+                        "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" }
+                    }
+                    if ($ChkMem.Checked) { $J.control += @{ "VTOY_MEM_DISK_MODE" = "1" } }
+                    if ($ThemeConfig) { $J.theme.Add("file", $ThemeConfig) }
+
+                    $J | ConvertTo-Json -Depth 5 | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
+                    New-Item "$UsbRoot\ISO" -ItemType Directory -Force | Out-Null
+                    Log-Msg "Cấu hình hoàn tất. Copy ISO vào ổ $UsbRoot." "Success"
+                    Invoke-Item $UsbRoot
+                } else {
+                    Log-Msg "Không thể truy cập USB để chép config (Cần rút ra cắm lại)." "Warn"
                 }
+            } else {
+                Log-Msg "Lỗi Ventoy2Disk. Mã lỗi: $ExitCode" "Red"
             }
+            $BtnStart.Enabled = $true; $Form.Cursor = "Default"
+        })
+    })
 
-            # Generate JSON
-            $J = @{
-                "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
-                "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" }
-            }
-            if ($ChkMem.Checked) { $J.control += @{ "VTOY_MEM_DISK_MODE" = "1" } }
-            if ($ThemeConfig) { $J.theme.Add("file", $ThemeConfig) }
-
-            $J | ConvertTo-Json -Depth 5 | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
-            New-Item "$UsbRoot\ISO" -ItemType Directory -Force | Out-Null
-            Log-Msg "Cấu hình hoàn tất. Copy ISO vào ổ $UsbRoot." "Success"
-            Invoke-Item $UsbRoot
-        } else {
-            Log-Msg "Không thể truy cập USB để chép config (Cần rút ra cắm lại)." "Warn"
-        }
-    } else {
-        Log-Msg "Lỗi Ventoy2Disk. Mã lỗi: $($P.ExitCode)" "Red"; return
-    }
+    $P.Start() | Out-Null
+    $P.BeginOutputReadLine()
+    $P.BeginErrorReadLine()
 }
 
 $BtnRef.Add_Click({ Load-USB })
@@ -385,7 +398,6 @@ $BtnStart.Add_Click({
         if ([System.Windows.Forms.MessageBox]::Show("$Warn`nTiếp tục với Disk $ID?", "Xác nhận", "YesNo", "Warning") -eq "Yes") {
             $BtnStart.Enabled = $false; $Form.Cursor = "WaitCursor"
             Process-Ventoy $ID $Mode $CbStyle.SelectedItem "Ventoy_Boot"
-            $BtnStart.Enabled = $true; $Form.Cursor = "Default"
         }
     } else { [System.Windows.Forms.MessageBox]::Show("Chưa chọn USB!") }
 })
