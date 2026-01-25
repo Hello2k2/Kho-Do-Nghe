@@ -1,10 +1,10 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V10.5 ULTIMATE DIAGNOSTIC)
+    VENTOY BOOT MAKER - PHAT TAN PC (V11.0 ULTRA AIO)
     Updates:
-    - [FIX] Sửa lỗi Get-Disk crash trên Win Lite (Dùng DiskPart Parser để check MBR/GPT).
-    - [INFO] Xem Health, Bus Type (2.0/3.0), Status.
-    - [GUI] Cửa sổ chi tiết mới có nút COPY log.
-    - [BOT] Math Captcha bảo mật.
+    - [STRUCTURE] Full Data Folders (Docs, Music, Apps...) & License Folders.
+    - [ACTIVATION] Tự động tải MAS AIO (Tool kích hoạt Win/Office) về USB.
+    - [RENAME FIX] Vòng lặp cưỡng chế đổi tên Label (Fix lỗi tên Ventoy cứng đầu).
+    - [LIVECD] Đổi tên thành "NangCap_UsbBoot.iso" và để ở Root.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -23,10 +23,14 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
+$Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
 $Global:VersionFile = "$Global:WorkDir\current_version.txt"
+
+# Reset Log
+"--- START LOG $(Get-Date) ---" | Out-File $Global:DebugFile -Encoding UTF8 -Force
 
 $Global:DefaultThemes = @(
     @{ Name="Ventoy Default"; Url=""; File=""; Folder="" },
@@ -69,7 +73,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V10.5 (DIAGNOSTIC)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V11.0 (ULTRA AIO)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -83,7 +87,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Hardware Info | Deep Scan | Anti-Crash | Auto Update"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto MAS Activator | Full Data Structure | Rename Fix | Deep Scan"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -112,31 +116,39 @@ $G1 = New-Object System.Windows.Forms.TableLayoutPanel; $G1.Dock = "Top"; $G1.Au
 $G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 40)))
 $G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 60)))
 
+# 1. Action Mode
 $LblAct = New-Object System.Windows.Forms.Label; $LblAct.Text = "Chế độ (Mode):"; $LblAct.ForeColor = "White"; $LblAct.AutoSize = $true
 $CbAction = New-Object System.Windows.Forms.ComboBox; $CbAction.Items.AddRange(@("Cài mới (Xóa sạch & Format)", "Cập nhật Ventoy (Giữ Data)")); $CbAction.SelectedIndex = 0; $CbAction.DropDownStyle = "DropDownList"; $CbAction.Width = 300
 $G1.Controls.Add($LblAct, 0, 0); $G1.Controls.Add($CbAction, 1, 0)
 
+# 2. Partition Style
 $LblSty = New-Object System.Windows.Forms.Label; $LblSty.Text = "Kiểu Partition:"; $LblSty.ForeColor = "White"; $LblSty.AutoSize = $true
 $CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy + UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex = 0; $CbStyle.DropDownStyle = "DropDownList"; $CbStyle.Width = 300
 $G1.Controls.Add($LblSty, 0, 1); $G1.Controls.Add($CbStyle, 1, 1)
 
+# 3. Label Name
 $LblName = New-Object System.Windows.Forms.Label; $LblName.Text = "Tên USB (Label):"; $LblName.ForeColor = "White"; $LblName.AutoSize = $true
 $TxtLabel = New-Object System.Windows.Forms.TextBox; $TxtLabel.Text = "PhatTan_Boot"; $TxtLabel.Width = 300; $TxtLabel.BackColor = $Theme.InputBg; $TxtLabel.ForeColor = "Cyan"
 $G1.Controls.Add($LblName, 0, 2); $G1.Controls.Add($TxtLabel, 1, 2)
 
+# 4. File System
 $LblFS = New-Object System.Windows.Forms.Label; $LblFS.Text = "Định dạng (Format):"; $LblFS.ForeColor = "White"; $LblFS.AutoSize = $true
 $CbFS = New-Object System.Windows.Forms.ComboBox; $CbFS.Items.AddRange(@("exFAT (Khuyên dùng)", "NTFS (Tương thích Win)", "FAT32 (Max 4GB/file)")); $CbFS.SelectedIndex = 0; $CbFS.DropDownStyle = "DropDownList"; $CbFS.Width = 300
 $G1.Controls.Add($LblFS, 0, 3); $G1.Controls.Add($CbFS, 1, 3)
 
-$ChkLive = New-Object System.Windows.Forms.CheckBox; $ChkLive.Text = "Tải & Cài Ventoy LiveCD ISO (Newest)"; $ChkLive.Checked = $true; $ChkLive.ForeColor = "Yellow"; $ChkLive.AutoSize = $true
+# 5. LiveCD Option
+$ChkLive = New-Object System.Windows.Forms.CheckBox; $ChkLive.Text = "Tải & Cài LiveCD (Đổi tên: NangCap_UsbBoot.iso)"; $ChkLive.Checked = $true; $ChkLive.ForeColor = "Yellow"; $ChkLive.AutoSize = $true
 $G1.Controls.Add($ChkLive, 0, 4); $G1.SetColumnSpan($ChkLive, 2)
 
-$ChkDir = New-Object System.Windows.Forms.CheckBox; $ChkDir.Text = "Tạo bộ lọc thư mục (Windows/Linux/Rescue...)"; $ChkDir.Checked = $true; $ChkDir.ForeColor = "Lime"; $ChkDir.AutoSize = $true
+# 6. Folder Structure
+$ChkDir = New-Object System.Windows.Forms.CheckBox; $ChkDir.Text = "Tạo Full Cấu trúc (DATA, Bản Quyền, ISO, MAS...)"; $ChkDir.Checked = $true; $ChkDir.ForeColor = "Lime"; $ChkDir.AutoSize = $true
 $G1.Controls.Add($ChkDir, 0, 5); $G1.SetColumnSpan($ChkDir, 2)
 
+# 7. Secure Boot
 $ChkSec = New-Object System.Windows.Forms.CheckBox; $ChkSec.Text = "Bật Secure Boot Support"; $ChkSec.Checked = $true; $ChkSec.ForeColor = "Orange"; $ChkSec.AutoSize = $true
 $G1.Controls.Add($ChkSec, 0, 6); $G1.SetColumnSpan($ChkSec, 2)
 
+# 8. ANTI BOT CHECKBOX (MATH)
 $ChkAntiBot = New-Object System.Windows.Forms.CheckBox; $ChkAntiBot.Text = "🛡️ Xác thực Math-Bot (Phép toán)"; $ChkAntiBot.Checked = $true; $ChkAntiBot.ForeColor = "Red"; $ChkAntiBot.AutoSize = $true
 $G1.Controls.Add($ChkAntiBot, 0, 7); $G1.SetColumnSpan($ChkAntiBot, 2)
 
@@ -170,7 +182,7 @@ $BtnStart = New-Object System.Windows.Forms.Button; $BtnStart.Text = "THỰC HI�
 $MainTable.Controls.Add($BtnStart, 0, 4)
 
 # ==========================================
-# 🛡️ ANTI-BOT LOGIC (MATH CAPTCHA)
+# 🛡️ ANTI-BOT & INFO LOGIC
 # ==========================================
 
 function Check-MathBot {
@@ -179,10 +191,6 @@ function Check-MathBot {
     $UserAns = [Microsoft.VisualBasic.Interaction]::InputBox("Xác thực bảo mật:`n`nHãy tính: $A + $B = ?", "Anti-Bot Verification", "")
     if ($UserAns -eq "$Result") { return $true } else { [System.Windows.Forms.MessageBox]::Show("Sai rồi!", "Cảnh báo", "OK", "Error"); return $false }
 }
-
-# ==========================================
-# ⚡ CORE LOGIC
-# ==========================================
 
 function Force-Disk-Refresh {
     Log-Msg "Auto F5: Rescan Disk..." "Yellow"
@@ -203,45 +211,19 @@ function Get-DriveLetter-DiskPart ($DiskIndex) {
     return $null
 }
 
-function Get-DriveLetter-WMI ($DiskIndex) {
-    try {
-        $EscapedIndex = "\\\\.\\PHYSICALDRIVE$DiskIndex"
-        $Query = "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$EscapedIndex'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
-        $Partitions = Get-WmiObject -Query $Query -ErrorAction SilentlyContinue
-        foreach ($Part in $Partitions) {
-            $Query2 = "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($Part.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
-            $LogDisk = Get-WmiObject -Query $Query2 -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($LogDisk.DeviceID) { return $LogDisk.DeviceID }
-        }
-    } catch {}
-    return $null
-}
-
-# --- FIX: ROBUST PARTITION STYLE CHECK ---
 function Get-Partition-Style-Robust ($DiskIndex) {
-    # 1. Try Get-Disk (Wrap in try/catch to avoid crash on Win Lite)
-    try {
-        if (Get-Command Get-Disk -EA 0) {
-            return (Get-Disk -Number $DiskIndex -ErrorAction Stop).PartitionStyle
-        }
-    } catch {}
-
-    # 2. Try DiskPart (Fallback)
+    try { if (Get-Command Get-Disk -EA 0) { return (Get-Disk -Number $DiskIndex -ErrorAction Stop).PartitionStyle } } catch {}
     try {
         $DpScript = "$env:TEMP\dp_style.txt"
         "list disk" | Out-File $DpScript -Encoding ASCII -Force
         $Output = & diskpart /s $DpScript
-        # Parse output: "Disk 3    Online      14 GB  0 B        *"  <-- The * means GPT
         foreach ($Line in $Output) {
-            if ($Line -match "Disk $DiskIndex\s+.*") {
-                if ($Line -match "\*\s*$") { return "GPT" } else { return "MBR" }
-            }
+            if ($Line -match "Disk $DiskIndex\s+.*") { if ($Line -match "\*\s*$") { return "GPT" } else { return "MBR" } }
         }
     } catch {}
     return "Unknown"
 }
 
-# --- CHECK VENTOY INSTALLED ---
 function Check-Ventoy-Status ($DiskIndex) {
     try {
         $DpScript = "$env:TEMP\dp_vtoy_check.txt"
@@ -252,88 +234,37 @@ function Check-Ventoy-Status ($DiskIndex) {
     return $false
 }
 
-function Load-USB {
-    $CbUSB.Items.Clear(); $Found = $false; Force-Disk-Refresh
-    if (Get-Command Get-Disk -ErrorAction SilentlyContinue) {
-        try {
-            $Disks = Get-Disk | Where-Object { $_.BusType -eq "USB" -or $_.MediaType -eq "Removable" }
-            if ($Disks) {
-                foreach ($d in $Disks) { $SizeGB = [Math]::Round($d.Size / 1GB, 1); $CbUSB.Items.Add("Disk $($d.Number): $($d.FriendlyName) - $SizeGB GB") }
-                $Found = $true
-            }
-        } catch {}
-    }
-    if (-not $Found) {
-        try {
-            $WmiDisks = Get-WmiObject Win32_DiskDrive | Where-Object { $_.InterfaceType -eq "USB" -or $_.MediaType -match "Removable" }
-            if ($WmiDisks) {
-                foreach ($d in $WmiDisks) { $Size = $d.Size; if (!$Size) { $Size = 0 }; $SizeGB = [Math]::Round($Size / 1GB, 1); $CbUSB.Items.Add("Disk $($d.Index): $($d.Model) - $SizeGB GB") }
-                $Found = $true
-            }
-        } catch {}
-    }
-    if (-not $Found) { $CbUSB.Items.Add("Không tìm thấy USB"); $CbUSB.SelectedIndex = 0 } else { $CbUSB.SelectedIndex = 0 }
-}
-
-# --- NEW: PRO INFO BOX WITH COPY BUTTON ---
+# --- PRO INFO BOX ---
 function Show-UsbDetails-Pro {
     if ($CbUSB.SelectedItem -match "Disk (\d+)") {
         $ID = $Matches[1]
-        
-        # Gather Info
         $D_Model = "Unknown"; $D_Size = "Unknown"; $D_Interface = "Unknown"; $D_Status = "Unknown"
-        
         try {
             $WmiD = Get-WmiObject Win32_DiskDrive | Where-Object { $_.Index -eq $ID }
             if ($WmiD) {
-                $D_Model = $WmiD.Model
-                $D_Size = "$([Math]::Round($WmiD.Size/1GB, 2)) GB"
-                $D_Interface = $WmiD.InterfaceType
-                $D_Status = $WmiD.Status
+                $D_Model = $WmiD.Model; $D_Size = "$([Math]::Round($WmiD.Size/1GB, 2)) GB"; $D_Interface = $WmiD.InterfaceType; $D_Status = $WmiD.Status
             }
         } catch {}
-        
-        $DL = Get-DriveLetter-DiskPart $ID
-        $Style = Get-Partition-Style-Robust $ID
-        $IsVentoy = Check-Ventoy-Status $ID
+        $DL = Get-DriveLetter-DiskPart $ID; $Style = Get-Partition-Style-Robust $ID; $IsVentoy = Check-Ventoy-Status $ID
         $VStatus = if ($IsVentoy) { "ĐÃ CÀI (Installed)" } else { "CHƯA CÀI (Clean)" }
         
-        $Report =  "=== USB DIAGNOSTIC REPORT ===`r`n"
-        $Report += "Thời gian: $(Get-Date -F 'dd/MM/yyyy HH:mm:ss')`r`n"
-        $Report += "-----------------------------`r`n"
-        $Report += "Device ID    : Disk $ID`r`n"
-        $Report += "Tên Model    : $D_Model`r`n"
-        $Report += "Dung lượng   : $D_Size`r`n"
-        $Report += "Giao tiếp    : $D_Interface`r`n"
-        $Report += "Trạng thái   : $D_Status`r`n"
-        $Report += "-----------------------------`r`n"
-        $Report += "Ký tự ổ (Win): $DL`r`n"
-        $Report += "Chuẩn Boot   : $Style`r`n"
-        $Report += "Ventoy Status: $VStatus`r`n"
-        $Report += "-----------------------------`r`n"
-        $Report += "* Note: Số lần đọc/ghi (TBW) không khả dụng qua kết nối USB thông thường."
+        $Report =  "=== USB DIAGNOSTIC REPORT ===`r`n-----------------------------`r`n"
+        $Report += "Device ID    : Disk $ID`r`nTên Model    : $D_Model`r`nDung lượng   : $D_Size`r`nGiao tiếp    : $D_Interface`r`nTrạng thái   : $D_Status`r`n"
+        $Report += "-----------------------------`r`nKý tự ổ (Win): $DL`r`nChuẩn Boot   : $Style`r`nVentoy Status: $VStatus`r`n-----------------------------`r`n"
 
-        # Create Info Form
-        $FInfo = New-Object System.Windows.Forms.Form
-        $FInfo.Text = "CHI TIẾT THIẾT BỊ"; $FInfo.Size = "500, 500"; $FInfo.StartPosition = "CenterScreen"
-        $FInfo.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $FInfo.ForeColor = "White"
-
-        $TxtInfo = New-Object System.Windows.Forms.TextBox
-        $TxtInfo.Multiline = $true; $TxtInfo.Dock = "Top"; $TxtInfo.Height = 380
-        $TxtInfo.Font = "Consolas, 10"; $TxtInfo.BackColor = "Black"; $TxtInfo.ForeColor = "Lime"
-        $TxtInfo.Text = $Report; $TxtInfo.ReadOnly = $true; $TxtInfo.ScrollBars = "Vertical"
-
-        $BtnCopy = New-Object System.Windows.Forms.Button
-        $BtnCopy.Text = "📋 COPY TO CLIPBOARD"; $BtnCopy.Dock = "Bottom"; $BtnCopy.Height = 50
-        $BtnCopy.BackColor = "Orange"; $BtnCopy.ForeColor = "Black"; $BtnCopy.Font = "Segoe UI, 11, Bold"
-        $BtnCopy.Add_Click({ 
-            [System.Windows.Forms.Clipboard]::SetText($Report)
-            [System.Windows.Forms.MessageBox]::Show("Đã copy nội dung!", "Thông báo")
-        })
-
-        $FInfo.Controls.Add($BtnCopy); $FInfo.Controls.Add($TxtInfo)
-        $FInfo.ShowDialog() | Out-Null
+        $FInfo = New-Object System.Windows.Forms.Form; $FInfo.Text = "CHI TIẾT THIẾT BỊ"; $FInfo.Size = "500, 500"; $FInfo.StartPosition = "CenterScreen"; $FInfo.BackColor = [System.Drawing.Color]::FromArgb(40,40,40); $FInfo.ForeColor = "White"
+        $TxtInfo = New-Object System.Windows.Forms.TextBox; $TxtInfo.Multiline = $true; $TxtInfo.Dock = "Top"; $TxtInfo.Height = 380; $TxtInfo.Font = "Consolas, 10"; $TxtInfo.BackColor = "Black"; $TxtInfo.ForeColor = "Lime"; $TxtInfo.Text = $Report; $TxtInfo.ReadOnly = $true; $TxtInfo.ScrollBars = "Vertical"
+        $BtnCopy = New-Object System.Windows.Forms.Button; $BtnCopy.Text = "📋 COPY TO CLIPBOARD"; $BtnCopy.Dock = "Bottom"; $BtnCopy.Height = 50; $BtnCopy.BackColor = "Orange"; $BtnCopy.ForeColor = "Black"; $BtnCopy.Font = "Segoe UI, 11, Bold"
+        $BtnCopy.Add_Click({ [System.Windows.Forms.Clipboard]::SetText($Report); [System.Windows.Forms.MessageBox]::Show("Đã copy nội dung!", "Thông báo") })
+        $FInfo.Controls.Add($BtnCopy); $FInfo.Controls.Add($TxtInfo); $FInfo.ShowDialog() | Out-Null
     }
+}
+
+function Load-USB {
+    $CbUSB.Items.Clear(); $Found = $false; Force-Disk-Refresh
+    if (Get-Command Get-Disk -EA 0) { try { $Disks = Get-Disk | Where-Object { $_.BusType -eq "USB" -or $_.MediaType -eq "Removable" }; if ($Disks) { foreach ($d in $Disks) { $SizeGB = [Math]::Round($d.Size / 1GB, 1); $CbUSB.Items.Add("Disk $($d.Number): $($d.FriendlyName) - $SizeGB GB") }; $Found = $true } } catch {} }
+    if (-not $Found) { try { $WmiDisks = Get-WmiObject Win32_DiskDrive | Where-Object { $_.InterfaceType -eq "USB" -or $_.MediaType -match "Removable" }; if ($WmiDisks) { foreach ($d in $WmiDisks) { $Size = $d.Size; if (!$Size) { $Size = 0 }; $SizeGB = [Math]::Round($Size / 1GB, 1); $CbUSB.Items.Add("Disk $($d.Index): $($d.Model) - $SizeGB GB") }; $Found = $true } } catch {} }
+    if (-not $Found) { $CbUSB.Items.Add("Không tìm thấy USB"); $CbUSB.SelectedIndex = 0 } else { $CbUSB.SelectedIndex = 0 }
 }
 
 function Get-Latest-Assets {
@@ -342,10 +273,8 @@ function Get-Latest-Assets {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $ApiUrl = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
         $Response = Invoke-RestMethod -Uri $ApiUrl -UseBasicParsing -TimeoutSec 10
-        
         $WinZip = $Response.assets | Where-Object { $_.name -match "windows.zip" } | Select-Object -First 1
         $LiveIso = $Response.assets | Where-Object { $_.name -match "livecd.iso" } | Select-Object -First 1
-        
         return @{ Version=$Response.tag_name; WinUrl=$WinZip.browser_download_url; LiveUrl=$LiveIso.browser_download_url }
     } catch { return $null }
 }
@@ -353,8 +282,7 @@ function Get-Latest-Assets {
 function Load-Themes {
     $CbTheme.Items.Clear(); $CbTheme.Items.Add("Mặc định (Ventoy)")
     try {
-        $JsonData = $Global:DefaultThemes 
-        $Global:ThemeData = $JsonData
+        $JsonData = $Global:DefaultThemes; $Global:ThemeData = $JsonData
         foreach ($item in $JsonData) { if ($item.Url) { $CbTheme.Items.Add($item.Name) } }
         Log-Msg "Load Theme OK." "Cyan"
     } catch {}
@@ -364,17 +292,12 @@ function Load-Themes {
 function Process-Ventoy {
     param($DiskID, $Mode, $Style, $LabelName, $FSType, $IsLiveCD, $IsDir)
     
-    # 0. MATH BOT CHECK
     if (-not (Check-MathBot)) { return }
-
-    # 1. GET ASSETS
     $Assets = Get-Latest-Assets
-    if (!$Assets) { Log-Msg "Không kết nối được GitHub! Kiểm tra mạng." "Red"; return }
+    if (!$Assets) { Log-Msg "Không kết nối được GitHub!" "Red"; return }
     Log-Msg "Version: $($Assets.Version)" "Cyan"
     
-    # Download Ventoy Zip
-    $ZipFile = "$Global:WorkDir\ventoy.zip"
-    $ExtractPath = "$Global:WorkDir\Extracted"
+    $ZipFile = "$Global:WorkDir\ventoy.zip"; $ExtractPath = "$Global:WorkDir\Extracted"
     if (!(Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
         Log-Msg "Downloading Tool..." "Yellow"
         (New-Object Net.WebClient).DownloadFile($Assets.WinUrl, $ZipFile)
@@ -383,28 +306,20 @@ function Process-Ventoy {
     }
     $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
     
-    # 2. GET DRIVE LETTER
     Force-Disk-Refresh
-    $DL = $null
-    try { if (Get-Command Get-Partition -EA 0) { $Part = Get-Partition -DiskNumber $DiskID -EA 0 | Where-Object { $_.DriveLetter } | Select -First 1; if ($Part) { $DL = "$($Part.DriveLetter):" } } } catch {}
-    if (!$DL) { $DL = Get-DriveLetter-WMI $DiskID }
-    if (!$DL) { $DL = Get-DriveLetter-DiskPart $DiskID }
+    $DL = Get-DriveLetter-DiskPart $DiskID
     if (!$DL) { Log-Msg "Lỗi: Không tìm thấy ký tự ổ đĩa!" "Red"; return }
     Log-Msg "Target: $DL" "Cyan"
 
-    # --- CROSS-MODE CHECK (BẢO VỆ DỮ LIỆU) ---
+    # CROSS-MODE CHECK
     $CurrentStyle = Get-Partition-Style-Robust $DiskID
     $TargetStyle = if ($Style -match "GPT") { "GPT" } else { "MBR" }
-    
-    if ($Mode -eq "UPDATE") {
-        if ($CurrentStyle -ne "Unknown" -and $CurrentStyle -ne $TargetStyle) {
-            Log-Msg "LỖI: Sai kiểu Partition!" "Red"
-            [System.Windows.Forms.MessageBox]::Show("USB hiện tại là [$CurrentStyle] nhưng bạn chọn [$TargetStyle].`n`nBạn KHÔNG THỂ Update khác hệ được!`nHãy chọn chế độ 'Cài mới' (Sẽ mất dữ liệu) hoặc đổi lại kiểu Partition.", "Cảnh báo dữ liệu", "OK", "Error")
-            return
-        }
+    if ($Mode -eq "UPDATE" -and $CurrentStyle -ne "Unknown" -and $CurrentStyle -ne $TargetStyle) {
+        Log-Msg "LỖI: Sai kiểu Partition!" "Red"
+        [System.Windows.Forms.MessageBox]::Show("Khác hệ Partition! Vui lòng chọn 'Cài mới' để Format.", "Cảnh báo", "OK", "Error")
+        return
     }
 
-    # 3. RUN VENTOY (ASYNC)
     $FlagMode = if ($Mode -eq "UPDATE") { "/U" } else { "/I" }
     $FlagStyle = if ($Style -match "GPT") { "/GPT" } else { "/MBR" }
     $FlagSecure = if ($ChkSec.Checked) { "/S" } else { "" }
@@ -417,10 +332,8 @@ function Process-Ventoy {
     $PInfo.Arguments = "VTOYCLI $FlagMode /Drive:$DL /NoUsbCheck $FlagStyle $FlagSecure $FlagFS"
     $PInfo.UseShellExecute = $true 
     
-    $P = New-Object System.Diagnostics.Process; $P.StartInfo = $PInfo
-    $P.Start() | Out-Null
+    $P = New-Object System.Diagnostics.Process; $P.StartInfo = $PInfo; $P.Start() | Out-Null
     
-    # --- WATCHDOG TIMER ---
     $TimeoutSec = 180; $Counter = 0
     while (!$P.HasExited) {
         Start-Sleep 1; $Counter++
@@ -431,10 +344,7 @@ function Process-Ventoy {
     $ExitCode = $P.ExitCode
     if ($ExitCode -eq 0) {
         try {
-            Log-Msg "VENTOY OK!" "Success"
-            Log-Msg "Đang chờ ổ đĩa xuất hiện lại (Max 30s)..." "Yellow"
-            
-            # RETRY LOOP
+            Log-Msg "VENTOY OK! Rescanning (Wait 30s)..." "Yellow"
             $UsbRoot = $null
             for ($i = 0; $i -lt 30; $i++) {
                 Force-Disk-Refresh
@@ -442,26 +352,56 @@ function Process-Ventoy {
                 if ($TempDL -and (Test-Path $TempDL)) { $UsbRoot = $TempDL; break }
                 Start-Sleep 1
             }
-            if (!$UsbRoot) { $UsbRoot = $DL; Log-Msg "Không tìm thấy ổ mới, thử dùng ký tự cũ: $DL" "Warn" }
+            if (!$UsbRoot) { $UsbRoot = $DL; Log-Msg "Dùng ký tự cũ: $DL" "Warn" }
             
             if (Test-Path $UsbRoot) {
-                if ($Mode -eq "INSTALL") { try { cmd /c "label $UsbRoot $LabelName" } catch {} }
+                # --- FIX: AGGRESSIVE RENAMING ---
+                if ($Mode -eq "INSTALL") {
+                    Log-Msg "Đang đổi tên USB thành $LabelName..." "Yellow"
+                    for ($k=0; $k -lt 3; $k++) {
+                         try { cmd /c "label $UsbRoot $LabelName"; if ((Get-Volume -DriveLetter $UsbRoot.Substring(0,1)).FileSystemLabel -eq $LabelName){break} } catch {}
+                         Start-Sleep 1
+                    }
+                }
+
                 $VentoyDir = "$UsbRoot\ventoy"; if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory -Force | Out-Null }
 
+                # --- NEW STRUCTURE ---
                 if ($IsDir) {
-                    Log-Msg "Tạo thư mục..." "Yellow"
-                    $Dirs = @("ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC10", "ISO_Windows\LTSC11", "ISO_Windows\Server", "ISO_Linux\Ubuntu", "ISO_Linux\Kali", "ISO_Linux\Mint", "ISO_Rescue", "Tools_Drivers")
+                    Log-Msg "Tạo cấu trúc thư mục AIO..." "Yellow"
+                    # 1. ISO
+                    $Dirs = @("ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC", "ISO_Windows\Server", "ISO_Linux\Ubuntu", "ISO_Linux\Kali", "ISO_Linux\Mint", "ISO_Rescue", "ISO_Android")
                     foreach ($d in $Dirs) { try { New-Item -Path "$UsbRoot\$d" -ItemType Directory -Force | Out-Null } catch {} }
+                    
+                    # 2. DATA
+                    $DataDirs = @("DATA\Documents", "DATA\Music", "DATA\Picture", "DATA\Video", "DATA\App", "DATA\Shortcut")
+                    foreach ($d in $DataDirs) { try { New-Item -Path "$UsbRoot\$d" -ItemType Directory -Force | Out-Null } catch {} }
+
+                    # 3. LICENSE (BAN QUYEN)
+                    $LicDirs = @("BanQuyen\Windows7", "BanQuyen\Windows10", "BanQuyen\Windows11", "BanQuyen\Office", "BanQuyen\Keys")
+                    foreach ($d in $LicDirs) { try { New-Item -Path "$UsbRoot\$d" -ItemType Directory -Force | Out-Null } catch {} }
                 }
 
+                # --- MAS DOWNLOAD ---
+                if ($IsDir) {
+                    Log-Msg "Tải tool Active (MAS AIO)..." "Yellow"
+                    $MasFile = "$UsbRoot\BanQuyen\MAS_AIO_KichHoat.cmd"
+                    try { (New-Object Net.WebClient).DownloadFile($Global:MasUrl, $MasFile); Log-Msg "MAS OK" "Success" } catch { Log-Msg "Lỗi tải MAS" "Red" }
+                }
+
+                # --- LIVECD (ROOT & RENAME) ---
                 if ($IsLiveCD -and $Assets.LiveUrl) {
                     Log-Msg "Downloading LiveCD..." "Yellow"
-                    $LiveFile = "$UsbRoot\ISO_Rescue\ventoy-livecd.iso"
+                    $LiveFile = "$UsbRoot\NangCap_UsbBoot.iso" # NEW NAME AT ROOT
                     if (!(Test-Path $LiveFile)) {
-                         try { (New-Object Net.WebClient).DownloadFile($Assets.LiveUrl, $LiveFile); Log-Msg "LiveCD OK" "Success" } catch { Log-Msg "Lỗi tải LiveCD: $_" "Red" }
-                    } else { Log-Msg "LiveCD đã có, bỏ qua." "Cyan" }
+                         try { (New-Object Net.WebClient).DownloadFile($Assets.LiveUrl, $LiveFile); Log-Msg "LiveCD OK" "Success" } catch { Log-Msg "Lỗi tải LiveCD" "Red" }
+                    } else { Log-Msg "LiveCD đã có." "Cyan" }
                 }
+                
+                # --- README ---
+                "USB Boot tạo bởi Phat Tan PC Tool`nNgày tạo: $(Get-Date)" | Out-File "$UsbRoot\ReadMe.txt" -Encoding UTF8
 
+                # Theme Config
                 try {
                     $J = @{ "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }); "theme" = @{ "display_mode" = "GUI" } }
                     if ($ChkMem.Checked) { $J.control += @{ "VTOY_MEM_DISK_MODE" = "1" } }
@@ -479,7 +419,7 @@ function Process-Ventoy {
 }
 
 $BtnRef.Add_Click({ Load-USB })
-$BtnInfo.Add_Click({ Show-UsbDetails-Pro }) # Sửa ở đây để gọi hàm Pro
+$BtnInfo.Add_Click({ Show-UsbDetails-Pro })
 $BtnLoadTheme.Add_Click({ Load-Themes })
 
 $BtnStart.Add_Click({
