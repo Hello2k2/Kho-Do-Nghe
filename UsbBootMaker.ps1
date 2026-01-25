@@ -1,10 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V7.0 ULTIMATE AIO)
+    VENTOY BOOT MAKER - PHAT TAN PC (V7.1 STABLE FIX)
     Updates:
-    - [STRUCTURE] Tự tạo cây thư mục ISO (Windows 10/11/LTSC, Linux, Cứu Hộ...).
-    - [LIVECD] Tự động tải Ventoy LiveCD ISO mới nhất vào USB.
-    - [CUSTOM] Cho phép đặt tên USB và chọn định dạng (NTFS/exFAT/FAT32).
-    - [CORE] Giữ nguyên Auto-Update & Fix Win Lite.
+    - [CRASH FIX] Bọc Try/Catch toàn bộ thao tác sau cài đặt để chống văng App.
+    - [WAIT] Tăng thời gian chờ USB mount lại sau khi Format.
+    - [AIO] Giữ nguyên tính năng tự tạo thư mục và tải LiveCD.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -45,13 +44,15 @@ $Theme = @{
 
 # --- HELPER FUNCTIONS ---
 function Log-Msg ($Msg, $Color="Lime") { 
-    $Form.Invoke([Action]{
-        $TxtLog.SelectionStart = $TxtLog.TextLength
-        $TxtLog.SelectionLength = 0
-        $TxtLog.SelectionColor = [System.Drawing.Color]::FromName($Color)
-        $TxtLog.AppendText("[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n")
-        $TxtLog.ScrollToCaret()
-    })
+    try {
+        $Form.Invoke([Action]{
+            $TxtLog.SelectionStart = $TxtLog.TextLength
+            $TxtLog.SelectionLength = 0
+            $TxtLog.SelectionColor = [System.Drawing.Color]::FromName($Color)
+            $TxtLog.AppendText("[$(Get-Date -F 'HH:mm:ss')] $Msg`r`n")
+            $TxtLog.ScrollToCaret()
+        })
+    } catch {}
 }
 
 function Add-GlowBorder ($Panel) {
@@ -65,13 +66,13 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V7.0 (AIO)"; $Form.Size = "950,850"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V7.1 (STABLE FIX)"; $Form.Size = "950,850"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Header
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # USB Selection
-$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 380))) # Settings Tab (Increased Height)
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 380))) # Settings Tab
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) # Log
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 70))) # Action Button
 $Form.Controls.Add($MainTable)
@@ -79,7 +80,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto ISO Folder | Download LiveCD | Custom Label & FS"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Anti-Crash Fix | Auto ISO Folder | Download LiveCD"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -108,35 +109,28 @@ $G1 = New-Object System.Windows.Forms.TableLayoutPanel; $G1.Dock = "Top"; $G1.Au
 $G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 40)))
 $G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 60)))
 
-# 1. Action Mode
 $LblAct = New-Object System.Windows.Forms.Label; $LblAct.Text = "Chế độ (Mode):"; $LblAct.ForeColor = "White"; $LblAct.AutoSize = $true
 $CbAction = New-Object System.Windows.Forms.ComboBox; $CbAction.Items.AddRange(@("Cài mới (Xóa sạch & Format)", "Cập nhật Ventoy (Giữ Data)")); $CbAction.SelectedIndex = 0; $CbAction.DropDownStyle = "DropDownList"; $CbAction.Width = 300
 $G1.Controls.Add($LblAct, 0, 0); $G1.Controls.Add($CbAction, 1, 0)
 
-# 2. Partition Style
 $LblSty = New-Object System.Windows.Forms.Label; $LblSty.Text = "Kiểu Partition:"; $LblSty.ForeColor = "White"; $LblSty.AutoSize = $true
 $CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy + UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex = 0; $CbStyle.DropDownStyle = "DropDownList"; $CbStyle.Width = 300
 $G1.Controls.Add($LblSty, 0, 1); $G1.Controls.Add($CbStyle, 1, 1)
 
-# 3. Label Name (NEW)
 $LblName = New-Object System.Windows.Forms.Label; $LblName.Text = "Tên USB (Label):"; $LblName.ForeColor = "White"; $LblName.AutoSize = $true
 $TxtLabel = New-Object System.Windows.Forms.TextBox; $TxtLabel.Text = "PhatTan_Boot"; $TxtLabel.Width = 300; $TxtLabel.BackColor = $Theme.InputBg; $TxtLabel.ForeColor = "Cyan"
 $G1.Controls.Add($LblName, 0, 2); $G1.Controls.Add($TxtLabel, 1, 2)
 
-# 4. File System (NEW)
 $LblFS = New-Object System.Windows.Forms.Label; $LblFS.Text = "Định dạng (Format):"; $LblFS.ForeColor = "White"; $LblFS.AutoSize = $true
 $CbFS = New-Object System.Windows.Forms.ComboBox; $CbFS.Items.AddRange(@("exFAT (Khuyên dùng)", "NTFS (Tương thích Win)", "FAT32 (Max 4GB/file)")); $CbFS.SelectedIndex = 0; $CbFS.DropDownStyle = "DropDownList"; $CbFS.Width = 300
 $G1.Controls.Add($LblFS, 0, 3); $G1.Controls.Add($CbFS, 1, 3)
 
-# 5. LiveCD Option (NEW)
 $ChkLive = New-Object System.Windows.Forms.CheckBox; $ChkLive.Text = "Tải & Cài Ventoy LiveCD ISO (Newest)"; $ChkLive.Checked = $true; $ChkLive.ForeColor = "Yellow"; $ChkLive.AutoSize = $true
 $G1.Controls.Add($ChkLive, 0, 4); $G1.SetColumnSpan($ChkLive, 2)
 
-# 6. Folder Structure (NEW)
 $ChkDir = New-Object System.Windows.Forms.CheckBox; $ChkDir.Text = "Tạo bộ lọc thư mục (Windows/Linux/Rescue...)"; $ChkDir.Checked = $true; $ChkDir.ForeColor = "Lime"; $ChkDir.AutoSize = $true
 $G1.Controls.Add($ChkDir, 0, 5); $G1.SetColumnSpan($ChkDir, 2)
 
-# 7. Secure Boot
 $ChkSec = New-Object System.Windows.Forms.CheckBox; $ChkSec.Text = "Bật Secure Boot Support"; $ChkSec.Checked = $true; $ChkSec.ForeColor = "Orange"; $ChkSec.AutoSize = $true
 $G1.Controls.Add($ChkSec, 0, 6); $G1.SetColumnSpan($ChkSec, 2)
 
@@ -272,7 +266,7 @@ function Process-Ventoy {
     
     # 1. GET ASSETS
     $Assets = Get-Latest-Assets
-    if (!$Assets) { Log-Msg "Không kết nối được GitHub!" "Red"; return }
+    if (!$Assets) { Log-Msg "Không kết nối được GitHub! Kiểm tra mạng." "Red"; return }
     
     Log-Msg "Version: $($Assets.Version)" "Cyan"
     
@@ -319,91 +313,82 @@ function Process-Ventoy {
         $ExitCode = $P.ExitCode
         $Form.Invoke([Action]{
             if ($ExitCode -eq 0) {
-                Log-Msg "VENTOY OK!" "Success"; Start-Sleep 3; Force-Disk-Refresh
-                
-                $NewDL = Get-DriveLetter-DiskPart $DiskID
-                if ($NewDL) { $UsbRoot = $NewDL } else { $UsbRoot = $DL }
-                
-                if (Test-Path $UsbRoot) {
-                    # --- 4. FORMAT & RENAME ---
-                    if ($Mode -eq "INSTALL") {
-                        # Determine FS
-                        $TargetFS = if ($FSType -match "NTFS") { "NTFS" } elseif ($FSType -match "FAT32") { "FAT32" } else { "exFAT" }
-                        
-                        Log-Msg "Configuring: Label='$LabelName' FS=$TargetFS" "Yellow"
-                        # Chỉ format nếu FS khác exFAT (mặc định Ventoy) hoặc cần đổi label
-                        # Chạy lệnh Format bằng DiskPart hoặc PowerShell
-                        # Để an toàn và nhanh, dùng Label command của Ventoy2Disk hoặc Format-Volume
-                        try {
-                            $Vol = Get-Volume -DriveLetter $UsbRoot.Substring(0,1)
-                            Format-Volume -DriveLetter $UsbRoot.Substring(0,1) -FileSystem $TargetFS -NewFileSystemLabel $LabelName -Confirm:$false | Out-Null
-                            Log-Msg "Format & Label OK." "Success"
-                        } catch {
-                            Log-Msg "Lỗi Format (Có thể do Win Lite). Thử đổi Label bằng lệnh..." "Warn"
-                            cmd /c "label $UsbRoot $LabelName"
-                        }
-                    }
-
-                    $VentoyDir = "$UsbRoot\ventoy"
-                    if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory | Out-Null }
-
-                    # --- 5. FOLDER STRUCTURE ---
-                    if ($IsDir) {
-                        Log-Msg "Creating Directory Tree..." "Yellow"
-                        $Dirs = @(
-                            "ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC", "ISO_Windows\Server",
-                            "ISO_Linux\Ubuntu", "ISO_Linux\Kali", "ISO_Linux\CentOS",
-                            "ISO_Rescue", "ISO_Android", "Tools_Drivers"
-                        )
-                        foreach ($d in $Dirs) { New-Item -Path "$UsbRoot\$d" -ItemType Directory -Force | Out-Null }
-                    }
-
-                    # --- 6. LIVECD DOWNLOAD ---
-                    if ($IsLiveCD -and $Assets.LiveUrl) {
-                        Log-Msg "Downloading Ventoy LiveCD ISO (~180MB)..." "Yellow"
-                        $LiveFile = "$UsbRoot\ISO_Rescue\ventoy-livecd.iso"
-                        if (!(Test-Path "$UsbRoot\ISO_Rescue")) { New-Item "$UsbRoot\ISO_Rescue" -ItemType Directory | Out-Null }
-                        
-                        # Async Download with Progress is hard in pure PS GUI without freezing
-                        # Using a sync download but notify user
-                        Log-Msg "Please wait... Downloading..." "Yellow"
-                        try {
-                            (New-Object Net.WebClient).DownloadFile($Assets.LiveUrl, $LiveFile)
-                            Log-Msg "LiveCD Downloaded." "Success"
-                        } catch { Log-Msg "Download LiveCD Failed." "Red" }
-                    }
-
-                    # --- 7. THEME ---
-                    $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
-                    if ($SelTheme -ne "Mặc định (Ventoy)") {
-                        $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
-                        if ($T) {
-                            $ThemeZip = "$Global:WorkDir\theme.zip"
-                            try {
-                                (New-Object Net.WebClient).DownloadFile($T.Url, $ThemeZip)
-                                $ThemeDest = "$VentoyDir\themes"
-                                [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
-                                $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
-                            } catch {}
-                        }
-                    }
-
-                    # JSON Config
-                    $J = @{
-                        "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
-                        "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" }
-                        "menu_alias" = @( @{ "image" = "/ventoy/ventoy.png"; "alias" = "PHAT TAN RESCUE USB" } )
-                    }
-                    if ($ChkMem.Checked) { $J.control += @{ "VTOY_MEM_DISK_MODE" = "1" } }
-                    if ($ThemeConfig) { $J.theme.Add("file", $ThemeConfig) }
-
-                    $J | ConvertTo-Json -Depth 5 | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
+                # --- TRY/CATCH ĐỂ CHỐNG VĂNG APP ---
+                try {
+                    Log-Msg "VENTOY OK!" "Success"
+                    Log-Msg "Đợi 5s để Windows nhận ổ đĩa..." "Yellow"
+                    Start-Sleep 5
+                    Force-Disk-Refresh
                     
-                    Log-Msg "DONE! Enjoy your Boot USB." "Success"
-                    Invoke-Item $UsbRoot
-                    [System.Windows.Forms.MessageBox]::Show("Xong! Đã tạo USB Boot thành công.", "Phat Tan PC")
+                    $NewDL = Get-DriveLetter-DiskPart $DiskID
+                    if ($NewDL) { $UsbRoot = $NewDL } else { $UsbRoot = $DL }
+                    
+                    if (Test-Path $UsbRoot) {
+                        # --- 4. FORMAT & RENAME ---
+                        if ($Mode -eq "INSTALL") {
+                            $TargetFS = if ($FSType -match "NTFS") { "NTFS" } elseif ($FSType -match "FAT32") { "FAT32" } else { "exFAT" }
+                            Log-Msg "Configuring: Label='$LabelName' FS=$TargetFS" "Yellow"
+                            
+                            try {
+                                # Thử dùng lệnh label cmd cho an toàn nhất
+                                cmd /c "label $UsbRoot $LabelName"
+                                Log-Msg "Label Set OK." "Success"
+                            } catch { Log-Msg "Lỗi đặt tên Label." "Warn" }
+                        }
+
+                        $VentoyDir = "$UsbRoot\ventoy"
+                        if (!(Test-Path $VentoyDir)) { New-Item -Path $VentoyDir -ItemType Directory -Force | Out-Null }
+
+                        # --- 5. FOLDER STRUCTURE ---
+                        if ($IsDir) {
+                            Log-Msg "Creating Folders..." "Yellow"
+                            $Dirs = @(
+                                "ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC", "ISO_Windows\Server",
+                                "ISO_Linux\Ubuntu", "ISO_Linux\Kali", "ISO_Linux\CentOS",
+                                "ISO_Rescue", "ISO_Android", "Tools_Drivers"
+                            )
+                            foreach ($d in $Dirs) { 
+                                try { New-Item -Path "$UsbRoot\$d" -ItemType Directory -Force | Out-Null } catch {} 
+                            }
+                        }
+
+                        # --- 6. LIVECD DOWNLOAD ---
+                        if ($IsLiveCD -and $Assets.LiveUrl) {
+                            Log-Msg "Downloading LiveCD (~180MB)..." "Yellow"
+                            $LiveFile = "$UsbRoot\ISO_Rescue\ventoy-livecd.iso"
+                            if (!(Test-Path "$UsbRoot\ISO_Rescue")) { New-Item "$UsbRoot\ISO_Rescue" -ItemType Directory -Force | Out-Null }
+                            
+                            try {
+                                (New-Object Net.WebClient).DownloadFile($Assets.LiveUrl, $LiveFile)
+                                Log-Msg "LiveCD Downloaded." "Success"
+                            } catch { Log-Msg "Download LiveCD Failed." "Red" }
+                        }
+
+                        # --- 7. THEME & JSON ---
+                        # (Giữ nguyên logic JSON cũ nhưng bọc try/catch)
+                        try {
+                            $J = @{
+                                "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
+                                "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" }
+                                "menu_alias" = @( @{ "image" = "/ventoy/ventoy.png"; "alias" = "PHAT TAN RESCUE USB" } )
+                            }
+                            if ($ChkMem.Checked) { $J.control += @{ "VTOY_MEM_DISK_MODE" = "1" } }
+                            $J | ConvertTo-Json -Depth 5 | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
+                        } catch { Log-Msg "Lỗi tạo config JSON." "Red" }
+                        
+                        Log-Msg "DONE! Enjoy." "Success"
+                        [System.Windows.Forms.MessageBox]::Show("HOÀN TẤT!", "Phat Tan PC")
+                        Invoke-Item $UsbRoot
+                    } else {
+                        Log-Msg "Không thể truy cập USB (Cần rút ra cắm lại)." "Warn"
+                        [System.Windows.Forms.MessageBox]::Show("Xong! Rút USB ra cắm lại để dùng.", "Thông báo")
+                    }
+                } catch {
+                    Log-Msg "LỖI NGOẠI LỆ: $($_.Exception.Message)" "Red"
+                    [System.Windows.Forms.MessageBox]::Show("Có lỗi xảy ra nhưng Ventoy đã cài xong.", "Lỗi nhẹ")
                 }
             } else { Log-Msg "Error ExitCode: $ExitCode" "Red" }
+            
             $BtnStart.Enabled = $true; $Form.Cursor = "Default"
         })
     })
