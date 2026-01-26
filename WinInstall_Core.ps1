@@ -124,93 +124,86 @@ function Start-Headless-DISM {
     if ([System.Windows.Forms.MessageBox]::Show("XÁC NHẬN CÀI WIN?`nỔ ĐÍCH ($($Global:SelectedInstall)) SẼ BỊ XÓA!", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO HE THONG (V11.0 SUPER BCD) ---"
+    Log "--- KHOI TAO HE THONG (V11.1 ISOLATED RAMDISK) ---"
 
-    # 1. Gán nhãn WIN_TARGET (QUAN TRỌNG: Để lát nữa tìm UID dựa vào tên này)
+    # 1. Gán nhãn và Lấy UID (GUID)
     $TargetDrive = "$($Global:SelectedInstall):"
     try {
-        # Dùng lệnh label của CMD cho chắc ăn
         cmd /c "label $TargetDrive WIN_TARGET"
-        Log "-> Đã gán nhãn WIN_TARGET cho ổ $TargetDrive"
-    } catch { Log "Lỗi gán nhãn: $_" }
+        Log "-> Đã gán nhãn WIN_TARGET"
+        
+        # Lấy Volume GUID chính xác (Dạng \\?\Volume{GUID}\)
+        $VolInfo = Get-WmiObject Win32_Volume -Filter "Label = 'WIN_TARGET'" | Select-Object -First 1
+        if (!$VolInfo) { throw "Không tìm thấy Volume WIN_TARGET" }
+        $VolumeGUID = $VolInfo.DeviceID.TrimEnd('\').Replace("\\?\", "") # Kết quả: Volume{...}
+        Log "-> Detected UID: $VolumeGUID"
+    } catch { 
+        Log "LỖI UID: $_"; $Form.Cursor = "Default"; return 
+    }
 
-    # 2. Tìm ổ an toàn để lưu Source
+    # 2. Chuẩn bị file (Copy vào GỐC để dễ boot)
     $SafeDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) { if ($D.DeviceID -ne $TargetDrive -and $D.FreeSpace -gt 5GB) { $SafeDrive = $D.DeviceID; break } }
-    
-    # Nếu không có ổ khác, dùng chính ổ cài (Rủi ro thấp nhưng vẫn chạy được)
-    if (!$SafeDrive) { $SafeDrive = $TargetDrive; Log "Cảnh báo: Dùng chung ổ cài để chứa Source." }
+    if (!$SafeDrive) { $SafeDrive = $TargetDrive; Log "-> Dùng chung ổ cài chứa Source." }
     
     $WorkDir = "$SafeDrive\WinSource_PhatTan"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     $Ext = [System.IO.Path]::GetExtension($Global:WimFile)
 
-    # 3. Copy file hệ thống
     Log "Copying files..."
     Copy-Item $Global:WimFile "$WorkDir\install$Ext" -Force
-    # Copy Boot.wim và Boot.sdi vào GỐC ổ WIN_TARGET để dễ gọi
+    # Copy Boot files ra GỐC ổ WIN_TARGET
     Copy-Item "$Global:IsoMounted\sources\boot.wim" "$TargetDrive\WinInstall.wim" -Force
     Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$TargetDrive\boot.sdi" -Force
 
-    # 4. Tạo file XML tự động kích hoạt setup
+    # XML Trigger
     $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist %%d:\WinSource_PhatTan\AutoInstall.cmd call %%d:\WinSource_PhatTan\AutoInstall.cmd)</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
     [IO.File]::WriteAllText("$SafeDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
 
-    # 5. CẤU HÌNH BCD SIÊU CẤP (UID/GUID MODE)
-    Log "Cấu hình Boot Loader (Chế độ UID/GUID - Anti BSOD)..."
+    # 3. CẤU HÌNH BCD ĐỘC LẬP (ISOLATED MODE)
+    Log "Cấu hình Boot Loader (Isolated Ramdisk)..."
     try {
-        # 5.1 LẤY UID (VOLUME GUID) DỰA TRÊN LABEL "WIN_TARGET"
-        # Kết quả sẽ có dạng: \\?\Volume{4c1b02c1-d384-11e9-9943-806e6f6e6963}\
-        $VolInfo = Get-WmiObject Win32_Volume -Filter "Label = 'WIN_TARGET'" | Select-Object -First 1
-        
-        if (!$VolInfo) { throw "Không tìm thấy phân vùng WIN_TARGET để lấy UID!" }
-        
-        # Chuyển đổi sang format BCD: volume={GUID}
-        # Cắt bỏ \\?\ và dấu \ ở cuối
-        $RawID = $VolInfo.DeviceID
-        $BCD_VolumeID = $RawID.Replace("\\?\", "").TrimEnd("\") 
-        # Kết quả $BCD_VolumeID sẽ là: Volume{4c1b02c1-d384-11e9-9943-806e6f6e6963}
-        
-        Log "-> Detected UID: $BCD_VolumeID"
-
-        # 5.2 Xác định Bootloader Path
         $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$TargetDrive\EFI")
         $LoaderPath = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # 5.3 Tạo Ramdisk Options (Trỏ vào UID thay vì Drive Letter)
-        & bcdedit /delete "{ramdiskoptions}" /f 2>$null
-        & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Ramdisk" /f | Out-Null
-        # QUAN TRỌNG: Dùng volume=... thay vì partition=C:
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "volume=$BCD_VolumeID"
-        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
+        # 3.1 TẠO RAMDISK OPTIONS MỚI (Không dùng {ramdiskoptions} mặc định)
+        # Tạo một GUID ngẫu nhiên cho Ramdisk Options này để tránh xung đột
+        $RamdiskGUID = "{"+[Guid]::NewGuid().ToString()+"}"
+        
+        & bcdedit /create $RamdiskGUID /d "Phat Tan Setup Ramdisk" /device
+        if ($LASTEXITCODE -ne 0) { throw "Lỗi tạo Ramdisk Device" }
 
-        # 5.4 Tạo Entry Boot
-        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER" /application osloader
-        $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
+        & bcdedit /set $RamdiskGUID ramdisksdidevice "volume=$VolumeGUID"
+        & bcdedit /set $RamdiskGUID ramdisksdipath "\boot.sdi"
+        Log "-> Tạo Ramdisk Options riêng: $RamdiskGUID"
 
-        if ($Guid) {
-            # Cấu hình Entry trỏ vào UID
-            $DeviceVal = "ramdisk=[volume=$BCD_VolumeID]\WinInstall.wim,{ramdiskoptions}"
+        # 3.2 TẠO ENTRY BOOT MỚI
+        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER (SAFE MODE)" /application osloader
+        $OsGUID = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
+
+        if ($OsGUID) {
+            # Trỏ vào file WIM trên Volume UID + Ramdisk Options vừa tạo
+            $DeviceVal = "ramdisk=[volume=$VolumeGUID]\WinInstall.wim,$RamdiskGUID"
             
-            & bcdedit /set $Guid device $DeviceVal
-            & bcdedit /set $Guid osdevice $DeviceVal
-            & bcdedit /set $Guid path $Loader
-            & bcdedit /set $Guid systemroot "\windows"
-            & bcdedit /set $Guid winpe yes
-            & bcdedit /set $Guid detecthal yes
+            & bcdedit /set $OsGUID device $DeviceVal
+            & bcdedit /set $OsGUID osdevice $DeviceVal
+            & bcdedit /set $OsGUID path $LoaderPath
+            & bcdedit /set $OsGUID systemroot "\windows"
+            & bcdedit /set $OsGUID winpe yes
+            & bcdedit /set $OsGUID detecthal yes
             
             # Ép Boot
-            & bcdedit /displayorder $Guid /addfirst
-            & bcdedit /bootsequence $Guid
+            & bcdedit /displayorder $OsGUID /addfirst
+            & bcdedit /bootsequence $OsGUID
             & bcdedit /timeout 5
             
-            # Fix lỗi chữ ký số (nguyên nhân hay gây màn hình xanh 0xc0000428)
-            & bcdedit /set $Guid nointegritychecks yes
-            & bcdedit /set $Guid testsigning yes
+            # Fix lỗi chữ ký số
+            & bcdedit /set $OsGUID nointegritychecks yes
+            & bcdedit /set $OsGUID testsigning yes
 
-            Log "-> BOOT CONFIG SUCCESS! UID Mapping OK."
+            Log "-> BOOT CONFIG SUCCESS! Entry: $OsGUID"
         } else {
-            throw "Không tạo được BCD Entry mới."
+            throw "Không tạo được OS Loader Entry."
         }
 
     } catch { 
