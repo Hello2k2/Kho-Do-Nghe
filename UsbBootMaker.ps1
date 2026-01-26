@@ -1,10 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V12.0 ULTIMATE AUTOMATION)
+    VENTOY BOOT MAKER - PHAT TAN PC (V12.1 FINAL FIX & COMBO)
     Updates:
-    - [AUTO-INSTALL] Tích hợp Plugin tự động cài Win/Linux (XML/Kickstart).
-    - [JSON] Cấu hình JSON chuyên sâu (Theme, Auto-Install, Menu Alias).
-    - [STRUCTURE] Folder map chính xác với script cài đặt.
-    - [CORE] Anti-Crash & Auto-Update.
+    - [FIX SYNTAX] Sửa lỗi biến $Key: gây crash script.
+    - [COMBO] Gộp tính năng Auto-Install (V12) + Data/MAS/Rename LiveCD (V11).
+    - [CORE] Anti-Crash, Triple-Check Drive, Math-Bot.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -23,18 +22,20 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
+$Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
 $Global:VersionFile = "$Global:WorkDir\current_version.txt"
 
-# Cấu hình Template Auto-Install (Link từ Ventoy)
+# Reset Log
+"--- START LOG $(Get-Date) ---" | Out-File $Global:DebugFile -Encoding UTF8 -Force
+
+# Auto-Install Config
 $Global:AutoInstallLinks = @{
     "windows_unattended.xml" = "https://www.ventoy.net/download/unattended.xml"
-    "deepin.ini"             = "https://www.ventoy.net/download/deepin.ini.txt"
     "centos_kickstart.cfg"   = "https://www.ventoy.net/download/kickstart7.cfg.txt"
     "ubuntu_server.seed"     = "https://www.ventoy.net/download/preseed.cfg.txt"
-    "suse_autoyast.xml"      = "https://www.ventoy.net/download/autoYast.xml"
 }
 
 $Global:DefaultThemes = @(
@@ -78,7 +79,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V12.0 (ULTIMATE AUTOMATION)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V12.1 (FINAL COMBO)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -92,7 +93,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto-Install Plugins (Win/Linux) | Full JSON Config | Anti-Crash"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Full AIO Structure | Auto-Install | MAS Activator | Rename Fix"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -267,7 +268,8 @@ function Download-AutoInstall-Scripts ($ScriptDir) {
         $Url = $Global:AutoInstallLinks[$Key]
         $Dest = "$ScriptDir\$Key"
         if (!(Test-Path $Dest)) {
-            try { (New-Object Net.WebClient).DownloadFile($Url, $Dest); Log-Msg " + $Key: OK" "Gray" } catch { Log-Msg " - $Key: Fail" "Red" }
+            # FIX: Dùng sub-expression $() để tránh lỗi cú pháp
+            try { (New-Object Net.WebClient).DownloadFile($Url, $Dest); Log-Msg " + $($Key): OK" "Gray" } catch { Log-Msg " - $($Key): Fail" "Red" }
         }
     }
 }
@@ -347,14 +349,30 @@ function Process-Ventoy {
                 # 5. FOLDERS
                 if ($IsDir) {
                     Log-Msg "Tạo cấu trúc thư mục AIO..." "Yellow"
-                    $Dirs = @("ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC", "ISO_Windows\Server", "ISO_Linux\Ubuntu", "ISO_Linux\CentOS", "ISO_Linux\Kali", "ISO_Rescue", "DATA\Documents", "DATA\App", "BanQuyen")
+                    $Dirs = @("ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC", "ISO_Windows\Server", "ISO_Linux\Ubuntu", "ISO_Linux\CentOS", "ISO_Linux\Kali", "ISO_Rescue", "DATA\Documents", "DATA\App", "BanQuyen", "DATA\Music", "DATA\Video", "DATA\Picture")
                     foreach ($d in $Dirs) { try { New-Item -Path "$UsbRoot\$d" -ItemType Directory -Force | Out-Null } catch {} }
                 }
 
                 # 6. AUTO INSTALL SCRIPTS
                 Download-AutoInstall-Scripts "$VentoyDir\script"
 
-                # 7. THEME & JSON & AUTO INSTALL CONFIG
+                # 7. MAS & LIVECD
+                if ($IsDir) {
+                     Log-Msg "Tải MAS AIO Activator..." "Yellow"
+                     try { (New-Object Net.WebClient).DownloadFile($Global:MasUrl, "$UsbRoot\BanQuyen\MAS_AIO.cmd"); Log-Msg "MAS OK" "Success" } catch {}
+                }
+
+                if ($IsLiveCD) {
+                     # Logic LiveCD: Tải link mới nhất từ GitHub
+                     Log-Msg "Tải LiveCD..." "Yellow"
+                     $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
+                     $LiveIso = $Assets.assets | Where-Object { $_.name -match "livecd.iso" } | Select -First 1
+                     if ($LiveIso) {
+                         try { (New-Object Net.WebClient).DownloadFile($LiveIso.browser_download_url, "$UsbRoot\NangCap_UsbBoot.iso"); Log-Msg "LiveCD OK" "Success" } catch {}
+                     }
+                }
+
+                # 8. THEME & JSON
                 $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
                 if ($SelTheme -ne "Mặc định (Ventoy)") {
                     $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
