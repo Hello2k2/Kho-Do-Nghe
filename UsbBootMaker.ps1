@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V12.1 FINAL FIX & COMBO)
+    VENTOY BOOT MAKER - PHAT TAN PC (V12.2 OFFLINE FALLBACK)
     Updates:
-    - [FIX SYNTAX] Sửa lỗi biến $Key: gây crash script.
-    - [COMBO] Gộp tính năng Auto-Install (V12) + Data/MAS/Rename LiveCD (V11).
-    - [CORE] Anti-Crash, Triple-Check Drive, Math-Bot.
+    - [CRITICAL] Thêm Link tải dự phòng (Direct Link) nếu API GitHub lỗi.
+    - [SAFETY] Kiểm tra nhân Ventoy trước khi chạy. Không có -> Dừng.
+    - [AIO] Giữ nguyên tính năng Auto-Install, Data, MAS.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -22,6 +22,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
+# Link cứng dự phòng (Không qua API)
+$Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
 $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
@@ -79,7 +81,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V12.1 (FINAL COMBO)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V12.2 (OFFLINE SAFE)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -93,7 +95,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Full AIO Structure | Auto-Install | MAS Activator | Rename Fix"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Backup Download Link | Full AIO Structure | Anti-Crash Core"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -268,7 +270,6 @@ function Download-AutoInstall-Scripts ($ScriptDir) {
         $Url = $Global:AutoInstallLinks[$Key]
         $Dest = "$ScriptDir\$Key"
         if (!(Test-Path $Dest)) {
-            # FIX: Dùng sub-expression $() để tránh lỗi cú pháp
             try { (New-Object Net.WebClient).DownloadFile($Url, $Dest); Log-Msg " + $($Key): OK" "Gray" } catch { Log-Msg " - $($Key): Fail" "Red" }
         }
     }
@@ -279,19 +280,38 @@ function Process-Ventoy {
     
     if (-not (Check-MathBot)) { return }
     
-    # 1. DOWNLOAD VENTOY
+    # 1. DOWNLOAD VENTOY (SMART FALLBACK)
     Log-Msg "Checking Ventoy..." "Cyan"
     $ZipFile = "$Global:WorkDir\ventoy.zip"; $ExtractPath = "$Global:WorkDir\Extracted"
+    
     if (!(Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
         try {
+            # Try API First
+            Log-Msg "Connecting to GitHub API..." "Yellow"
             $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
             $WinZip = $Assets.assets | Where-Object { $_.name -match "windows.zip" } | Select -First 1
-            $Url = if ($WinZip) { $WinZip.browser_download_url } else { $Global:VentoyFallbackUrl }
-            (New-Object Net.WebClient).DownloadFile($Url, $ZipFile)
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
-        } catch { Log-Msg "Lỗi tải Ventoy. Dùng bản cũ nếu có." "Red" }
+            $Url = $WinZip.browser_download_url
+            Log-Msg "Found Latest: $($Assets.tag_name)" "Cyan"
+        } catch {
+            # Fallback if API fails
+            Log-Msg "GitHub API Error (Rate Limit?). Using Fallback Link." "Red"
+            $Url = $Global:VentoyDirectLink
+        }
+        
+        try {
+             Log-Msg "Downloading Core..." "Yellow"
+             (New-Object Net.WebClient).DownloadFile($Url, $ZipFile)
+             if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
+             [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
+        } catch {
+             Log-Msg "CRITICAL: Cannot download Ventoy Core! Check internet." "Red"
+             [System.Windows.Forms.MessageBox]::Show("Không thể tải Ventoy! Vui lòng kiểm tra mạng.", "Lỗi Mạng", "OK", "Error")
+             return
+        }
     }
+    
     $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
+    if (!$Global:VentoyExe) { Log-Msg "Lỗi: File Ventoy2Disk.exe không tồn tại!" "Red"; return }
     
     # 2. GET DRIVE
     Force-Disk-Refresh
@@ -363,13 +383,18 @@ function Process-Ventoy {
                 }
 
                 if ($IsLiveCD) {
-                     # Logic LiveCD: Tải link mới nhất từ GitHub
+                     # Logic LiveCD
                      Log-Msg "Tải LiveCD..." "Yellow"
-                     $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
-                     $LiveIso = $Assets.assets | Where-Object { $_.name -match "livecd.iso" } | Select -First 1
-                     if ($LiveIso) {
-                         try { (New-Object Net.WebClient).DownloadFile($LiveIso.browser_download_url, "$UsbRoot\NangCap_UsbBoot.iso"); Log-Msg "LiveCD OK" "Success" } catch {}
-                     }
+                     try {
+                        $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
+                        $LiveIso = $Assets.assets | Where-Object { $_.name -match "livecd.iso" } | Select -First 1
+                        $LiveUrl = if ($LiveIso) { $LiveIso.browser_download_url } else { "" }
+                        
+                        if ($LiveUrl) {
+                            (New-Object Net.WebClient).DownloadFile($LiveUrl, "$UsbRoot\NangCap_UsbBoot.iso")
+                            Log-Msg "LiveCD OK" "Success"
+                        }
+                     } catch {}
                 }
 
                 # 8. THEME & JSON
