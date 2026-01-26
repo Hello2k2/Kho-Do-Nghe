@@ -121,84 +121,86 @@ function Start-Headless-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     $TargetDrive = "$($Global:SelectedInstall):"
     
-    if ([System.Windows.Forms.MessageBox]::Show("CẢNH BÁO: Sẽ Format ổ $TargetDrive và chép bộ cài.`nTiếp tục?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
+    if ([System.Windows.Forms.MessageBox]::Show("CÀI ĐẶT WINDOWS LÊN Ổ $TargetDrive?`n(Dữ liệu cũ sẽ bị xóa khi Setup chạy)", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO (V13.0 PHYSICAL SIGNATURE) ---"
+    Log "--- KHOI TAO (V15.0 AUTO-SEARCH BOOT) ---"
 
-    # 1. DỌN DẸP BCD CŨ
-    Log "Don dep BCD..."
+    # 1. CLEANUP BCD
+    Log "Dọn dẹp BCD..."
     & bcdedit /enum | Select-String "identifier" | ForEach-Object {
         $ID = $_.ToString().Split(" ")[-1].Trim()
         if ($ID -match "{[a-z0-9-]{36}}") { & bcdedit /delete $ID /f 2>$null }
     }
     & bcdedit /delete "{ramdiskoptions}" /f 2>$null
 
-    # 2. CHUẨN BỊ SOURCE
+    # 2. CHUẨN BỊ FILE (Folder ngắn gọn để tránh lỗi path)
+    $BootDir = "$TargetDrive\BootWIM"
+    Log "Creating $BootDir..."
+    if (Test-Path $BootDir) { Remove-Item $BootDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $BootDir -Force | Out-Null
+    
+    # Copy Boot Files
+    Log "Copying Boot Files..."
+    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$BootDir\boot.wim" -Force
+    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$BootDir\boot.sdi" -Force
+    
+    # Copy Source (Để Setup tìm thấy)
     $SourceDir = "$TargetDrive\WinSource"
-    Log "Creating Source at $SourceDir..."
     if (Test-Path $SourceDir) { Remove-Item $SourceDir -Recurse -Force }
     New-Item -ItemType Directory -Path "$SourceDir\sources" -Force | Out-Null
-    New-Item -ItemType Directory -Path "$SourceDir\boot" -Force | Out-Null
     
-    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$SourceDir\boot.wim" -Force
-    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$SourceDir\boot.sdi" -Force
-    
-    # Copy Install.wim (để Setup tìm thấy)
     $InstWim = "$Global:IsoMounted\sources\install.wim"
     if (!(Test-Path $InstWim)) { $InstWim = "$Global:IsoMounted\sources\install.esd" }
     Copy-Item $InstWim "$SourceDir\sources\install.wim" -Force
     Copy-Item "$Global:IsoMounted\setup.exe" "$SourceDir\setup.exe" -Force
 
-    # 3. CẤU HÌNH BCD (PHYSICAL DISK MODE)
-    Log "Configuring BCD (Physical Disk Signature)..."
+    # XML Trigger
+    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist %%d:\WinSource\setup.exe %%d:\WinSource\setup.exe)</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
+    [IO.File]::WriteAllText("$TargetDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
+
+    # 3. CẤU HÌNH BCD (PHƯƠNG PHÁP DEVICE OBJECT)
+    Log "Configuring BCD (Device Object Mode)..."
     try {
         $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$TargetDrive\EFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # Lấy thông tin Partition vật lý bằng DiskPart
-        # Mẹo: Tạo file script Diskpart để lấy ID
-        $DpScript = "$env:TEMP\getid.txt"
-        "select volume $TargetDrive`ndetail volume" | Out-File $DpScript -Encoding ASCII
-        $VolDetail = & diskpart /s $DpScript | Out-String
-        
-        # Lấy Partition Type/Info để gán đúng
-        # Tuy nhiên, cách an toàn nhất trong PowerShell là dùng đối tượng COM BcdStore (khó code trong 1 file).
-        # Nên ta quay lại dùng `locate` (Tự động tìm file).
+        # 3.1 TẠO RAMDISK DEVICE (Không dùng {ramdiskoptions})
+        # Tạo một thiết bị ramdisk mới và lấy GUID của nó
+        $RamdiskOut = & bcdedit /create /d "Ramdisk Device" /device
+        $RamdiskGUID = ([regex]'{[a-z0-9-]{36}}').Match($RamdiskOut).Value
 
-        # PHƯƠNG PHÁP LOCATE (Tự động tìm file trên mọi ổ)
-        # Đây là cách cứu hộ: locate=custom:
-        
-        # B1: Tạo Ramdisk Options
-        & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Setup" /f | Out-Null
-        # locate=custom: chỉ định file sdi
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "locate=\WinSource\boot.sdi"
-        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource\boot.sdi"
+        if ($RamdiskGUID) {
+            # Trỏ Device này vào file SDI trên ổ đĩa hiện tại (boot)
+            & bcdedit /set $RamdiskGUID ramdisksdidevice partition=$TargetDrive
+            & bcdedit /set $RamdiskGUID ramdisksdipath \BootWIM\boot.sdi
+            Log "-> Created Ramdisk Device: $RamdiskGUID"
+        } else { throw "Lỗi tạo Ramdisk Device" }
 
-        # B2: Tạo Entry
-        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (LOCATE MODE)" /application osloader
-        $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
+        # 3.2 TẠO OS LOADER ENTRY
+        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (V15.0)" /application osloader
+        $OsGUID = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
-        if ($Guid) {
-            # Dùng cú pháp LOCATE để BCD tự tìm file boot.wim trên tất cả các ổ
-            # Thay vì chỉ định ổ C:, ta bảo nó "tìm thằng nào có đường dẫn này thì load lên"
+        if ($OsGUID) {
+            # Trỏ Entry vào file WIM thông qua Ramdisk Device vừa tạo
+            # Cú pháp: ramdisk=[Drive]\Path\File.wim,{RamdiskGUID}
             
-            $DeviceVal = "ramdisk=[locate]\WinSource\boot.wim,{ramdiskoptions}"
+            $DeviceStr = "ramdisk=[$TargetDrive]\BootWIM\boot.wim,$RamdiskGUID"
+            Log "-> Setting Device: $DeviceStr"
+
+            & bcdedit /set $OsGUID device $DeviceStr
+            & bcdedit /set $OsGUID osdevice $DeviceStr
+            & bcdedit /set $OsGUID path $Loader
+            & bcdedit /set $OsGUID systemroot "\windows"
+            & bcdedit /set $OsGUID winpe yes
+            & bcdedit /set $OsGUID detecthal yes
             
-            Log "-> Setting Device: $DeviceVal"
-            
-            & bcdedit /set $Guid device $DeviceVal
-            & bcdedit /set $Guid osdevice $DeviceVal
-            & bcdedit /set $Guid path $Loader
-            & bcdedit /set $Guid systemroot "\windows"
-            & bcdedit /set $Guid winpe yes
-            & bcdedit /set $Guid detecthal yes
-            
-            & bcdedit /displayorder $Guid /addfirst
-            & bcdedit /bootsequence $Guid
+            # Ép Boot
+            & bcdedit /displayorder $OsGUID /addfirst
+            & bcdedit /bootsequence $OsGUID
             & bcdedit /timeout 5
             
-            Log "-> BOOT SUCCESS! Entry: $Guid"
+            Log "-> BOOT SUCCESS! Entry: $OsGUID"
         } 
     } catch { 
         Log "CRITICAL ERROR: $($_.Exception.Message)"
@@ -208,7 +210,7 @@ function Start-Headless-DISM {
     }
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã Fix lỗi Device Unknown (V13)!`nRestart ngay?", "Xong", "YesNo") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Đã nạp Boot (V15)!`nRestart ngay?", "Xong", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
 }
