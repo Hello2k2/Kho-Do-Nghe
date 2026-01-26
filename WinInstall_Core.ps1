@@ -27,7 +27,7 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(20,20,25); Panel=[System.Drawing
 
 # --- GUI ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V10.5.6  (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
+$Form.Text = "CORE INSTALLER V10.5.7  (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
 
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V10.2"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
@@ -124,64 +124,67 @@ function Start-Headless-DISM {
     if ([System.Windows.Forms.MessageBox]::Show("CẢNH BÁO: Sẽ Format ổ $TargetDrive và chép bộ cài.`nTiếp tục?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO (V12.0 SETUP MODE) ---"
+    Log "--- KHOI TAO (V12.5 HARDLINK SDI) ---"
 
-    # 1. DỌN DẸP
+    # 1. DỌN DẸP BCD CŨ
     Log "Don dep BCD..."
     & bcdedit /enum | Select-String "identifier" | ForEach-Object {
         $ID = $_.ToString().Split(" ")[-1].Trim()
         if ($ID -match "{[a-z0-9-]{36}}") { & bcdedit /delete $ID /f 2>$null }
     }
+    & bcdedit /delete "{ramdiskoptions}" /f 2>$null
 
-    # 2. CHUẨN BỊ SOURCE (Copy Full Structure)
-    # Để tránh lỗi Unmountable, ta copy nguyên cấu trúc ISO vào ổ C (hoặc ổ D)
-    # Setup.exe sẽ tự tìm thấy file install.wim nằm đúng chỗ
+    # 2. CHUẨN BỊ SOURCE (Copy vào thư mục gốc để đường dẫn ngắn nhất)
+    # Cấu trúc: C:\WinSource\boot.wim và C:\WinSource\boot.sdi
     
     $SourceDir = "$TargetDrive\WinSource"
     Log "Creating Source at $SourceDir..."
     if (Test-Path $SourceDir) { Remove-Item $SourceDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
+    
+    # Copy Boot.wim
+    Log "Copying Boot.wim..."
+    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$SourceDir\boot.wim" -Force
+    
+    # Copy Boot.sdi (BẮT BUỘC PHẢI CÓ)
+    Log "Copying Boot.sdi..."
+    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$SourceDir\boot.sdi" -Force
+    
+    # Copy Install.wim (để Setup tìm thấy sau khi boot)
+    Log "Copying Install.wim..."
+    $InstWim = "$Global:IsoMounted\sources\install.wim"
+    if (!(Test-Path $InstWim)) { $InstWim = "$Global:IsoMounted\sources\install.esd" }
+    
+    # Tạo folder sources con để Setup.exe tự tìm thấy
     New-Item -ItemType Directory -Path "$SourceDir\sources" -Force | Out-Null
-    New-Item -ItemType Directory -Path "$SourceDir\boot" -Force | Out-Null
-
-    # Copy các file quan trọng
-    Log "Copying Boot.wim (PE)..."
-    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$SourceDir\sources\boot.wim" -Force
-    
-    Log "Copying Install.wim (Data)..."
-    if (Test-Path "$Global:IsoMounted\sources\install.wim") {
-        Copy-Item "$Global:IsoMounted\sources\install.wim" "$SourceDir\sources\install.wim" -Force
-    } elseif (Test-Path "$Global:IsoMounted\sources\install.esd") {
-        Copy-Item "$Global:IsoMounted\sources\install.esd" "$SourceDir\sources\install.esd" -Force
-    }
-    
-    Log "Copying Boot Files..."
-    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$SourceDir\boot\boot.sdi" -Force
+    Copy-Item $InstWim "$SourceDir\sources\install.wim" -Force
     Copy-Item "$Global:IsoMounted\setup.exe" "$SourceDir\setup.exe" -Force
 
-    # Copy AutoUnattend.xml vào GỐC sources để tự nhận
+    # Copy XML
     $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><UserData><ProductKey><Key>NPPR9-FWDCX-D2C8J-H872K-2YT43</Key><WillShowUI>OnError</WillShowUI></ProductKey><AcceptEula>true</AcceptEula></UserData><ImageInstall><OSImage><InstallTo><DiskID>0</DiskID><PartitionID>1</PartitionID></InstallTo><WillShowUI>OnError</WillShowUI></OSImage></ImageInstall></component></settings></unattend>"
-    # Lưu ý: Cần chỉnh lại DiskID/PartitionID trong XML nếu muốn tự động hoàn toàn
-    # Ở đây ta chỉ copy để bypass EULA
-    
-    # 3. CẤU HÌNH BCD (Boot vào file boot.wim nhỏ nhẹ)
-    Log "Configuring BCD (Boot PE Only)..."
+    [IO.File]::WriteAllText("$TargetDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
+
+    # 3. CẤU HÌNH BCD (HARDLINK SDI MODE)
+    Log "Configuring BCD (Direct Link)..."
     try {
         $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$TargetDrive\EFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Setup" /f | Out-Null
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$TargetDrive"
-        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource\boot\boot.sdi"
-
-        $BcdOutput = & bcdedit /create /d "PHAT TAN WINDOWS SETUP" /application osloader
+        # Tạo Entry mới
+        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (FIX 0xED)" /application osloader
         $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($Guid) {
-            # Trỏ vào BOOT.WIM (Không phải Install.wim)
-            $DeviceStr = "ramdisk=[$TargetDrive]\WinSource\sources\boot.wim,{ramdiskoptions}"
+            # --- KHÁC BIỆT LỚN NHẤT Ở ĐÂY ---
+            # Cú pháp: ramdisk=[Drive]\Path\To\Wim,[Drive]\Path\To\Sdi
+            # Gắn trực tiếp đường dẫn SDI vào lệnh, không qua {ramdiskoptions} nữa
             
-            & bcdedit /set $Guid device $DeviceStr
-            & bcdedit /set $Guid osdevice $DeviceStr
+            $DeviceVal = "ramdisk=[$TargetDrive]\WinSource\boot.wim,[$TargetDrive]\WinSource\boot.sdi"
+            
+            Log "-> Setting Device: $DeviceVal"
+            
+            & bcdedit /set $Guid device $DeviceVal
+            & bcdedit /set $Guid osdevice $DeviceVal
             & bcdedit /set $Guid path $Loader
             & bcdedit /set $Guid systemroot "\windows"
             & bcdedit /set $Guid winpe yes
@@ -201,7 +204,7 @@ function Start-Headless-DISM {
     }
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã chép bộ cài xong! Restart ngay?", "Xong", "YesNo") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Đã Fix lỗi Unmountable (0xED)!`nRestart ngay?", "Xong", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
 }
