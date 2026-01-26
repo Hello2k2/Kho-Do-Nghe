@@ -119,102 +119,96 @@ $GridPart.ContextMenuStrip = $Cms
 
 function Start-Headless-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
-    $IndexName = $CbIndex.SelectedItem; $Idx = if ($IndexName) { $IndexName.ToString().Split("-")[0].Trim() } else { 1 }
-
-    if ([System.Windows.Forms.MessageBox]::Show("XÁC NHẬN CÀI WIN?`nỔ ĐÍCH ($($Global:SelectedInstall)) SẼ BỊ XÓA!", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
+    
+    # Lấy ổ đích từ biến toàn cục
+    $TargetDrive = "$($Global:SelectedInstall):"
+    
+    if ([System.Windows.Forms.MessageBox]::Show("CẢNH BÁO CUỐI CÙNG:`nSẽ cài đè lên ổ $TargetDrive.`nBạn có chắc chắn không?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO HE THONG (V11.1 ISOLATED RAMDISK) ---"
+    Log "--- KHOI TAO (V11.5 CLASSIC FIX) ---"
 
-    # 1. Gán nhãn và Lấy UID (GUID)
-    $TargetDrive = "$($Global:SelectedInstall):"
-    try {
-        cmd /c "label $TargetDrive WIN_TARGET"
-        Log "-> Đã gán nhãn WIN_TARGET"
-        
-        # Lấy Volume GUID chính xác (Dạng \\?\Volume{GUID}\)
-        $VolInfo = Get-WmiObject Win32_Volume -Filter "Label = 'WIN_TARGET'" | Select-Object -First 1
-        if (!$VolInfo) { throw "Không tìm thấy Volume WIN_TARGET" }
-        $VolumeGUID = $VolInfo.DeviceID.TrimEnd('\').Replace("\\?\", "") # Kết quả: Volume{...}
-        Log "-> Detected UID: $VolumeGUID"
-    } catch { 
-        Log "LỖI UID: $_"; $Form.Cursor = "Default"; return 
+    # 1. DỌN DẸP BCD CŨ (Xóa rác để tránh loạn boot)
+    Log "Dọn dẹp BCD cũ..."
+    & bcdedit /enum | Select-String "identifier" | ForEach-Object {
+        $ID = $_.ToString().Split(" ")[-1].Trim()
+        if ($ID -ne "{current}" -and $ID -ne "{bootmgr}" -and $ID -ne "{memdiag}") {
+            & bcdedit /delete $ID /f 2>$null
+        }
     }
+    & bcdedit /delete "{ramdiskoptions}" /f 2>$null
 
-    # 2. Chuẩn bị file (Copy vào GỐC để dễ boot)
-    $SafeDrive = $null
+    # 2. CHUẨN BỊ FILE
+    # Tìm ổ an toàn để lưu source (tránh ổ cài nếu được)
+    $SafeDrive = $TargetDrive 
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) { if ($D.DeviceID -ne $TargetDrive -and $D.FreeSpace -gt 5GB) { $SafeDrive = $D.DeviceID; break } }
-    if (!$SafeDrive) { $SafeDrive = $TargetDrive; Log "-> Dùng chung ổ cài chứa Source." }
     
     $WorkDir = "$SafeDrive\WinSource_PhatTan"; New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     $Ext = [System.IO.Path]::GetExtension($Global:WimFile)
 
-    Log "Copying files..."
+    Log "Copying files to $TargetDrive (Root)..."
+    # Copy Install.wim vào kho chứa
     Copy-Item $Global:WimFile "$WorkDir\install$Ext" -Force
-    # Copy Boot files ra GỐC ổ WIN_TARGET
+    # Copy Boot files ra GỐC ổ WIN_TARGET (Bắt buộc để BCD dễ tìm)
     Copy-Item "$Global:IsoMounted\sources\boot.wim" "$TargetDrive\WinInstall.wim" -Force
     Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$TargetDrive\boot.sdi" -Force
 
-    # XML Trigger
+    # XML Trigger (Tìm file AutoInstall.cmd khắp nơi)
     $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist %%d:\WinSource_PhatTan\AutoInstall.cmd call %%d:\WinSource_PhatTan\AutoInstall.cmd)</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
     [IO.File]::WriteAllText("$SafeDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
 
-    # 3. CẤU HÌNH BCD ĐỘC LẬP (ISOLATED MODE)
-    Log "Cấu hình Boot Loader (Isolated Ramdisk)..."
+    # 3. CẤU HÌNH BCD (PHƯƠNG PHÁP CỔ ĐIỂN - PARTITION LETTER)
+    Log "Nap Boot Loader (Mode: Partition Letter)..."
     try {
+        # Xác định Loader Path
         $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$TargetDrive\EFI")
-        $LoaderPath = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
+        $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # 3.1 TẠO RAMDISK OPTIONS MỚI (Không dùng {ramdiskoptions} mặc định)
-        # Tạo một GUID ngẫu nhiên cho Ramdisk Options này để tránh xung đột
-        $RamdiskGUID = "{"+[Guid]::NewGuid().ToString()+"}"
-        
-        & bcdedit /create $RamdiskGUID /d "Phat Tan Setup Ramdisk" /device
-        if ($LASTEXITCODE -ne 0) { throw "Lỗi tạo Ramdisk Device" }
+        # 3.1 Tạo Ramdisk Options (Dùng partition=C: thay vì UID)
+        & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Setup" /f | Out-Null
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$TargetDrive"
+        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\boot.sdi"
 
-        & bcdedit /set $RamdiskGUID ramdisksdidevice "volume=$VolumeGUID"
-        & bcdedit /set $RamdiskGUID ramdisksdipath "\boot.sdi"
-        Log "-> Tạo Ramdisk Options riêng: $RamdiskGUID"
+        # 3.2 Tạo Entry Boot
+        $BcdOutput = & bcdedit /create /d "CAI DAT WINDOWS (PHAT TAN)" /application osloader
+        $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
-        # 3.2 TẠO ENTRY BOOT MỚI
-        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER (SAFE MODE)" /application osloader
-        $OsGUID = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
-
-        if ($OsGUID) {
-            # Trỏ vào file WIM trên Volume UID + Ramdisk Options vừa tạo
-            $DeviceVal = "ramdisk=[volume=$VolumeGUID]\WinInstall.wim,$RamdiskGUID"
+        if ($Guid) {
+            # Cú pháp chuẩn của Microsoft: [D:]\path\to\file.wim,{options}
+            $DeviceStr = "ramdisk=[$TargetDrive]\WinInstall.wim,{ramdiskoptions}"
             
-            & bcdedit /set $OsGUID device $DeviceVal
-            & bcdedit /set $OsGUID osdevice $DeviceVal
-            & bcdedit /set $OsGUID path $LoaderPath
-            & bcdedit /set $OsGUID systemroot "\windows"
-            & bcdedit /set $OsGUID winpe yes
-            & bcdedit /set $OsGUID detecthal yes
+            & bcdedit /set $Guid device $DeviceStr
+            & bcdedit /set $Guid osdevice $DeviceStr
+            & bcdedit /set $Guid path $Loader
+            & bcdedit /set $Guid systemroot "\windows"
+            & bcdedit /set $Guid winpe yes
+            & bcdedit /set $Guid detecthal yes
             
             # Ép Boot
-            & bcdedit /displayorder $OsGUID /addfirst
-            & bcdedit /bootsequence $OsGUID
+            & bcdedit /displayorder $Guid /addfirst
+            & bcdedit /bootsequence $Guid
             & bcdedit /timeout 5
             
-            # Fix lỗi chữ ký số
-            & bcdedit /set $OsGUID nointegritychecks yes
-            & bcdedit /set $OsGUID testsigning yes
+            # Tắt check chữ ký (Quan trọng cho Win 7/Modded ISO)
+            & bcdedit /set $Guid nointegritychecks yes
+            & bcdedit /set $Guid testsigning yes
 
-            Log "-> BOOT CONFIG SUCCESS! Entry: $OsGUID"
+            Log "-> BOOT SUCCESS! Entry: $Guid"
+            Log "-> Device trỏ về: $DeviceStr"
         } else {
-            throw "Không tạo được OS Loader Entry."
+            throw "Lỗi tạo Entry BCD mới."
         }
 
     } catch { 
         Log "CRITICAL ERROR: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Lỗi cấu hình Boot: $($_.Exception.Message)", "Error")
+        [System.Windows.Forms.MessageBox]::Show("Lỗi BCD: $($_.Exception.Message)", "Error")
         $Form.Cursor = "Default"
         return
     }
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã cài đặt môi trường Boot thành công!`nKhởi động lại ngay để cài Win?", "Xong", "YesNo") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Đã nạp Boot thành công!`nKhởi động lại ngay?", "Xong", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
 }
