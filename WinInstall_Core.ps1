@@ -27,7 +27,7 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(20,20,25); Panel=[System.Drawing
 
 # --- GUI ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V10.5.7  (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
+$Form.Text = "CORE INSTALLER V10.5.8  (PHAT TAN PC)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
 
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V10.2"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
@@ -124,7 +124,7 @@ function Start-Headless-DISM {
     if ([System.Windows.Forms.MessageBox]::Show("CẢNH BÁO: Sẽ Format ổ $TargetDrive và chép bộ cài.`nTiếp tục?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO (V12.5 HARDLINK SDI) ---"
+    Log "--- KHOI TAO (V13.0 PHYSICAL SIGNATURE) ---"
 
     # 1. DỌN DẸP BCD CŨ
     Log "Don dep BCD..."
@@ -134,52 +134,56 @@ function Start-Headless-DISM {
     }
     & bcdedit /delete "{ramdiskoptions}" /f 2>$null
 
-    # 2. CHUẨN BỊ SOURCE (Copy vào thư mục gốc để đường dẫn ngắn nhất)
-    # Cấu trúc: C:\WinSource\boot.wim và C:\WinSource\boot.sdi
-    
+    # 2. CHUẨN BỊ SOURCE
     $SourceDir = "$TargetDrive\WinSource"
     Log "Creating Source at $SourceDir..."
     if (Test-Path $SourceDir) { Remove-Item $SourceDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $SourceDir -Force | Out-Null
+    New-Item -ItemType Directory -Path "$SourceDir\sources" -Force | Out-Null
+    New-Item -ItemType Directory -Path "$SourceDir\boot" -Force | Out-Null
     
-    # Copy Boot.wim
-    Log "Copying Boot.wim..."
     Copy-Item "$Global:IsoMounted\sources\boot.wim" "$SourceDir\boot.wim" -Force
-    
-    # Copy Boot.sdi (BẮT BUỘC PHẢI CÓ)
-    Log "Copying Boot.sdi..."
     Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$SourceDir\boot.sdi" -Force
     
-    # Copy Install.wim (để Setup tìm thấy sau khi boot)
-    Log "Copying Install.wim..."
+    # Copy Install.wim (để Setup tìm thấy)
     $InstWim = "$Global:IsoMounted\sources\install.wim"
     if (!(Test-Path $InstWim)) { $InstWim = "$Global:IsoMounted\sources\install.esd" }
-    
-    # Tạo folder sources con để Setup.exe tự tìm thấy
-    New-Item -ItemType Directory -Path "$SourceDir\sources" -Force | Out-Null
     Copy-Item $InstWim "$SourceDir\sources\install.wim" -Force
     Copy-Item "$Global:IsoMounted\setup.exe" "$SourceDir\setup.exe" -Force
 
-    # Copy XML
-    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><UserData><ProductKey><Key>NPPR9-FWDCX-D2C8J-H872K-2YT43</Key><WillShowUI>OnError</WillShowUI></ProductKey><AcceptEula>true</AcceptEula></UserData><ImageInstall><OSImage><InstallTo><DiskID>0</DiskID><PartitionID>1</PartitionID></InstallTo><WillShowUI>OnError</WillShowUI></OSImage></ImageInstall></component></settings></unattend>"
-    [IO.File]::WriteAllText("$TargetDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
-
-    # 3. CẤU HÌNH BCD (HARDLINK SDI MODE)
-    Log "Configuring BCD (Direct Link)..."
+    # 3. CẤU HÌNH BCD (PHYSICAL DISK MODE)
+    Log "Configuring BCD (Physical Disk Signature)..."
     try {
         $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$TargetDrive\EFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # Tạo Entry mới
-        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (FIX 0xED)" /application osloader
+        # Lấy thông tin Partition vật lý bằng DiskPart
+        # Mẹo: Tạo file script Diskpart để lấy ID
+        $DpScript = "$env:TEMP\getid.txt"
+        "select volume $TargetDrive`ndetail volume" | Out-File $DpScript -Encoding ASCII
+        $VolDetail = & diskpart /s $DpScript | Out-String
+        
+        # Lấy Partition Type/Info để gán đúng
+        # Tuy nhiên, cách an toàn nhất trong PowerShell là dùng đối tượng COM BcdStore (khó code trong 1 file).
+        # Nên ta quay lại dùng `locate` (Tự động tìm file).
+
+        # PHƯƠNG PHÁP LOCATE (Tự động tìm file trên mọi ổ)
+        # Đây là cách cứu hộ: locate=custom:
+        
+        # B1: Tạo Ramdisk Options
+        & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Setup" /f | Out-Null
+        # locate=custom: chỉ định file sdi
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "locate=\WinSource\boot.sdi"
+        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource\boot.sdi"
+
+        # B2: Tạo Entry
+        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (LOCATE MODE)" /application osloader
         $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($Guid) {
-            # --- KHÁC BIỆT LỚN NHẤT Ở ĐÂY ---
-            # Cú pháp: ramdisk=[Drive]\Path\To\Wim,[Drive]\Path\To\Sdi
-            # Gắn trực tiếp đường dẫn SDI vào lệnh, không qua {ramdiskoptions} nữa
+            # Dùng cú pháp LOCATE để BCD tự tìm file boot.wim trên tất cả các ổ
+            # Thay vì chỉ định ổ C:, ta bảo nó "tìm thằng nào có đường dẫn này thì load lên"
             
-            $DeviceVal = "ramdisk=[$TargetDrive]\WinSource\boot.wim,[$TargetDrive]\WinSource\boot.sdi"
+            $DeviceVal = "ramdisk=[locate]\WinSource\boot.wim,{ramdiskoptions}"
             
             Log "-> Setting Device: $DeviceVal"
             
@@ -204,7 +208,7 @@ function Start-Headless-DISM {
     }
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã Fix lỗi Unmountable (0xED)!`nRestart ngay?", "Xong", "YesNo") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Đã Fix lỗi Device Unknown (V13)!`nRestart ngay?", "Xong", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
 }
