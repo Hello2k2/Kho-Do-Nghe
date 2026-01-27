@@ -1,8 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V12.9 UNSTOPPABLE EXTRACTOR)
+    VENTOY BOOT MAKER - PHAT TAN PC (V13.0 SMART CACHE & CHECK VERSION)
     Updates:
-    - [GOD MODE] Tự động tải 7-Zip Portable để giải nén RAR/7Z nếu máy không có.
-    - [FIX] Cân mọi định dạng: .zip, .tar, .gz, .xz, .rar, .7z.
+    - [CACHE] Kiểm tra phiên bản Ventoy đã tải. Nếu mới nhất -> KHÔNG TẢI LẠI.
+    - [FIX] Thêm User-Agent khi tải Ventoy Core (Tránh lỗi 403/Critical).
+    - [OFFLINE] Tự động dùng bản cũ nếu mất mạng.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -25,12 +26,11 @@ $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest
 $Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
 $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 $Global:ThemeConfigUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/themes.json" 
-
-# Link tải 7-Zip Portable (Dự phòng cho RAR)
 $Global:7zToolUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
+$Global:VersionFile = "$Global:WorkDir\version_info.txt" # File lưu version hiện tại
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
 
 "--- START LOG $(Get-Date) ---" | Out-File $Global:DebugFile -Encoding UTF8 -Force
@@ -67,48 +67,89 @@ function Download-File-Safe ($Url, $Dest) {
     } catch { throw $_ }
 }
 
-# --- 🔥 SUPER EXTRACTOR (ZIP + TAR + RAR + 7Z) ---
+# --- CHECK & DOWNLOAD VENTOY THÔNG MINH ---
+function Prepare-Ventoy-Core {
+    $ZipFile = "$Global:WorkDir\ventoy.zip"
+    $ExtractPath = "$Global:WorkDir\Extracted"
+    $CurrentVer = if (Test-Path $Global:VersionFile) { Get-Content $Global:VersionFile } else { "v0.0.0" }
+    
+    Log-Msg "Kiểm tra phiên bản Ventoy (Hiện tại: $CurrentVer)..." "Cyan"
+
+    try {
+        # Lấy thông tin bản mới nhất từ API
+        $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
+        $LatestVer = $Assets.tag_name
+        $WinZip = $Assets.assets | Where-Object { $_.name -match "windows.zip" } | Select -First 1
+        $Url = $WinZip.browser_download_url
+        
+        Log-Msg "GitHub Version: $LatestVer" "Cyan"
+
+        # SO SÁNH VERSION
+        if ($LatestVer -eq $CurrentVer -and (Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
+            Log-Msg "Đã có bản mới nhất. Bỏ qua tải lại." "Success"
+            $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
+            return
+        }
+
+        # Nếu có bản mới -> Tải
+        Log-Msg "Phát hiện bản mới ($LatestVer). Đang tải..." "Yellow"
+        Download-File-Safe $Url $ZipFile
+        
+        if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
+        
+        # Lưu version mới
+        $LatestVer | Out-File $Global:VersionFile -Force
+        Log-Msg "Cập nhật Ventoy OK!" "Success"
+
+    } catch {
+        Log-Msg "Lỗi kiểm tra Update: $($_.Exception.Message)" "Red"
+        
+        # FALLBACK: Nếu không check được update, kiểm tra xem có bản cũ dùng tạm không
+        if (Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe") {
+            Log-Msg "-> Chuyển sang chế độ OFFLINE (Dùng bản cũ)." "Yellow"
+        } else {
+            Log-Msg "-> Không có bản Offline. Thử tải link dự phòng..." "Yellow"
+            try {
+                Download-File-Safe $Global:VentoyDirectLink $ZipFile
+                if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
+                "v1.0.99" | Out-File $Global:VersionFile -Force
+            } catch {
+                Log-Msg "CRITICAL: Không thể tải Ventoy! Vui lòng kiểm tra mạng." "Red"
+                return
+            }
+        }
+    }
+    
+    $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
+}
+
+# --- EXTRACTOR ---
 function Extract-Unstoppable ($SourceFile, $DestDir) {
     $Ext = [System.IO.Path]::GetExtension($SourceFile).ToLower()
     if (Test-Path $DestDir) { Remove-Item $DestDir -Recurse -Force }
     New-Item $DestDir -ItemType Directory | Out-Null
 
-    # Case 1: ZIP (Native .NET - Nhanh nhất)
     if ($Ext -eq ".zip") {
         Log-Msg "Dùng Native Zip..." "Cyan"
         [System.IO.Compression.ZipFile]::ExtractToDirectory($SourceFile, $DestDir)
         return
     }
-
-    # Case 2: TAR/GZ/XZ (Native Windows 10+ Tar)
     if ($Ext -match "\.tar|\.gz|\.xz|\.tgz") {
         Log-Msg "Dùng System Tar..." "Cyan"
         $P = Start-Process -FilePath "tar.exe" -ArgumentList "-xf `"$SourceFile`" -C `"$DestDir`"" -Wait -NoNewWindow -PassThru
         if ($P.ExitCode -eq 0) { return }
-        Log-Msg "System Tar lỗi, chuyển sang phương án 7-Zip..." "Yellow"
+        Log-Msg "System Tar lỗi, thử 7-Zip..." "Yellow"
     }
 
-    # Case 3: RAR/7Z (Hoặc Tar bị lỗi) -> Dùng 7-Zip Portable
-    Log-Msg "File khó ($Ext) -> Gọi viện binh 7-Zip..." "Yellow"
     $7zExe = "$Global:WorkDir\7za.exe"
-    
-    # Tải 7za.exe nếu chưa có
     if (!(Test-Path $7zExe)) {
-        try {
-            Log-Msg "Đang tải engine giải nén (1MB)..." "Gray"
-            Download-File-Safe $Global:7zToolUrl $7zExe
-        } catch {
-            throw "Không tải được 7-Zip để giải nén RAR! Kiểm tra mạng."
-        }
+        try { Log-Msg "Tải 7-Zip engine..." "Gray"; Download-File-Safe $Global:7zToolUrl $7zExe } catch { throw "Lỗi tải 7-Zip!" }
     }
-
-    # Chạy lệnh giải nén 7z (x = eXtract full paths, -y = yes to all, -o = output dir)
     $Proc = Start-Process -FilePath $7zExe -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y" -Wait -NoNewWindow -PassThru
-    
-    if ($Proc.ExitCode -ne 0) {
-        throw "7-Zip giải nén thất bại (Code: $($Proc.ExitCode)). File lỗi hoặc có mật khẩu?"
-    }
-    Log-Msg "Giải nén RAR/7Z thành công!" "Success"
+    if ($Proc.ExitCode -ne 0) { throw "Lỗi giải nén ($Ext)" }
+    Log-Msg "Giải nén OK!" "Success"
 }
 
 function Add-GlowBorder ($Panel) {
@@ -122,7 +163,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY V12.9.1 (RAR SUPPORT)"; $Form.Size = "950,900"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY V13.0 (SMART CACHE)"; $Form.Size = "950,900"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -136,7 +177,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto-Extract RAR/ZIP/TAR | Win11 Bypass | Online JSON"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Smart Cache | Auto-Extract | Win11 Bypass | Online JSON"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -273,27 +314,14 @@ function Show-UsbDetails-Pro {
 # --- LOGIC JSON ONLINE ---
 function Load-Themes-Online {
     $CbTheme.Items.Clear(); $CbTheme.Items.Add("Mặc định (Ventoy)")
-    Log-Msg "Đang tải danh sách Theme (Backup: Star Rail)..." "Cyan"
-    
+    Log-Msg "Đang tải danh sách Theme..." "Cyan"
     try {
-        # DANH SÁCH DỰ PHÒNG
-        $BackupJson = @"
-        [
-            { "name": "Vimix 1080p (Clean)", "type": "GRUB", "link": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/THEME/Vimix-1080p.tar.xz" },
-            { "name": "StarRail - Acheron", "type": "GRUB", "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Acheron.tar.gz" },
-            { "name": "StarRail - Firefly", "type": "GRUB", "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Firefly.tar.gz" }
-        ]
-"@
-        try {
-            $Global:ThemeData = Invoke-RestMethod -Uri $Global:ThemeConfigUrl -TimeoutSec 3 -ErrorAction Stop
-            Log-Msg "Tải Config Online thành công!" "Success"
-        } catch {
-            Log-Msg "Không tải được Config Online, dùng dữ liệu dự phòng." "Yellow"
-            $Global:ThemeData = $BackupJson | ConvertFrom-Json
-        }
-
+        $Global:ThemeData = Invoke-RestMethod -Uri $Global:ThemeConfigUrl -TimeoutSec 3 -ErrorAction Stop
+        Log-Msg "Tải Config Online thành công!" "Success"
         foreach ($item in $Global:ThemeData) { if ($item.type -eq "GRUB" -and $item.link) { $CbTheme.Items.Add($item.name) } }
-    } catch { Log-Msg "Lỗi xử lý JSON: $_" "Red" }
+    } catch { 
+        Log-Msg "Lỗi tải Config Online! Kiểm tra mạng." "Red" 
+    }
     $CbTheme.SelectedIndex = 0
 }
 
@@ -301,21 +329,9 @@ function Process-Ventoy {
     param($DiskID, $Mode, $Style, $LabelName, $FSType, $IsLiveCD, $IsDir)
     if (-not (Check-MathBot)) { return }
     
-    # 1. DOWNLOAD VENTOY
-    Log-Msg "Checking Ventoy..." "Cyan"
-    $ZipFile = "$Global:WorkDir\ventoy.zip"; $ExtractPath = "$Global:WorkDir\Extracted"
-    
-    if (!(Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
-        try {
-            $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
-            $WinZip = $Assets.assets | Where-Object { $_.name -match "windows.zip" } | Select -First 1
-            $Url = $WinZip.browser_download_url
-            Log-Msg "Found Latest: $($Assets.tag_name)" "Cyan"
-        } catch { $Url = $Global:VentoyDirectLink }
-        try { Download-File-Safe $Url $ZipFile; [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath) } catch { Log-Msg "CRITICAL: Cannot download Ventoy Core!" "Red"; return }
-    }
-    
-    $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
+    # 1. PREPARE VENTOY (Smart Check)
+    Prepare-Ventoy-Core
+    if (!$Global:VentoyExe) { return }
     
     # 2. GET DRIVE
     Force-Disk-Refresh; $DL = Get-DriveLetter-DiskPart $DiskID
@@ -350,17 +366,12 @@ function Process-Ventoy {
                     if ($T) {
                         try {
                             Log-Msg "Đang tải Theme: $($T.Name)..." "Cyan"
-                            
-                            # Đoán đuôi file để lưu tạm cho đúng
-                            $FileName = [System.IO.Path]::GetFileName($T.Link)
-                            if ($FileName -notmatch "\.") { $FileName = "theme_temp.zip" } 
+                            $FileName = [System.IO.Path]::GetFileName($T.Link); if ($FileName -notmatch "\.") { $FileName = "theme_temp.zip" } 
                             $ThemeFile = "$Global:WorkDir\$FileName"
-                            
                             Download-File-Safe $T.Link $ThemeFile
                             
                             $ThemeDest = "$VentoyDir\themes"; if (Test-Path $ThemeDest) { Remove-Item $ThemeDest -Recurse -Force }; New-Item $ThemeDest -ItemType Directory | Out-Null
                             
-                            # GỌI HÀM GIẢI NÉN THÔNG MINH
                             Extract-Unstoppable $ThemeFile $ThemeDest
                             
                             $ThemeTxt = Get-ChildItem -Path $ThemeDest -Filter "theme.txt" -Recurse | Select -First 1
