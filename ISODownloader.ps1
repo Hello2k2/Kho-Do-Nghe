@@ -1,7 +1,6 @@
 # =============================================================================
-# ISODownloader_v2.6_Ultimate.ps1
-# PHAT TAN PC - ISO DOWNLOADER EXTREME V2.6
-# (MANUAL ENGINE SELECTION + SPLIT JOINER + AUTO SETUP)
+# ISODownloader_v2.7_FixedUI.ps1
+# PHAT TAN PC - ISO DOWNLOADER EXTREME (FIXED UI & PROGRESS)
 # =============================================================================
 
 # 1. YÊU CẦU QUYỀN ADMIN
@@ -65,19 +64,19 @@ function Get-Aria2Path {
 }
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "ISO DOWNLOADER V2.6 - PHAT TAN PC"; $Form.Size = New-Object System.Drawing.Size(780, 520); $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
+$Form.Text = "ISO DOWNLOADER V2.7 (FIX UI) - PHAT TAN PC"; $Form.Size = New-Object System.Drawing.Size(780, 520); $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 30); $Form.ForeColor = "White"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 $Global:IsoData = @()
 
 $FontTitle = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold); $FontNormal = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular); $FontBold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold); $FontBigBtn = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 
 # Header
-$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (V2.6 CHOICE)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.Font=$FontTitle; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
+$Lbl = New-Object System.Windows.Forms.Label; $Lbl.Text = "KHO TAI NGUYEN (FIXED PROGRESS)"; $Lbl.AutoSize=$true; $Lbl.Location="20,15"; $Lbl.Font=$FontTitle; $Lbl.ForeColor="Cyan"; $Form.Controls.Add($Lbl)
 
 # Aria2 Check Status
 $LblAria = New-Object System.Windows.Forms.Label; $LblAria.Location="580,20"; $LblAria.AutoSize=$true; $LblAria.Font=$FontBold; $Form.Controls.Add($LblAria)
 if (Get-Aria2Path) { $LblAria.Text="[ARIA2: INSTALLED]"; $LblAria.ForeColor="Lime" } else { $LblAria.Text="[ARIA2: MISSING]"; $LblAria.ForeColor="Red" }
 
-# Filter Group (Đã mở rộng size để chứa nút chọn)
+# Filter Group
 $GbFilter = New-Object System.Windows.Forms.GroupBox; $GbFilter.Text="Bo Loc & Cau Hinh"; $GbFilter.Location="20,60"; $GbFilter.Size="720,80"; $GbFilter.ForeColor="Yellow"; $GbFilter.Font=$FontBold; $Form.Controls.Add($GbFilter)
 
 $CbType = New-Object System.Windows.Forms.ComboBox; $CbType.Location="20,30"; $CbType.Size="120,30"; $CbType.DropDownStyle="DropDownList"; $CbType.Font=$FontNormal; $GbFilter.Controls.Add($CbType)
@@ -87,11 +86,9 @@ $CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location="220,30"; $
 $LblThread = New-Object System.Windows.Forms.Label; $LblThread.Text="Luong:"; $LblThread.Location="320,33"; $LblThread.AutoSize=$true; $LblThread.Font=$FontNormal; $GbFilter.Controls.Add($LblThread)
 $CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location="370,30"; $CbThread.Size="50,30"; $CbThread.DropDownStyle="DropDownList"; $CbThread.Font=$FontNormal; $CbThread.Items.AddRange(@("4", "8", "16", "32")); $CbThread.SelectedItem="16"; $GbFilter.Controls.Add($CbThread)
 
-# --- [MỚI] KHU VỰC CHỌN ENGINE ---
 $LblEng = New-Object System.Windows.Forms.Label; $LblEng.Text="Engine:"; $LblEng.Location="440,33"; $LblEng.AutoSize=$true; $LblEng.Font=$FontNormal; $GbFilter.Controls.Add($LblEng)
 $RadNative = New-Object System.Windows.Forms.RadioButton; $RadNative.Text="Native"; $RadNative.Location="500,30"; $RadNative.AutoSize=$true; $RadNative.Font=$FontNormal; $RadNative.Checked=$true; $GbFilter.Controls.Add($RadNative)
 $RadAria = New-Object System.Windows.Forms.RadioButton; $RadAria.Text="Aria2"; $RadAria.Location="565,30"; $RadAria.AutoSize=$true; $RadAria.Font=$FontNormal; $GbFilter.Controls.Add($RadAria)
-# ---------------------------------
 
 $BtnLoad = New-Object System.Windows.Forms.Button; $BtnLoad.Text="REFRESH"; $BtnLoad.Location="630,25"; $BtnLoad.Size="80,35"; $BtnLoad.BackColor="DimGray"; $BtnLoad.ForeColor="White"; $BtnLoad.Font=$FontBold; $GbFilter.Controls.Add($BtnLoad)
 
@@ -121,7 +118,7 @@ $ScriptBlock = {
     } catch { return $_.Exception.Message }
 }
 
-# --- NATIVE DOWNLOAD ---
+# --- NATIVE DOWNLOAD (FIXED UI) ---
 function Start-NativeDownload ($Url, $DestPath, $ThreadCount, $SilentMode) {
     if (!$SilentMode) { $Status.Text = "KHOI DONG NATIVE ENGINE..." }
     [System.Windows.Forms.Application]::DoEvents()
@@ -151,14 +148,21 @@ function Start-NativeDownload ($Url, $DestPath, $ThreadCount, $SilentMode) {
         }
         if ($TotalSize -gt 0) {
             $Percent = [Math]::Min(100, [Math]::Round(($Downloaded / $TotalSize) * 100))
-            if (!$SilentMode) { $Bar.Value = $Percent; $Status.Text = "Downloading (Native)... $Percent% ([Math]::Round($Downloaded/1MB,2) MB)" }
+            # --- FIX HIỂN THỊ SỐ ẢO Ở ĐÂY ---
+            if (!$SilentMode) { 
+                $CurrentMB = [Math]::Round($Downloaded / 1MB, 2)
+                $TotalMB = [Math]::Round($TotalSize / 1MB, 2)
+                $Bar.Value = [int]$Percent
+                $Status.Text = "Dang tai... $Percent% ($CurrentMB MB / $TotalMB MB)" 
+            }
+            # --------------------------------
         }
         if ($Completed -eq $Threads) { $IsDone = $true }
         [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 200
     }
     foreach ($Ps in $PowerShells) { $Ps.Dispose() }; $Pool.Close(); $Pool.Dispose(); [GC]::Collect()
 
-    if (!$SilentMode) { $Status.Text = "Merging..." }
+    if (!$SilentMode) { $Status.Text = "Dang ghep file (Merging)..." }
     try {
         $OutStream = New-Object System.IO.FileStream($DestPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, 1048576)
         $MergeBuf = New-Object byte[] 1048576
@@ -180,7 +184,7 @@ function Start-NativeDownload ($Url, $DestPath, $ThreadCount, $SilentMode) {
 function Start-AriaDownload ($Url, $DestPath, $ThreadCount, $ExePath, $SilentMode) {
     $Dir = Split-Path $DestPath; $FileName = Split-Path $DestPath -Leaf
     $ArgsList = "-x$ThreadCount -s$ThreadCount -k1M --file-allocation=none -d `"$Dir`" -o `"$FileName`" `"$Url`""
-    if (!$SilentMode) { $Status.Text = "ARIA2 RUNNING..." }
+    if (!$SilentMode) { $Status.Text = "ARIA2 DANG CHAY (Vui long xem cua so CMD)..." }
     Start-Process -FilePath $ExePath -ArgumentList $ArgsList -Wait -NoNewWindow
     if (Test-Path $DestPath) {
         if (!$SilentMode) { $Status.Text = "HOAN TAT!"; [System.Windows.Forms.MessageBox]::Show("Tai thanh cong!", "Success"); Invoke-Item $Dir }
@@ -191,14 +195,14 @@ function Start-AriaDownload ($Url, $DestPath, $ThreadCount, $ExePath, $SilentMod
 
 # --- HANDLERS ---
 function Load-JsonData {
-    $Status.Text = "Loading..."; $Form.Cursor = "WaitCursor"
+    $Status.Text = "Dang tai du lieu..."; $Form.Cursor = "WaitCursor"
     try {
         $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds(); $Json = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts"
         $Global:IsoData = $Json
         $CbType.Items.Clear(); $CbType.Items.Add("All"); ($Json.type | Select -Unique | Sort) | % { $CbType.Items.Add($_) }; $CbType.SelectedIndex=0
         $CbLang.Items.Clear(); $CbLang.Items.Add("All"); ($Json.language | Select -Unique | Sort) | % { $CbLang.Items.Add($_) }; $CbLang.SelectedIndex=0
-        Filter-List; $Status.Text = "Ready."
-    } catch { [System.Windows.Forms.MessageBox]::Show("Loi JSON","Error") }
+        Filter-List; $Status.Text = "San sang."
+    } catch { [System.Windows.Forms.MessageBox]::Show("Khong tai duoc danh sach ISO!","Loi Mang") }
     $Form.Cursor = "Default"
 }
 
@@ -213,7 +217,7 @@ function Filter-List {
 
 $CbType.Add_SelectedIndexChanged({ Filter-List }); $CbBit.Add_SelectedIndexChanged({ Filter-List }); $CbLang.Add_SelectedIndexChanged({ Filter-List }); $BtnLoad.Add_Click({ Load-JsonData })
 
-# --- BTN DOWN LOGIC (CHOICE + SPLIT) ---
+# --- BTN DOWN LOGIC ---
 $BtnDown.Add_Click({
     $Sel = $CbResult.SelectedItem
     $Item = $Global:IsoData | ? { $_.name -eq $Sel } | Select -First 1
@@ -228,25 +232,15 @@ $BtnDown.Add_Click({
         $Threads = $CbThread.SelectedItem; $BtnDown.Enabled = $false; $CbResult.Enabled = $false
         $TargetFile = $Save.FileName; $Links = $Item.link -split "\|"
         
-        # --- LOGIC CHỌN ENGINE ---
-        $UseAria = $RadAria.Checked # Kiểm tra xem khách chọn Aria hay Native
-        $AriaExe = Get-Aria2Path
-        
-        # Nếu chọn Aria mà không có file exe -> Tự chuyển về Native
-        if ($UseAria -and -not $AriaExe) {
-             [System.Windows.Forms.MessageBox]::Show("Khong tim thay Aria2! Se tu dong chuyen sang Native.", "Thong Bao")
-             $UseAria = $false
-        }
-        # -------------------------
+        $UseAria = $RadAria.Checked; $AriaExe = Get-Aria2Path
+        if ($UseAria -and -not $AriaExe) { [System.Windows.Forms.MessageBox]::Show("Khong tim thay Aria2! Chuyen ve Native.", "Thong Bao"); $UseAria = $false }
 
         if ($Links.Count -gt 1) {
-            # --- SPLIT MODE ---
             $PartFiles = @(); $Count = 1; $Success = $true
             foreach ($L in $Links) {
                 $PartName = "$TargetFile.part$Count.tmp"; $PartFiles += $PartName
-                $Status.Text = "Dang tai PART $Count / $($Links.Count) ..."; $Bar.Value = [Math]::Round(($Count / $Links.Count) * 100); [System.Windows.Forms.Application]::DoEvents()
+                $Status.Text = "Dang tai PHAN $Count / $($Links.Count) ..."; $Bar.Value = [Math]::Round(($Count / $Links.Count) * 100); [System.Windows.Forms.Application]::DoEvents()
                 
-                # Quyết định dùng Engine nào
                 if ($UseAria) { $Res = Start-AriaDownload $L $PartName $Threads $AriaExe $true } 
                 else { $Res = Start-NativeDownload $L $PartName $Threads $true }
 
@@ -262,8 +256,7 @@ $BtnDown.Add_Click({
                 } catch { [System.Windows.Forms.MessageBox]::Show("Loi Join File!", "Error") }
             } else { [System.Windows.Forms.MessageBox]::Show("Loi khi tai cac phan!", "Error") }
         } else {
-            # --- SINGLE MODE ---
-            $Status.Text = "Dang tai file..."; 
+            $Status.Text = "Dang chuan bi..."; 
             if ($UseAria) { Start-AriaDownload $Links[0] $TargetFile $Threads $AriaExe $false } 
             else { Start-NativeDownload $Links[0] $TargetFile $Threads $false }
         }
