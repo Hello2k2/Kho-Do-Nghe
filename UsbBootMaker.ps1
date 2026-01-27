@@ -1,9 +1,8 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V13.1 MEMTEST & SECURITY)
+    VENTOY BOOT MAKER - PHAT TAN PC (V13.2 AUTO UPDATE MEMTEST)
     Updates:
-    - [MEMTEST] Tự động tải Memtest86+ v7.00 ISO vào thư mục ISO_Rescue.
-    - [SECURITY] Hỗ trợ đặt Password cho Menu Boot (Tự động mã hóa SHA256).
-    - [CUSTOM] Cho phép tùy chỉnh tên Alias Menu.
+    - [AUTO] Tự động lấy link tải Memtest86+ mới nhất qua GitHub API.
+    - [UPDATE] Cập nhật link dự phòng lên Memtest v7.20.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -28,8 +27,9 @@ $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activat
 $Global:ThemeConfigUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/themes.json" 
 $Global:7zToolUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
 
-# Link Memtest86+ ISO Chính chủ
-$Global:MemtestUrl = "https://github.com/memtest86plus/memtest86plus/releases/download/v7.00/mt86plus_7.00.iso"
+# --- NEW: MEMTEST CONFIG ---
+$Global:MemtestRepo = "https://api.github.com/repos/memtest86plus/memtest86plus/releases/latest"
+$Global:MemtestFallback = "https://github.com/memtest86plus/memtest86plus/releases/download/v7.20/mt86plus_7.20.iso"
 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
@@ -38,7 +38,7 @@ if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:W
 
 "--- START LOG $(Get-Date) ---" | Out-File $Global:DebugFile -Encoding UTF8 -Force
 
-# 3. GUI COLORS
+# 3. GUI
 $Theme = @{
     BgForm  = [System.Drawing.Color]::FromArgb(30, 30, 35)
     Card    = [System.Drawing.Color]::FromArgb(45, 45, 50)
@@ -49,7 +49,6 @@ $Theme = @{
     InputBg = [System.Drawing.Color]::FromArgb(60, 60, 70)
 }
 
-# --- HELPER FUNCTIONS ---
 function Log-Msg ($Msg, $Color="Lime") { 
     try {
         $Form.Invoke([Action]{
@@ -102,7 +101,7 @@ function Prepare-Ventoy-Core {
         [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
         $LatestVer | Out-File $Global:VersionFile -Force
     } catch {
-        Log-Msg "Offline Mode / API Error. Dùng bản cũ..." "Yellow"
+        Log-Msg "Offline/API Error. Dùng bản cũ..." "Yellow"
         if (Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe") {
              $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
         } else {
@@ -143,13 +142,13 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY V13.1 (MEMTEST + SECURITY)"; $Form.Size = "950,920"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY V13.2 (AUTO MEMTEST)"; $Form.Size = "950,920"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) 
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) 
-$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 500))) # Tăng chiều cao tab
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 500))) 
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) 
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 70))) 
 $Form.Controls.Add($MainTable)
@@ -157,7 +156,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto Memtest86+ | Boot Password | Custom Alias | Win11 Bypass"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "API Update Memtest | Boot Password | Custom Alias | Win11 Bypass"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -211,7 +210,7 @@ $LblPass = New-Object System.Windows.Forms.Label; $LblPass.Text = "Password Boot
 $TxtPass = New-Object System.Windows.Forms.TextBox; $TxtPass.Text = ""; $TxtPass.Width = 300; $TxtPass.BackColor = $Theme.InputBg; $TxtPass.ForeColor = "Orange"; $TxtPass.PasswordChar = "*"
 $G1.Controls.Add($LblPass, 0, 5); $G1.Controls.Add($TxtPass, 1, 5)
 
-$ChkMemtest = New-Object System.Windows.Forms.CheckBox; $ChkMemtest.Text = "Tải Memtest86+ v7.00 ISO (Test RAM)"; $ChkMemtest.Checked = $true; $ChkMemtest.ForeColor = "Cyan"; $ChkMemtest.AutoSize = $true
+$ChkMemtest = New-Object System.Windows.Forms.CheckBox; $ChkMemtest.Text = "Tải Memtest86+ mới nhất (GitHub API)"; $ChkMemtest.Checked = $true; $ChkMemtest.ForeColor = "Cyan"; $ChkMemtest.AutoSize = $true
 $G1.Controls.Add($ChkMemtest, 0, 6); $G1.SetColumnSpan($ChkMemtest, 2)
 
 $ChkLive = New-Object System.Windows.Forms.CheckBox; $ChkLive.Text = "Tải & Cài LiveCD (NangCap_UsbBoot.iso)"; $ChkLive.Checked = $true; $ChkLive.ForeColor = "Yellow"; $ChkLive.AutoSize = $true
@@ -354,14 +353,24 @@ function Process-Ventoy {
                 if ($Mode -eq "INSTALL") { try { cmd /c "label $UsbRoot $LabelName" } catch {} }
                 $VentoyDir = "$UsbRoot\ventoy"; New-Item -Path $VentoyDir -ItemType Directory -Force | Out-Null
                 
-                # --- MEMTEST86+ (NEW) ---
+                # --- MEMTEST86+ (AUTO API) ---
                 if ($ChkMemtest.Checked) {
                     try {
-                        Log-Msg "Đang tải Memtest86+ ISO (v7.00)..." "Cyan"
+                        Log-Msg "Check Memtest86+ Latest..." "Cyan"
+                        try {
+                            $M_Assets = Invoke-RestMethod -Uri $Global:MemtestRepo -TimeoutSec 5
+                            $M_Iso = $M_Assets.assets | Where-Object { $_.name -match "\.iso$" } | Select -First 1
+                            $MemUrl = $M_Iso.browser_download_url
+                            Log-Msg "Found: $($M_Assets.tag_name)" "Cyan"
+                        } catch {
+                            Log-Msg "API Error. Dùng link fallback (v7.20)." "Yellow"
+                            $MemUrl = $Global:MemtestFallback
+                        }
+                        
                         $IsoRescueDir = "$UsbRoot\ISO_Rescue"
                         if (!(Test-Path $IsoRescueDir)) { New-Item -Path $IsoRescueDir -ItemType Directory -Force | Out-Null }
-                        Download-File-Safe $Global:MemtestUrl "$IsoRescueDir\memtest86+.iso"
-                        Log-Msg "Memtest86+ OK -> $IsoRescueDir" "Success"
+                        Download-File-Safe $MemUrl "$IsoRescueDir\memtest86+.iso"
+                        Log-Msg "Memtest86+ OK!" "Success"
                     } catch { Log-Msg "Lỗi tải Memtest: $($_.Exception.Message)" "Red" }
                 }
 
