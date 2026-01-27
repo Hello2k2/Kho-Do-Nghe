@@ -257,7 +257,7 @@ wpeutil reboot
         Restart-Computer -Force
     }
 }
-}
+
 # --- EVENTS (FIXED TypeNotFound) ---
 $BtnISO.Add_Click({ 
     $OFD = New-Object System.Windows.Forms.OpenFileDialog
