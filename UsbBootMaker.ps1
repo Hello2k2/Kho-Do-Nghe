@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V13.3 STABILITY PATCH)
+    VENTOY BOOT MAKER - PHAT TAN PC (V13.4 RECURSIVE EXTRACT)
     Updates:
-    - [FIX] Sửa lỗi Crash khi không lấy được link Memtest từ API (Tự động Fallback).
-    - [FIX] Nâng cấp bộ giải nén Theme: Kiểm tra kỹ file tải về, thử nhiều cách giải nén.
-    - [LOG] Thêm thông báo chi tiết hơn để dễ debug.
+    - [FIX] Giải nén thông minh 2 lớp (VD: .tar.xz -> .tar -> files).
+    - [FIX] Memtest tải bằng Invoke-WebRequest (ổn định hơn) + Retry 3 lần.
+    - [UX] Ẩn cửa sổ dòng lệnh đen sì của 7-Zip cho đỡ rối mắt.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -13,8 +13,8 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Exit
 }
 
-# 1. SETUP & SECURITY
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
+# 1. SETUP
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -27,9 +27,6 @@ $Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v
 $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 $Global:ThemeConfigUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/themes.json" 
 $Global:7zToolUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
-
-# Memtest Config (API + Fallback)
-$Global:MemtestRepo = "https://api.github.com/repos/memtest86plus/memtest86plus/releases/latest"
 $Global:MemtestFallback = "https://github.com/memtest86plus/memtest86plus/releases/download/v7.20/mt86plus_7.20.iso"
 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
@@ -70,15 +67,33 @@ function Get-Sha256 ($String) {
     return [BitConverter]::ToString($Hash).Replace("-", "").ToLower()
 }
 
-function Download-File-Safe ($Url, $Dest) {
-    try {
-        $WebClient = New-Object System.Net.WebClient
-        $WebClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        $WebClient.DownloadFile($Url, $Dest)
-        
-        # Check size file
-        if ((Get-Item $Dest).Length -lt 1KB) { throw "File tải về quá nhỏ (Lỗi Link?)" }
-    } catch { throw $_ }
+# --- NEW: ROBUST DOWNLOADER (RETRY 3 TIMES) ---
+function Download-File-Robust ($Url, $Dest) {
+    $MaxRetries = 3
+    $RetryCount = 0
+    $Success = $false
+
+    while (-not $Success -and $RetryCount -lt $MaxRetries) {
+        try {
+            $RetryCount++
+            # Dùng Invoke-WebRequest thay vì WebClient (ổn định hơn)
+            Invoke-WebRequest -Uri $Url -OutFile $Dest -UserAgent "Mozilla/5.0" -TimeoutSec 300 -ErrorAction Stop
+            
+            if ((Get-Item $Dest).Length -gt 1KB) { 
+                $Success = $true 
+            } else { throw "File quá nhỏ (<1KB)" }
+        } catch {
+            Log-Msg "Tải lỗi (Lần $RetryCount/$MaxRetries): $($_.Exception.Message)" "Yellow"
+            Start-Sleep -Seconds 2
+        }
+    }
+    if (-not $Success) { throw "Tải thất bại sau $MaxRetries lần thử!" }
+}
+
+function Download-File-Simple ($Url, $Dest) {
+    # Hàm tải nhanh cho file nhỏ (json, text)
+    $wc = New-Object System.Net.WebClient
+    $wc.DownloadFile($Url, $Dest)
 }
 
 # --- CORE FUNCTIONS ---
@@ -100,7 +115,7 @@ function Prepare-Ventoy-Core {
             return
         }
         Log-Msg "Tải bản mới ($LatestVer)..." "Yellow"
-        Download-File-Safe $Url $ZipFile
+        Download-File-Robust $Url $ZipFile
         if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
         [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
         $LatestVer | Out-File $Global:VersionFile -Force
@@ -115,40 +130,45 @@ function Prepare-Ventoy-Core {
     $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
 }
 
-function Extract-Unstoppable ($SourceFile, $DestDir) {
-    $Ext = [System.IO.Path]::GetExtension($SourceFile).ToLower()
+# --- 🔥 RECURSIVE EXTRACTOR (GIẢI NÉN LỒNG NHAU) ---
+function Extract-Recursive ($SourceFile, $DestDir) {
+    if (!(Test-Path $SourceFile)) { throw "File nguồn không tồn tại!" }
     if (Test-Path $DestDir) { Remove-Item $DestDir -Recurse -Force }
     New-Item $DestDir -ItemType Directory | Out-Null
 
-    Log-Msg "Đang giải nén: $([System.IO.Path]::GetFileName($SourceFile))..." "Yellow"
+    Log-Msg "Bắt đầu giải nén: $([System.IO.Path]::GetFileName($SourceFile))" "Yellow"
 
-    # 1. Native ZIP
-    if ($Ext -eq ".zip") {
-        try {
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($SourceFile, $DestDir)
-            return
-        } catch { Log-Msg "Native Zip lỗi, thử 7-Zip..." "Yellow" }
-    }
-
-    # 2. 7-Zip Portable (Ưu tiên số 1 cho các định dạng khó)
+    # Chuẩn bị 7-Zip
     $7zExe = "$Global:WorkDir\7za.exe"
     if (!(Test-Path $7zExe)) { 
-        try { Log-Msg "Tải engine 7-Zip..." "Gray"; Download-File-Safe $Global:7zToolUrl $7zExe } catch {} 
+        try { Log-Msg "Tải engine 7-Zip..." "Gray"; Download-File-Robust $Global:7zToolUrl $7zExe } catch { throw "Lỗi tải 7-Zip!" }
     }
+
+    # LẦN 1: Giải nén file gốc (VD: .tar.xz -> ra file .tar)
+    # -bso0 -bsp0: Tắt output rác ra console
+    $Proc = Start-Process -FilePath $7zExe -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y -bso0 -bsp0" -Wait -NoNewWindow -PassThru
     
-    if (Test-Path $7zExe) {
-        $Proc = Start-Process -FilePath $7zExe -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y" -Wait -NoNewWindow -PassThru
-        if ($Proc.ExitCode -eq 0) { return }
-        Log-Msg "7-Zip lỗi (Code $($Proc.ExitCode)), thử TAR..." "Yellow"
+    if ($Proc.ExitCode -ne 0) {
+        # Fallback: Thử dùng Native Zip nếu 7z thất bại
+        try { [System.IO.Compression.ZipFile]::ExtractToDirectory($SourceFile, $DestDir); Log-Msg "Dùng Native Zip OK." "Success"; return }
+        catch { throw "Giải nén thất bại!" }
     }
 
-    # 3. Native Tar (Fallback cuối cùng)
-    if ($Ext -match "\.tar|\.gz|\.xz|\.tgz") {
-        $P = Start-Process -FilePath "tar.exe" -ArgumentList "-xf `"$SourceFile`" -C `"$DestDir`"" -Wait -NoNewWindow -PassThru
-        if ($P.ExitCode -eq 0) { return }
+    # LẦN 2: Kiểm tra xem bên trong có lòi ra file .TAR không? (Xử lý case .tar.xz / .tar.gz)
+    $InnerTar = Get-ChildItem -Path $DestDir -Filter "*.tar" | Select -First 1
+    if ($InnerTar) {
+        Log-Msg "⚠️ Phát hiện file TAR lồng bên trong. Giải nén tiếp..." "Cyan"
+        # Giải nén file tar này ra chính thư mục đó
+        $Proc2 = Start-Process -FilePath $7zExe -ArgumentList "x `"$($InnerTar.FullName)`" -o`"$DestDir`" -y -bso0 -bsp0" -Wait -NoNewWindow -PassThru
+        
+        if ($Proc2.ExitCode -eq 0) {
+            # Xóa file tar rác đi cho nhẹ
+            Remove-Item $InnerTar.FullName -Force
+            Log-Msg "Giải nén lớp 2 hoàn tất!" "Success"
+        }
+    } else {
+        Log-Msg "Giải nén hoàn tất (1 lớp)." "Success"
     }
-
-    throw "Không thể giải nén file này! Kiểm tra file có lỗi không."
 }
 
 function Add-GlowBorder ($Panel) {
@@ -162,7 +182,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY V13.3 (STABILITY PATCH)"; $Form.Size = "950,920"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY V13.4 (FINAL FIX)"; $Form.Size = "950,920"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -176,7 +196,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Smart Cache | Auto-Extract | Win11 Bypass | Online JSON"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Recursive Extract | Robust Download | Win11 Bypass"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -373,7 +393,7 @@ function Process-Ventoy {
                 if ($Mode -eq "INSTALL") { try { cmd /c "label $UsbRoot $LabelName" } catch {} }
                 $VentoyDir = "$UsbRoot\ventoy"; New-Item -Path $VentoyDir -ItemType Directory -Force | Out-Null
                 
-                # --- MEMTEST86+ (AUTO API) ---
+                # --- MEMTEST86+ (ROBUST) ---
                 if ($ChkMemtest.Checked) {
                     try {
                         Log-Msg "Check Memtest86+ Latest..." "Cyan"
@@ -392,15 +412,15 @@ function Process-Ventoy {
                         
                         $IsoRescueDir = "$UsbRoot\ISO_Rescue"
                         if (!(Test-Path $IsoRescueDir)) { New-Item -Path $IsoRescueDir -ItemType Directory -Force | Out-Null }
-                        Download-File-Safe $MemUrl "$IsoRescueDir\memtest86+.iso"
+                        Download-File-Robust $MemUrl "$IsoRescueDir\memtest86+.iso"
                         Log-Msg "Memtest86+ OK!" "Success"
                     } catch { Log-Msg "Lỗi tải Memtest: $($_.Exception.Message)" "Red" }
                 }
 
                 # MAS & LIVECD
-                if ($IsDir) { try { Download-File-Safe $Global:MasUrl "$UsbRoot\MAS_AIO.cmd"; Log-Msg "MAS OK" "Success" } catch {} }
+                if ($IsDir) { try { Download-File-Simple $Global:MasUrl "$UsbRoot\MAS_AIO.cmd"; Log-Msg "MAS OK" "Success" } catch {} }
 
-                # 4. THEME ONLINE (SUPER EXTRACT)
+                # 4. THEME ONLINE (RECURSIVE)
                 $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
                 if ($SelTheme -ne "Mặc định (Ventoy)") {
                     $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
@@ -409,18 +429,19 @@ function Process-Ventoy {
                             Log-Msg "Đang tải Theme: $($T.Name)..." "Cyan"
                             $FileName = [System.IO.Path]::GetFileName($T.Link); if ($FileName -notmatch "\.") { $FileName = "theme_temp.zip" } 
                             $ThemeFile = "$Global:WorkDir\$FileName"
-                            Download-File-Safe $T.Link $ThemeFile
+                            Download-File-Robust $T.Link $ThemeFile
                             
                             $ThemeDest = "$VentoyDir\themes"; if (Test-Path $ThemeDest) { Remove-Item $ThemeDest -Recurse -Force }; New-Item $ThemeDest -ItemType Directory | Out-Null
                             
-                            Extract-Unstoppable $ThemeFile $ThemeDest
+                            Extract-Recursive $ThemeFile $ThemeDest
                             
+                            # Tìm file theme.txt
                             $ThemeTxt = Get-ChildItem -Path $ThemeDest -Filter "theme.txt" -Recurse | Select -First 1
                             if ($ThemeTxt) {
                                 $RelPath = $ThemeTxt.FullName.Substring($VentoyDir.Length).Replace("\", "/")
                                 $ThemeConfig = "/ventoy$RelPath"
                                 Log-Msg "Cài Theme OK: $RelPath" "Success"
-                            } else { Log-Msg "Không tìm thấy file theme.txt! (Folder rỗng?)" "Red" }
+                            } else { Log-Msg "Không tìm thấy file theme.txt!" "Red" }
                         } catch { Log-Msg "LỖI THEME: $($_.Exception.Message)" "Red" }
                     }
                 }
@@ -436,7 +457,6 @@ function Process-Ventoy {
                     "menu_alias" = @( @{ "image" = "/ventoy/ventoy.png"; "alias" = $TxtAlias.Text } )
                 }
                 
-                # PASSWORD LOGIC (SHA256)
                 if ($TxtPass.Text -ne "") {
                     $HashedPass = Get-Sha256 $TxtPass.Text
                     $J.Add("password", @{ "menupwd" = $HashedPass })
