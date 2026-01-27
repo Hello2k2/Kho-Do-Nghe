@@ -63,5 +63,60 @@
     "name": "StarRail - Feixiao",
     "type": "GRUB",
     "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Feixiao.tar.gz"
+  },
+  {
+    "name": "Lycoris Recoil - Chisato Nishikigi",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/Lyco-v1.0/Nishikigi-Chisato.tar.gz"
+  },
+  {
+    "name": "Lycoris Recoil - Takina Inoue",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/Lyco-v1.0/Inoue-Takina.tar.gz"
+  },
+  {
+    "name": "Hololive - Kobo Kanaeru",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/VTuber-v1.1/Kobo_Kanaeru.tar.gz"
+  },
+  {
+    "name": "Hololive - Hoshimati Suisei",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/VTuber-v1.0/Hoshimati_Suisei.tar.gz"
+  },
+  {
+    "name": "Hololive - Airani Iofifteen",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/VTuber-v1.2/Airani_Iofifteen.tar.gz"
+  },
+  {
+    "name": "Vocaloid - Hatsune Miku",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/Vocaloid-v1.0/Hatsune_Miku.tar.gz"
+  },
+  {
+    "name": "Touhou Project (AIO)",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/Tproject-v1.0/Touhou_Project.tar.gz"
+  },
+  {
+    "name": "FGO - Okita Souji (Alter)",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/FGO-v1.2/Okita-Souji-Alter-Version.tar.gz"
+  },
+  {
+    "name": "FGO - Mash Kyrielight (Ver 2)",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/FGO-v1.1/Mash-Kyrielight-Version-2.tar.gz"
+  },
+  {
+    "name": "FGO - Leonardo da Vinci (Rider)",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/FGO-v1.0/Leonardo-da-Vinci-Rider-Version.tar.gz"
+  },
+  {
+    "name": "Doki Doki Literature Club Plus!",
+    "type": "GRUB",
+    "link": "https://github.com/13atm01/GRUB-Theme/releases/download/DDLC-v1.0/DDLC.tar.gz"
   }
 ]
