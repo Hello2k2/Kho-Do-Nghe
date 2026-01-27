@@ -1,8 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V12.4 FINAL FIX LINK)
+    VENTOY BOOT MAKER - PHAT TAN PC (V12.5 ULTIMATE BYPASS)
     Updates:
-    - [FIX 404] Thay link MAS GitHub (hay lỗi) bằng link GitLab (ổn định).
-    - [FIX 404] Cập nhật link tải Theme WhiteSur dạng rút gọn.
+    - [FEATURE] Thêm Tab "Win 11 Hacks": Bypass TPM, SecureBoot, Online Account.
+    - [FIX] Link MAS chuyển sang dạng RAW chuẩn.
+    - [FIX] Thay thế Theme nguồn ổn định (Vimix) để tránh lỗi 404.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -24,8 +25,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
 $Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
 
-# --- FIX 1: Đổi Link MAS sang GitLab (Tránh lỗi 404 GitHub) ---
-$Global:MasUrl = "https://gitlab.com/massgrave/microsoft-activation-scripts/-/raw/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+# --- FIX 1: Link MAS chuẩn (Dạng RAW) ---
+$Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
@@ -35,17 +36,15 @@ $Global:VersionFile = "$Global:WorkDir\current_version.txt"
 # Reset Log
 "--- START LOG $(Get-Date) ---" | Out-File $Global:DebugFile -Encoding UTF8 -Force
 
-# Auto-Install Config
+# Auto-Install Config (Cái này để tải file mẫu nếu cần)
 $Global:AutoInstallLinks = @{
     "windows_unattended.xml" = "https://www.ventoy.net/download/unattended.xml"
-    "centos_kickstart.cfg"   = "https://www.ventoy.net/download/kickstart7.cfg.txt"
-    "ubuntu_server.seed"     = "https://www.ventoy.net/download/preseed.cfg.txt"
 }
 
-# --- FIX 2: Cập nhật Link Theme WhiteSur chuẩn ---
+# --- FIX 2: Theme Vimix (Link Release ổn định hơn WhiteSur source code) ---
 $Global:DefaultThemes = @(
     @{ Name="Ventoy Default"; Url=""; File=""; Folder="" },
-    @{ Name="WhiteSur 4K (Demo)"; Url="https://github.com/vinceliuice/WhiteSur-grub-theme/archive/master.zip"; File="theme.txt"; Folder="WhiteSur-grub-theme-master/WhiteSur" }
+    @{ Name="Vimix 1080p (Đẹp)"; Url="https://github.com/vinceliuice/grub2-themes/raw/master/dist/Vimix-1080p.tar"; File="theme.txt"; Folder="Vimix-1080p" }
 )
 
 # 3. THEME GUI
@@ -73,7 +72,6 @@ function Log-Msg ($Msg, $Color="Lime") {
     try { "$(Get-Date -F 'HH:mm:ss')|$Msg" | Out-File $Global:DebugFile -Append -Encoding UTF8 } catch {}
 }
 
-# --- HAM DOWNLOAD AN TOAN (User-Agent) ---
 function Download-File-Safe ($Url, $Dest) {
     try {
         $WebClient = New-Object System.Net.WebClient
@@ -95,13 +93,13 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V12.4 (FINAL)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V12.5 (WIN11 BYPASS)"; $Form.Size = "950,900"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # Header
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) # USB Selection
-$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 450))) # Settings Tab
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 480))) # Settings Tab (Tăng chiều cao)
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) # Log
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 70))) # Action Button
 $Form.Controls.Add($MainTable)
@@ -109,7 +107,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Backup Download Link | Full AIO Structure | Anti-Crash Core"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Win11 Bypass | Data Backup | Auto-Install | MAS Activator"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -130,8 +128,9 @@ $CardUSB.Controls.Add($L_U1); $CardUSB.Controls.Add($LblUTitle); $MainTable.Cont
 # 3. SETTINGS & TABS
 $TabC = New-Object System.Windows.Forms.TabControl; $TabC.Dock = "Fill"; $TabC.Padding = "10,5"
 $Tab1 = New-Object System.Windows.Forms.TabPage; $Tab1.Text = "CÀI ĐẶT & DATA"; $Tab1.BackColor = $Theme.BgForm
+$Tab3 = New-Object System.Windows.Forms.TabPage; $Tab3.Text = "WIN 11 HACKS (MỚI)"; $Tab3.BackColor = $Theme.BgForm
 $Tab2 = New-Object System.Windows.Forms.TabPage; $Tab2.Text = "THEME & PLUGINS"; $Tab2.BackColor = $Theme.BgForm
-$TabC.Controls.Add($Tab1); $TabC.Controls.Add($Tab2); $MainTable.Controls.Add($TabC, 0, 2)
+$TabC.Controls.Add($Tab1); $TabC.Controls.Add($Tab3); $TabC.Controls.Add($Tab2); $MainTable.Controls.Add($TabC, 0, 2)
 
 # -- TAB 1: BASIC --
 $G1 = New-Object System.Windows.Forms.TableLayoutPanel; $G1.Dock = "Top"; $G1.AutoSize = $true; $G1.Padding = 10; $G1.ColumnCount = 2; $G1.RowCount = 8
@@ -167,6 +166,24 @@ $ChkAntiBot = New-Object System.Windows.Forms.CheckBox; $ChkAntiBot.Text = "🛡
 $G1.Controls.Add($ChkAntiBot, 0, 7); $G1.SetColumnSpan($ChkAntiBot, 2)
 
 $Tab1.Controls.Add($G1)
+
+# -- TAB 3: WIN 11 HACKS (NEW) --
+$G3 = New-Object System.Windows.Forms.TableLayoutPanel; $G3.Dock = "Top"; $G3.AutoSize = $true; $G3.Padding = 20; $G3.ColumnCount = 1; $G3.RowCount = 4
+
+$LblHacks = New-Object System.Windows.Forms.Label; $LblHacks.Text = "TÙY CHỌN CÀI ĐẶT WINDOWS 11:"; $LblHacks.Font = $F_Bold; $LblHacks.ForeColor = "Cyan"; $LblHacks.AutoSize = $true; $LblHacks.Margin = "0,0,0,10"
+$G3.Controls.Add($LblHacks, 0, 0)
+
+$ChkBypassCheck = New-Object System.Windows.Forms.CheckBox; $ChkBypassCheck.Text = "✅ Bypass TPM 2.0, SecureBoot, CPU Check (Cài Win 11 máy cũ)"; $ChkBypassCheck.Checked = $true; $ChkBypassCheck.ForeColor = "White"; $ChkBypassCheck.AutoSize = $true; $ChkBypassCheck.Font = $F_Norm
+$G3.Controls.Add($ChkBypassCheck, 0, 1)
+
+$ChkBypassNRO = New-Object System.Windows.Forms.CheckBox; $ChkBypassNRO.Text = "✅ Bypass Online Account (Cài Win 11 không cần Internet/Acc MS)"; $ChkBypassNRO.Checked = $true; $ChkBypassNRO.ForeColor = "White"; $ChkBypassNRO.AutoSize = $true; $ChkBypassNRO.Font = $F_Norm
+$G3.Controls.Add($ChkBypassNRO, 0, 2)
+
+$LblPassInfo = New-Object System.Windows.Forms.Label; $LblPassInfo.Text = "ℹ️ Lưu ý: Tính năng 'Tạo Pass tự động' cần file Auto-Unattend.xml riêng.`nTool này sẽ kích hoạt chế độ Bypass TPM toàn cục cho Ventoy."; $LblPassInfo.ForeColor = "Gray"; $LblPassInfo.AutoSize = $true; $LblPassInfo.Margin = "20,10,0,0"
+$G3.Controls.Add($LblPassInfo, 0, 3)
+
+$Tab3.Controls.Add($G3)
+
 
 # -- TAB 2: ADVANCED --
 $G2 = New-Object System.Windows.Forms.TableLayoutPanel; $G2.Dock = "Top"; $G2.AutoSize = $true; $G2.Padding = 10; $G2.ColumnCount = 1; $G2.RowCount = 6
@@ -294,7 +311,7 @@ function Process-Ventoy {
     
     if (-not (Check-MathBot)) { return }
     
-    # 1. DOWNLOAD VENTOY (SMART FALLBACK)
+    # 1. DOWNLOAD VENTOY
     Log-Msg "Checking Ventoy..." "Cyan"
     $ZipFile = "$Global:WorkDir\ventoy.zip"; $ExtractPath = "$Global:WorkDir\Extracted"
     
@@ -307,8 +324,7 @@ function Process-Ventoy {
             $Url = $WinZip.browser_download_url
             Log-Msg "Found Latest: $($Assets.tag_name)" "Cyan"
         } catch {
-            # Fallback if API fails
-            Log-Msg "GitHub API Error (Rate Limit?). Using Fallback Link." "Red"
+            Log-Msg "GitHub API Error. Using Fallback Link." "Red"
             $Url = $Global:VentoyDirectLink
         }
         
@@ -318,8 +334,8 @@ function Process-Ventoy {
              if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
              [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
         } catch {
-             Log-Msg "CRITICAL: Cannot download Ventoy Core! Check internet. ($($_.Exception.Message))" "Red"
-             [System.Windows.Forms.MessageBox]::Show("Không thể tải Ventoy! Vui lòng kiểm tra mạng.", "Lỗi Mạng", "OK", "Error")
+             Log-Msg "CRITICAL: Cannot download Ventoy Core! ($($_.Exception.Message))" "Red"
+             [System.Windows.Forms.MessageBox]::Show("Không thể tải Ventoy! Kiểm tra mạng.", "Lỗi Mạng", "OK", "Error")
              return
         }
     }
@@ -411,21 +427,30 @@ function Process-Ventoy {
                      } catch {}
                 }
 
-                # 8. THEME & JSON
+                # 8. THEME & JSON & BYPASS
                 $SelTheme = $CbTheme.SelectedItem; $ThemeConfig = $null
                 if ($SelTheme -ne "Mặc định (Ventoy)") {
                     $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
                     if ($T) {
                         try {
                             Log-Msg "Đang tải Theme: $($T.Name)..." "Cyan"
-                            $ThemeZip = "$Global:WorkDir\theme.zip"; 
+                            $ThemeZip = "$Global:WorkDir\theme.tar"; # Vimix dùng .tar
                             Download-File-Safe $T.Url $ThemeZip
                             $ThemeDest = "$VentoyDir\themes"; 
-                            # Xóa cũ nếu có để tránh lỗi
-                            if (Test-Path "$ThemeDest\$($T.Folder)") { Remove-Item "$ThemeDest\$($T.Folder)" -Recurse -Force }
-                            [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
-                            $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
-                            Log-Msg "Cài Theme OK!" "Success"
+                            
+                            # Xử lý giải nén TAR (Vì Vimix dùng .tar)
+                            # Do .NET cũ ko support Tar, ta dùng 7zip trong Ventoy nếu có, hoặc dùng tạm Zip nếu là file zip
+                            # Ở đây đổi sang dùng link ZIP hoặc xử lý đơn giản:
+                            # Tự tạo folder theme nếu không giải nén được
+                            if ($T.Url -match ".zip") {
+                                if (Test-Path "$ThemeDest\$($T.Folder)") { Remove-Item "$ThemeDest\$($T.Folder)" -Recurse -Force }
+                                [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
+                                $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
+                                Log-Msg "Cài Theme OK!" "Success"
+                            } else {
+                                Log-Msg "Lưu ý: Theme này cần giải nén thủ công (dạng TAR). Đã tải về USB." "Yellow"
+                                Move-Item $ThemeZip "$ThemeDest\theme_install_me.tar" -Force
+                            }
                         } catch {
                             Log-Msg "LỖI THEME: $($_.Exception.Message)" "Red"
                         }
@@ -433,14 +458,25 @@ function Process-Ventoy {
                 }
 
                 try {
+                    # --- CẤU HÌNH JSON (CÓ BYPASS) ---
+                    $JControl = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
+                    
+                    # BYPASS LOGIC
+                    if ($ChkBypassCheck.Checked) { 
+                        $JControl += @{ "VTOY_WIN11_BYPASS_CHECK" = "1" } 
+                        Log-Msg "-> Đã bật: Bypass Win 11 Checks" "Cyan"
+                    }
+                    if ($ChkBypassNRO.Checked) { 
+                        $JControl += @{ "VTOY_WIN11_BYPASS_NRO" = "1" }
+                        Log-Msg "-> Đã bật: Bypass Online Account" "Cyan"
+                    }
+
                     $J = @{
-                        "control" = @(@{ "VTOY_DEFAULT_MENU_MODE" = "0" }, @{ "VTOY_FILT_DOT_UNDERSCORE_FILE" = "1" })
+                        "control" = $JControl
                         "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080"; "ventoy_color"="#0000ff" }
                         "auto_install" = @(
                             @{ "parent"="/ISO_Windows/Win10"; "template"="/ventoy/script/windows_unattended.xml" },
-                            @{ "parent"="/ISO_Windows/Win11"; "template"="/ventoy/script/windows_unattended.xml" },
-                            @{ "parent"="/ISO_Linux/CentOS"; "template"="/ventoy/script/centos_kickstart.cfg" },
-                            @{ "parent"="/ISO_Linux/Ubuntu"; "template"="/ventoy/script/ubuntu_server.seed" }
+                            @{ "parent"="/ISO_Windows/Win11"; "template"="/ventoy/script/windows_unattended.xml" }
                         )
                         "menu_alias" = @( @{ "image" = "/ventoy/ventoy.png"; "alias" = "PHAT TAN RESCUE USB" } )
                     }
@@ -448,6 +484,7 @@ function Process-Ventoy {
                     if ($ThemeConfig) { $J.theme.Add("file", $ThemeConfig) }
                     
                     $J | ConvertTo-Json -Depth 10 | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
+                    Log-Msg "Cấu hình JSON hoàn tất." "Success"
                 } catch { Log-Msg "Lỗi JSON: $_" "Red" }
                 
                 Log-Msg "DONE! Enjoy." "Success"; [System.Windows.Forms.MessageBox]::Show("HOÀN TẤT!", "Phat Tan PC"); Invoke-Item $UsbRoot
