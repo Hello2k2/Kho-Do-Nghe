@@ -251,34 +251,49 @@ $BtnBuild = New-Object System.Windows.Forms.Button; $BtnBuild.Text="3. TẠO ISO
 $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.Filter="WIM File|*.wim"; $S.FileName="install.wim"; if($S.ShowDialog()-eq"OK"){$TxtCapOut.Text=$S.FileName} })
 
 # --- CAPTURE LOGIC (VSS INTEGRATED) ---
+# --- CAPTURE LOGIC (VSS INTEGRATED + AUTO COMPRESS) ---
 $BtnStartCap.Add_Click({
     if (!(Check-Tools)) { return }
     Update-Workspace; Prepare-Dirs
     $ConfigFile = Create-DismConfig
     $WimTarget = $TxtCapOut.Text
     
+    # 1. KIỂM TRA DUNG LƯỢNG TRỐNG ĐỂ CHỌN MỨC NÉN
+    $SelDriveLetter = $CboDrives.SelectedItem.ToString().Split(" ")[0]
+    $DriveInfo = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID = '$SelDriveLetter'"
+    $FreeGB = [Math]::Round($DriveInfo.FreeSpace / 1GB, 1)
+    
+    # Logic: Nếu trống dưới 25GB thì dùng 'fast' để cứu vãn, trên 25GB thì chơi 'max' cho nhẹ file
+    $CompressLevel = "max"
+    if ($FreeGB -lt 25) {
+        $CompressLevel = "fast"
+        Log $TxtLogCap "CẢNH BÁO: Dung lượng thấp ($FreeGB GB). Tự động chuyển về nén FAST để tránh treo." "DEBUG"
+    } else {
+        Log $TxtLogCap "Dung lượng tốt ($FreeGB GB). Sử dụng nén MAX." "INFO"
+    }
+    
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # BƯỚC 1: TẠO SHADOW COPY CỦA Ổ C:
-    # -----------------------------------------------------
+    # BƯỚC 1: TẠO SHADOW COPY
     $VssOk = Create-ShadowCopy "C:\" $Global:ShadowMount $TxtLogCap
     
     if ($VssOk) {
-        # BƯỚC 2: CAPTURE TỪ SHADOW COPY (KHÔNG PHẢI Ổ C)
-        # -----------------------------------------------------
-        Log $TxtLogCap "Đang Capture từ Snapshot (Zero Lock Files)..." "INFO"
+        # BƯỚC 2: CAPTURE VỚI MỨC NÉN TỰ ĐỘNG
+        Log $TxtLogCap "Đang Capture từ Snapshot (Compression: $CompressLevel)..." "INFO"
         
-        $Proc = Start-Process "dism" -ArgumentList "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:`"$Global:ShadowMount`" /Name:`"MyWin_VSS`" /Compress:max /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`"" -Wait -NoNewWindow -PassThru
+        # Ép DISM dùng ScratchDir riêng để không làm rác ổ hệ thống
+        $DismArgs = "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:`"$Global:ShadowMount`" /Name:`"MyWin_VSS`" /Compress:$CompressLevel /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`""
+        
+        $Proc = Start-Process "dism" -ArgumentList $DismArgs -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
-            Log $TxtLogCap "THÀNH CÔNG! Đã tạo WIM sạch từ VSS." "INFO"
-            [System.Windows.Forms.MessageBox]::Show("Capture VSS Thành Công!")
+            Log $TxtLogCap "THÀNH CÔNG! Đã tạo WIM sạch." "INFO"
+            [System.Windows.Forms.MessageBox]::Show("Capture Thành Công! Mức nén: $CompressLevel")
         } else {
-            Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode))." "ERR"
+            Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode)). Kiểm tra lại dung lượng!" "ERR"
         }
         
         # BƯỚC 3: DỌN DẸP VSS
-        # -----------------------------------------------------
         Cleanup-ShadowCopy $Global:ShadowMount $TxtLogCap
     }
     
