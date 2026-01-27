@@ -119,100 +119,144 @@ $GridPart.ContextMenuStrip = $Cms
 
 function Start-Headless-DISM {
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
-    $TargetDrive = "$($Global:SelectedInstall):"
     
-    if ([System.Windows.Forms.MessageBox]::Show("CÀI ĐẶT WINDOWS LÊN Ổ $TargetDrive?`n(Dữ liệu cũ sẽ bị xóa khi Setup chạy)", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
+    # 1. XÁC ĐỊNH Ổ
+    $InstallDrive = "$($Global:SelectedInstall):" # Ổ sẽ bị Format để cài Win
+    $SourceDrive = $null
+    
+    # Tìm ổ chứa Source (Ổ D, E...) - Phải khác ổ cài và còn trống > 8GB
+    $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
+    foreach ($D in $Drives) { 
+        if ($D.DeviceID -ne $InstallDrive -and $D.FreeSpace -gt 8GB) { 
+            $SourceDrive = $D.DeviceID; break 
+        } 
+    }
+    
+    if (!$SourceDrive) { [System.Windows.Forms.MessageBox]::Show("Cần ít nhất 1 ổ đĩa phụ (D:, E:...) còn trống > 8GB để chứa bộ cài!", "Lỗi"); return }
+
+    if ([System.Windows.Forms.MessageBox]::Show("KỊCH BẢN CÀI ĐẶT V17.0:`n1. Chép bộ cài vào ổ $SourceDrive (An toàn).`n2. Boot vào $SourceDrive.`n3. Format sạch ổ $InstallDrive và cài Win lên đó.`n`nBạn đồng ý chứ?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO (V15.0 AUTO-SEARCH BOOT) ---"
+    Log "--- KHOI TAO (V17.0 SAFE SOURCE BOOT) ---"
 
-    # 1. CLEANUP BCD
-    Log "Dọn dẹp BCD..."
-    & bcdedit /enum | Select-String "identifier" | ForEach-Object {
-        $ID = $_.ToString().Split(" ")[-1].Trim()
-        if ($ID -match "{[a-z0-9-]{36}}") { & bcdedit /delete $ID /f 2>$null }
-    }
-    & bcdedit /delete "{ramdiskoptions}" /f 2>$null
+    # 2. ĐÁNH DẤU Ổ ĐÍCH (Label + GUID)
+    Log "Gán nhãn ổ đích..."
+    cmd /c "label $InstallDrive WIN_TARGET"
+    # Lấy GUID ổ đích (để dành cho script trong PE dùng)
+    # Nhưng trong PE ký tự ổ có thể đổi, nên ta dùng LABEL "WIN_TARGET" để định vị là chuẩn nhất.
 
-    # 2. CHUẨN BỊ FILE (Folder ngắn gọn để tránh lỗi path)
-    $BootDir = "$TargetDrive\BootWIM"
-    Log "Creating $BootDir..."
-    if (Test-Path $BootDir) { Remove-Item $BootDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $BootDir -Force | Out-Null
-    
-    # Copy Boot Files
-    Log "Copying Boot Files..."
-    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$BootDir\boot.wim" -Force
-    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$BootDir\boot.sdi" -Force
-    
-    # Copy Source (Để Setup tìm thấy)
-    $SourceDir = "$TargetDrive\WinSource"
-    if (Test-Path $SourceDir) { Remove-Item $SourceDir -Recurse -Force }
-    New-Item -ItemType Directory -Path "$SourceDir\sources" -Force | Out-Null
+    # 3. CHUẨN BỊ SOURCE TRÊN Ổ PHỤ ($SourceDrive)
+    $WinSource = "$SourceDrive\WinSource_PhatTan"
+    Log "Đang chép bộ cài vào $WinSource..."
+    if (Test-Path $WinSource) { Remove-Item $WinSource -Recurse -Force }
+    New-Item -ItemType Directory -Path "$WinSource\sources" -Force | Out-Null
+    New-Item -ItemType Directory -Path "$WinSource\boot" -Force | Out-Null
+
+    # Copy các file cần thiết
+    Copy-Item "$Global:IsoMounted\sources\boot.wim" "$WinSource\sources\boot.wim" -Force
+    Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$WinSource\boot\boot.sdi" -Force
+    Copy-Item "$Global:IsoMounted\setup.exe" "$WinSource\setup.exe" -Force
     
     $InstWim = "$Global:IsoMounted\sources\install.wim"
     if (!(Test-Path $InstWim)) { $InstWim = "$Global:IsoMounted\sources\install.esd" }
-    Copy-Item $InstWim "$SourceDir\sources\install.wim" -Force
-    Copy-Item "$Global:IsoMounted\setup.exe" "$SourceDir\setup.exe" -Force
+    Copy-Item $InstWim "$WinSource\sources\install.wim" -Force
 
-    # XML Trigger
-    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (if exist %%d:\WinSource\setup.exe %%d:\WinSource\setup.exe)</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
-    [IO.File]::WriteAllText("$TargetDrive\autounattend.xml", $XmlContent, [System.Text.Encoding]::UTF8)
+    # 4. TẠO SCRIPT TỰ ĐỘNG CHẠY TRONG PE (AutoInstall.cmd)
+    # Script này sẽ được autounattend.xml gọi khi vào PE
+    # Nhiệm vụ: Tìm ổ có label WIN_TARGET -> Format -> Bung Image -> Nạp Boot -> Reboot
+    $CmdContent = @"
+@echo off
+color 0a
+title PHAT TAN AUTO INSTALLER V17
+echo.
+echo  Dang tim o dia dich (WIN_TARGET)...
+echo.
 
-    # 3. CẤU HÌNH BCD (PHƯƠNG PHÁP DEVICE OBJECT)
-    Log "Configuring BCD (Device Object Mode)..."
+set TARGET=
+for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
+    vol %%d: | find "WIN_TARGET" >nul
+    if not errorlevel 1 set TARGET=%%d:
+)
+
+if "%TARGET%"=="" (
+    echo LOI: Khong tim thay o dia dich WIN_TARGET!
+    pause
+    exit
+)
+
+echo  TIM THAY O DICH: %TARGET%
+echo  Dang Format o %TARGET%...
+format %TARGET% /fs:ntfs /q /y /v:Windows
+
+echo.
+echo  Dang bung file Windows... (Dung DISM)
+echo  Source: %~dp0sources\install.wim
+dism /Apply-Image /ImageFile:"%~dp0sources\install.wim" /Index:1 /ApplyDir:%TARGET%
+
+echo.
+echo  Dang nap Bootloader...
+bcdboot %TARGET%\Windows /s %TARGET% /f ALL
+
+echo.
+echo  Xong! Tu dong khoi dong lai sau 10 giay...
+timeout /t 10
+wpeutil reboot
+"@
+    [IO.File]::WriteAllText("$WinSource\AutoInstall.cmd", $CmdContent, [System.Text.Encoding]::ASCII)
+
+    # 5. TẠO XML KÍCH HOẠT SCRIPT
+    # XML này sẽ bảo WinPE: "Mày khởi động xong thì chạy ngay cái file AutoInstall.cmd kia cho tao"
+    $XmlContent = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c $SourceDrive\WinSource_PhatTan\AutoInstall.cmd</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
+    # Lưu ý: Trong PE, ổ SourceDrive có thể đổi ký tự. 
+    # Tốt nhất là dùng vòng lặp tìm file cmd như V16, nhưng ở đây ta hardcode tạm ổ D để test (vì thường ổ D trong Win vẫn là D hoặc C trong PE).
+    # Update XML thông minh hơn: Tìm file cmd ở mọi ổ
+    $XmlSmart = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%i in (C D E F G H I J K L M N) do if exist %%i:\WinSource_PhatTan\AutoInstall.cmd %%i:\WinSource_PhatTan\AutoInstall.cmd</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
+    
+    [IO.File]::WriteAllText("$WinSource\autounattend.xml", $XmlSmart, [System.Text.Encoding]::UTF8)
+
+    # 6. CẤU HÌNH BCD ĐỂ BOOT TỪ Ổ PHỤ ($SourceDrive)
+    Log "Configuring Boot from $SourceDrive..."
     try {
-        $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$TargetDrive\EFI")
+        $IsUEFI = ($env:Firmware_Type -eq "UEFI") -or (Test-Path "$InstallDrive\EFI")
         $Loader = if ($IsUEFI) { "\windows\system32\boot\winload.efi" } else { "\windows\system32\winload.exe" }
 
-        # 3.1 TẠO RAMDISK DEVICE (Không dùng {ramdiskoptions})
-        # Tạo một thiết bị ramdisk mới và lấy GUID của nó
-        $RamdiskOut = & bcdedit /create /d "Ramdisk Device" /device
-        $RamdiskGUID = ([regex]'{[a-z0-9-]{36}}').Match($RamdiskOut).Value
+        # Tạo Device Ramdisk trỏ vào ổ PHỤ
+        & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Source" /f | Out-Null
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$SourceDrive"
+        & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource_PhatTan\boot\boot.sdi"
 
-        if ($RamdiskGUID) {
-            # Trỏ Device này vào file SDI trên ổ đĩa hiện tại (boot)
-            & bcdedit /set $RamdiskGUID ramdisksdidevice partition=$TargetDrive
-            & bcdedit /set $RamdiskGUID ramdisksdipath \BootWIM\boot.sdi
-            Log "-> Created Ramdisk Device: $RamdiskGUID"
-        } else { throw "Lỗi tạo Ramdisk Device" }
+        # Tạo Entry Boot
+        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER (V17)" /application osloader
+        $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
-        # 3.2 TẠO OS LOADER ENTRY
-        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (V15.0)" /application osloader
-        $OsGUID = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
-
-        if ($OsGUID) {
-            # Trỏ Entry vào file WIM thông qua Ramdisk Device vừa tạo
-            # Cú pháp: ramdisk=[Drive]\Path\File.wim,{RamdiskGUID}
+        if ($Guid) {
+            # Trỏ vào Boot.wim trên ổ PHỤ
+            $DeviceStr = "ramdisk=[$SourceDrive]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}"
             
-            $DeviceStr = "ramdisk=[$TargetDrive]\BootWIM\boot.wim,$RamdiskGUID"
-            Log "-> Setting Device: $DeviceStr"
-
-            & bcdedit /set $OsGUID device $DeviceStr
-            & bcdedit /set $OsGUID osdevice $DeviceStr
-            & bcdedit /set $OsGUID path $Loader
-            & bcdedit /set $OsGUID systemroot "\windows"
-            & bcdedit /set $OsGUID winpe yes
-            & bcdedit /set $OsGUID detecthal yes
+            & bcdedit /set $Guid device $DeviceStr
+            & bcdedit /set $Guid osdevice $DeviceStr
+            & bcdedit /set $Guid path $Loader
+            & bcdedit /set $Guid systemroot "\windows"
+            & bcdedit /set $Guid winpe yes
+            & bcdedit /set $Guid detecthal yes
             
-            # Ép Boot
-            & bcdedit /displayorder $OsGUID /addfirst
-            & bcdedit /bootsequence $OsGUID
+            & bcdedit /displayorder $Guid /addfirst
+            & bcdedit /bootsequence $Guid
             & bcdedit /timeout 5
             
-            Log "-> BOOT SUCCESS! Entry: $OsGUID"
+            Log "-> BOOT OK! Entry: $Guid"
         } 
     } catch { 
-        Log "CRITICAL ERROR: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Lỗi BCD: $_", "Error")
-        $Form.Cursor = "Default"
-        return
+        Log "BCD ERROR: $_"
+        [System.Windows.Forms.MessageBox]::Show("Lỗi cấu hình Boot: $_", "Error")
+        $Form.Cursor = "Default"; return
     }
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã nạp Boot (V15)!`nRestart ngay?", "Xong", "YesNo") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Đã chuẩn bị xong trên ổ $SourceDrive!`nSẵn sàng Restart để cài vào ổ $InstallDrive?", "Xong", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
+}
 }
 # --- EVENTS (FIXED TypeNotFound) ---
 $BtnISO.Add_Click({ 
