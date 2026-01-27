@@ -24,7 +24,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
 $Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
 $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
-$Global:ThemeConfigUrl = "https://gist.githubusercontent.com/anonymous/raw/themes.json" 
+$Global:ThemeConfigUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/themes.json" 
 
 # Link tải 7-Zip Portable (Dự phòng cho RAR)
 $Global:7zToolUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
