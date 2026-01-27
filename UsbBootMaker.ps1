@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V12.2 OFFLINE FALLBACK)
+    VENTOY BOOT MAKER - PHAT TAN PC (V12.3 FIXED THEME & LOGGING)
     Updates:
-    - [CRITICAL] Thêm Link tải dự phòng (Direct Link) nếu API GitHub lỗi.
-    - [SAFETY] Kiểm tra nhân Ventoy trước khi chạy. Không có -> Dừng.
-    - [AIO] Giữ nguyên tính năng Auto-Install, Data, MAS.
+    - [FIX] Sửa lỗi không tải được Theme từ GitHub (Thêm User-Agent & TLS 1.2).
+    - [FIX] Sửa đường dẫn cấu trúc thư mục WhiteSur.
+    - [DEBUG] Mở khóa Log lỗi ở phần tải Theme.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -13,7 +13,8 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Exit
 }
 
-# 1. SETUP
+# 1. SETUP & SECURITY PROTOCOL (QUAN TRỌNG CHO GITHUB)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -22,7 +23,6 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # 2. CONFIG
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
-# Link cứng dự phòng (Không qua API)
 $Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
 $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
@@ -40,9 +40,10 @@ $Global:AutoInstallLinks = @{
     "ubuntu_server.seed"     = "https://www.ventoy.net/download/preseed.cfg.txt"
 }
 
+# --- FIX: Cấu trúc thư mục theme đúng ---
 $Global:DefaultThemes = @(
     @{ Name="Ventoy Default"; Url=""; File=""; Folder="" },
-    @{ Name="WhiteSur 4K (Demo)"; Url="https://github.com/vinceliuice/WhiteSur-grub-theme/archive/refs/heads/master.zip"; File="theme.txt"; Folder="WhiteSur-grub-theme-master" }
+    @{ Name="WhiteSur 4K (Demo)"; Url="https://github.com/vinceliuice/WhiteSur-grub-theme/archive/refs/heads/master.zip"; File="theme.txt"; Folder="WhiteSur-grub-theme-master/WhiteSur" }
 )
 
 # 3. THEME GUI
@@ -70,6 +71,17 @@ function Log-Msg ($Msg, $Color="Lime") {
     try { "$(Get-Date -F 'HH:mm:ss')|$Msg" | Out-File $Global:DebugFile -Append -Encoding UTF8 } catch {}
 }
 
+# --- FIX: Hàm download có User-Agent ---
+function Download-File-Safe ($Url, $Dest) {
+    try {
+        $WebClient = New-Object System.Net.WebClient
+        $WebClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        $WebClient.DownloadFile($Url, $Dest)
+    } catch {
+        throw $_
+    }
+}
+
 function Add-GlowBorder ($Panel) {
     $Panel.Add_Paint({ param($s,$e) $p=New-Object System.Drawing.Pen($Theme.Accent,1); $r=$s.ClientRectangle; $r.Width-=1; $r.Height-=1; $e.Graphics.DrawRectangle($p,$r); $p.Dispose() })
 }
@@ -81,7 +93,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V12.2 (OFFLINE SAFE)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V12.3 (FIXED)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
@@ -270,7 +282,7 @@ function Download-AutoInstall-Scripts ($ScriptDir) {
         $Url = $Global:AutoInstallLinks[$Key]
         $Dest = "$ScriptDir\$Key"
         if (!(Test-Path $Dest)) {
-            try { (New-Object Net.WebClient).DownloadFile($Url, $Dest); Log-Msg " + $($Key): OK" "Gray" } catch { Log-Msg " - $($Key): Fail" "Red" }
+            try { Download-File-Safe $Url $Dest; Log-Msg " + $($Key): OK" "Gray" } catch { Log-Msg " - $($Key): Fail ($($_.Exception.Message))" "Red" }
         }
     }
 }
@@ -300,11 +312,11 @@ function Process-Ventoy {
         
         try {
              Log-Msg "Downloading Core..." "Yellow"
-             (New-Object Net.WebClient).DownloadFile($Url, $ZipFile)
+             Download-File-Safe $Url $ZipFile
              if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
              [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
         } catch {
-             Log-Msg "CRITICAL: Cannot download Ventoy Core! Check internet." "Red"
+             Log-Msg "CRITICAL: Cannot download Ventoy Core! Check internet. ($($_.Exception.Message))" "Red"
              [System.Windows.Forms.MessageBox]::Show("Không thể tải Ventoy! Vui lòng kiểm tra mạng.", "Lỗi Mạng", "OK", "Error")
              return
         }
@@ -379,7 +391,7 @@ function Process-Ventoy {
                 # 7. MAS & LIVECD
                 if ($IsDir) {
                      Log-Msg "Tải MAS AIO Activator..." "Yellow"
-                     try { (New-Object Net.WebClient).DownloadFile($Global:MasUrl, "$UsbRoot\BanQuyen\MAS_AIO.cmd"); Log-Msg "MAS OK" "Success" } catch {}
+                     try { Download-File-Safe $Global:MasUrl "$UsbRoot\BanQuyen\MAS_AIO.cmd"; Log-Msg "MAS OK" "Success" } catch { Log-Msg "MAS ERR: $($_.Exception.Message)" "Red" }
                 }
 
                 if ($IsLiveCD) {
@@ -391,7 +403,7 @@ function Process-Ventoy {
                         $LiveUrl = if ($LiveIso) { $LiveIso.browser_download_url } else { "" }
                         
                         if ($LiveUrl) {
-                            (New-Object Net.WebClient).DownloadFile($LiveUrl, "$UsbRoot\NangCap_UsbBoot.iso")
+                            Download-File-Safe $LiveUrl "$UsbRoot\NangCap_UsbBoot.iso"
                             Log-Msg "LiveCD OK" "Success"
                         }
                      } catch {}
@@ -403,10 +415,18 @@ function Process-Ventoy {
                     $T = $Global:ThemeData | Where-Object { $_.Name -eq $SelTheme } | Select -First 1
                     if ($T) {
                         try {
-                            $ThemeZip = "$Global:WorkDir\theme.zip"; (New-Object Net.WebClient).DownloadFile($T.Url, $ThemeZip)
-                            $ThemeDest = "$VentoyDir\themes"; [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
+                            Log-Msg "Đang tải Theme: $($T.Name)..." "Cyan"
+                            $ThemeZip = "$Global:WorkDir\theme.zip"; 
+                            Download-File-Safe $T.Url $ThemeZip
+                            $ThemeDest = "$VentoyDir\themes"; 
+                            # Xóa cũ nếu có để tránh lỗi
+                            if (Test-Path "$ThemeDest\$($T.Folder)") { Remove-Item "$ThemeDest\$($T.Folder)" -Recurse -Force }
+                            [System.IO.Compression.ZipFile]::ExtractToDirectory($ThemeZip, $ThemeDest, $true)
                             $ThemeConfig = "/ventoy/themes/$($T.Folder)/$($T.File)"
-                        } catch {}
+                            Log-Msg "Cài Theme OK!" "Success"
+                        } catch {
+                            Log-Msg "LỖI THEME: $($_.Exception.Message)" "Red"
+                        }
                     }
                 }
 
