@@ -212,7 +212,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V5.2 (VSS SNAPSHOT EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V5.3 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -284,11 +284,9 @@ $BtnStartCap.Add_Click({
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     Log $TxtLogCap "Đang khởi động Wimlib (Native VSS)..." "INFO"
 
-    # [BƯỚC ĐỘT PHÁ] TẠO FILE CONFIG ĐỂ TRÁNH LỖI CÚ PHÁP
-    # Thay vì gõ lệnh dài ngoằng, ta viết danh sách loại trừ vào file này
+    # [FIX 1] Dùng @' (nháy đơn) để giữ nguyên chữ $Recycle không bị mất
     $WimConfigFile = "$ToolsDir\WimExcludes.ini"
-    
-    $ConfigContent = @"
+    $ConfigContent = @'
 [ExclusionList]
 \hiberfil.sys
 \pagefile.sys
@@ -297,42 +295,36 @@ $BtnStartCap.Add_Click({
 \$Recycle.Bin
 \Users\*\AppData\Local\Temp
 \Config.Msi
-"@
+'@
     [System.IO.File]::WriteAllText($WimConfigFile, $ConfigContent)
-    Log $TxtLogCap "Đã tạo file cấu hình loại trừ tại: $WimConfigFile" "DEBUG"
 
-    # 2. XÂY DỰNG LỆNH GỌN GÀNG HƠN
-    # Bây giờ lệnh chỉ cần trỏ vào file config thôi
-    
+    # [FIX 2] Xây dựng mảng lệnh "An toàn tuyệt đối"
     $WimArgs = @(
         "capture",
-        "C:\",
+        "C:",                     # <--- QUAN TRỌNG: Bỏ dấu \ ở cuối để tránh lỗi thoát ngoặc kép
         "$WimTarget",
         "PhatTan_OS",
-        "Build by PhatTanPC",
+        "Build_by_PhatTanPC",     # <--- Dùng gạch dưới cho chắc ăn, tránh lỗi khoảng trắng
         "--compress=LZX",
         "--check",
         "--threads=0",
-        "--snapshot",            # VSS tự động
-        "--config=$WimConfigFile" # <--- CHÌA KHÓA GIẢI QUYẾT VẤN ĐỀ Ở ĐÂY
+        "--snapshot",             
+        "--config=$WimConfigFile" 
     )
 
-    # 3. Debug lệnh
-    Log $TxtLogCap "Command: wimlib-imagex $($WimArgs -join ' ')" "DEBUG"
+    # 3. Debug lệnh (sẽ thấy các tham số tách rời nhau chuẩn chỉ)
+    Log $TxtLogCap "Command Debug: wimlib-imagex $($WimArgs -join ' ')" "DEBUG"
 
     # 4. THỰC THI
     try {
         $Proc = Start-Process -FilePath $WimlibExe -ArgumentList $WimArgs -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
-            Log $TxtLogCap "SUCCESS! Wimlib đã capture xong (Quá mượt!)." "SUCCESS"
+            Log $TxtLogCap "SUCCESS! Wimlib đã capture xong (Code 0)." "SUCCESS"
             [System.Windows.Forms.MessageBox]::Show("Capture Thành Công!")
         } 
         else {
             Log $TxtLogCap "Wimlib thất bại! Code: $($Proc.ExitCode)." "ERR"
-            
-            # Đọc file log lỗi của Wimlib (nếu có) để hiển thị cho ông xem
-            # (Thường Wimlib in lỗi ra stderr, ở đây ta đoán code thôi)
         }
     } catch {
         Log $TxtLogCap "Lỗi chạy process: $($_.Exception.Message)" "ERR"
