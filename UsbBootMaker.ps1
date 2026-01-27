@@ -1,9 +1,9 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V13.0 SMART CACHE & CHECK VERSION)
+    VENTOY BOOT MAKER - PHAT TAN PC (V13.1 MEMTEST & SECURITY)
     Updates:
-    - [CACHE] Kiểm tra phiên bản Ventoy đã tải. Nếu mới nhất -> KHÔNG TẢI LẠI.
-    - [FIX] Thêm User-Agent khi tải Ventoy Core (Tránh lỗi 403/Critical).
-    - [OFFLINE] Tự động dùng bản cũ nếu mất mạng.
+    - [MEMTEST] Tự động tải Memtest86+ v7.00 ISO vào thư mục ISO_Rescue.
+    - [SECURITY] Hỗ trợ đặt Password cho Menu Boot (Tự động mã hóa SHA256).
+    - [CUSTOM] Cho phép tùy chỉnh tên Alias Menu.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -28,14 +28,17 @@ $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activat
 $Global:ThemeConfigUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/themes.json" 
 $Global:7zToolUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
 
+# Link Memtest86+ ISO Chính chủ
+$Global:MemtestUrl = "https://github.com/memtest86plus/memtest86plus/releases/download/v7.00/mt86plus_7.00.iso"
+
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
-$Global:VersionFile = "$Global:WorkDir\version_info.txt" # File lưu version hiện tại
+$Global:VersionFile = "$Global:WorkDir\version_info.txt"
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
 
 "--- START LOG $(Get-Date) ---" | Out-File $Global:DebugFile -Encoding UTF8 -Force
 
-# 3. GUI
+# 3. GUI COLORS
 $Theme = @{
     BgForm  = [System.Drawing.Color]::FromArgb(30, 30, 35)
     Card    = [System.Drawing.Color]::FromArgb(45, 45, 50)
@@ -46,6 +49,7 @@ $Theme = @{
     InputBg = [System.Drawing.Color]::FromArgb(60, 60, 70)
 }
 
+# --- HELPER FUNCTIONS ---
 function Log-Msg ($Msg, $Color="Lime") { 
     try {
         $Form.Invoke([Action]{
@@ -59,6 +63,13 @@ function Log-Msg ($Msg, $Color="Lime") {
     try { "$(Get-Date -F 'HH:mm:ss')|$Msg" | Out-File $Global:DebugFile -Append -Encoding UTF8 } catch {}
 }
 
+function Get-Sha256 ($String) {
+    $Sha = [System.Security.Cryptography.SHA256]::Create()
+    $Bytes = [System.Text.Encoding]::UTF8.GetBytes($String)
+    $Hash = $Sha.ComputeHash($Bytes)
+    return [BitConverter]::ToString($Hash).Replace("-", "").ToLower()
+}
+
 function Download-File-Safe ($Url, $Dest) {
     try {
         $WebClient = New-Object System.Net.WebClient
@@ -67,89 +78,58 @@ function Download-File-Safe ($Url, $Dest) {
     } catch { throw $_ }
 }
 
-# --- CHECK & DOWNLOAD VENTOY THÔNG MINH ---
+# --- CORE FUNCTIONS ---
 function Prepare-Ventoy-Core {
     $ZipFile = "$Global:WorkDir\ventoy.zip"
     $ExtractPath = "$Global:WorkDir\Extracted"
     $CurrentVer = if (Test-Path $Global:VersionFile) { Get-Content $Global:VersionFile } else { "v0.0.0" }
     
-    Log-Msg "Kiểm tra phiên bản Ventoy (Hiện tại: $CurrentVer)..." "Cyan"
-
+    Log-Msg "Check Ventoy Core (Current: $CurrentVer)..." "Cyan"
     try {
-        # Lấy thông tin bản mới nhất từ API
         $Assets = Invoke-RestMethod -Uri $Global:VentoyRepo -UseBasicParsing -TimeoutSec 5
         $LatestVer = $Assets.tag_name
         $WinZip = $Assets.assets | Where-Object { $_.name -match "windows.zip" } | Select -First 1
         $Url = $WinZip.browser_download_url
         
-        Log-Msg "GitHub Version: $LatestVer" "Cyan"
-
-        # SO SÁNH VERSION
         if ($LatestVer -eq $CurrentVer -and (Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe")) {
-            Log-Msg "Đã có bản mới nhất. Bỏ qua tải lại." "Success"
+            Log-Msg "Core đã mới nhất ($LatestVer). Skip tải." "Success"
             $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
             return
         }
-
-        # Nếu có bản mới -> Tải
-        Log-Msg "Phát hiện bản mới ($LatestVer). Đang tải..." "Yellow"
+        Log-Msg "Tải bản mới ($LatestVer)..." "Yellow"
         Download-File-Safe $Url $ZipFile
-        
         if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
         [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
-        
-        # Lưu version mới
         $LatestVer | Out-File $Global:VersionFile -Force
-        Log-Msg "Cập nhật Ventoy OK!" "Success"
-
     } catch {
-        Log-Msg "Lỗi kiểm tra Update: $($_.Exception.Message)" "Red"
-        
-        # FALLBACK: Nếu không check được update, kiểm tra xem có bản cũ dùng tạm không
+        Log-Msg "Offline Mode / API Error. Dùng bản cũ..." "Yellow"
         if (Test-Path "$ExtractPath\ventoy\Ventoy2Disk.exe") {
-            Log-Msg "-> Chuyển sang chế độ OFFLINE (Dùng bản cũ)." "Yellow"
+             $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
         } else {
-            Log-Msg "-> Không có bản Offline. Thử tải link dự phòng..." "Yellow"
-            try {
-                Download-File-Safe $Global:VentoyDirectLink $ZipFile
-                if (Test-Path $ExtractPath) { Remove-Item $ExtractPath -Recurse -Force }
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $ExtractPath)
-                "v1.0.99" | Out-File $Global:VersionFile -Force
-            } catch {
-                Log-Msg "CRITICAL: Không thể tải Ventoy! Vui lòng kiểm tra mạng." "Red"
-                return
-            }
+             Log-Msg "CRITICAL: Không tìm thấy Ventoy Core!" "Red"
         }
     }
-    
     $Global:VentoyExe = Get-ChildItem -Path $ExtractPath -Filter "Ventoy2Disk.exe" -Recurse | Select -First 1 | %{$_.FullName}
 }
 
-# --- EXTRACTOR ---
 function Extract-Unstoppable ($SourceFile, $DestDir) {
     $Ext = [System.IO.Path]::GetExtension($SourceFile).ToLower()
     if (Test-Path $DestDir) { Remove-Item $DestDir -Recurse -Force }
     New-Item $DestDir -ItemType Directory | Out-Null
 
     if ($Ext -eq ".zip") {
-        Log-Msg "Dùng Native Zip..." "Cyan"
         [System.IO.Compression.ZipFile]::ExtractToDirectory($SourceFile, $DestDir)
         return
     }
     if ($Ext -match "\.tar|\.gz|\.xz|\.tgz") {
-        Log-Msg "Dùng System Tar..." "Cyan"
         $P = Start-Process -FilePath "tar.exe" -ArgumentList "-xf `"$SourceFile`" -C `"$DestDir`"" -Wait -NoNewWindow -PassThru
         if ($P.ExitCode -eq 0) { return }
-        Log-Msg "System Tar lỗi, thử 7-Zip..." "Yellow"
     }
-
     $7zExe = "$Global:WorkDir\7za.exe"
-    if (!(Test-Path $7zExe)) {
-        try { Log-Msg "Tải 7-Zip engine..." "Gray"; Download-File-Safe $Global:7zToolUrl $7zExe } catch { throw "Lỗi tải 7-Zip!" }
+    if (!(Test-Path $7zExe)) { try { Download-File-Safe $Global:7zToolUrl $7zExe } catch {} }
+    if (Test-Path $7zExe) {
+        Start-Process -FilePath $7zExe -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y" -Wait -NoNewWindow
     }
-    $Proc = Start-Process -FilePath $7zExe -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y" -Wait -NoNewWindow -PassThru
-    if ($Proc.ExitCode -ne 0) { throw "Lỗi giải nén ($Ext)" }
-    Log-Msg "Giải nén OK!" "Success"
 }
 
 function Add-GlowBorder ($Panel) {
@@ -163,13 +143,13 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY V13.0 (SMART CACHE)"; $Form.Size = "950,900"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY V13.1 (MEMTEST + SECURITY)"; $Form.Size = "950,920"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) 
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) 
-$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 480))) 
+$MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 500))) # Tăng chiều cao tab
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) 
 $MainTable.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 70))) 
 $Form.Controls.Add($MainTable)
@@ -177,7 +157,7 @@ $Form.Controls.Add($MainTable)
 # 1. HEADER
 $PnlHead = New-Object System.Windows.Forms.Panel; $PnlHead.Height = 60; $PnlHead.Dock = "Top"; $PnlHead.Margin = "0,0,0,10"
 $LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "USB BOOT MASTER - VENTOY EDITION"; $LblT.Font = $F_Title; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "10,10"
-$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Smart Cache | Auto-Extract | Win11 Bypass | Online JSON"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
+$LblS = New-Object System.Windows.Forms.Label; $LblS.Text = "Auto Memtest86+ | Boot Password | Custom Alias | Win11 Bypass"; $LblS.ForeColor = "Gray"; $LblS.AutoSize = $true; $LblS.Location = "15,40"
 $PnlHead.Controls.Add($LblT); $PnlHead.Controls.Add($LblS); $MainTable.Controls.Add($PnlHead, 0, 0)
 
 # 2. USB SELECTION
@@ -202,29 +182,47 @@ $Tab2 = New-Object System.Windows.Forms.TabPage; $Tab2.Text = "KHO THEME (JSON)"
 $TabC.Controls.Add($Tab1); $TabC.Controls.Add($Tab3); $TabC.Controls.Add($Tab2); $MainTable.Controls.Add($TabC, 0, 2)
 
 # -- TAB 1: BASIC --
-$G1 = New-Object System.Windows.Forms.TableLayoutPanel; $G1.Dock = "Top"; $G1.AutoSize = $true; $G1.Padding = 10; $G1.ColumnCount = 2; $G1.RowCount = 8
+$G1 = New-Object System.Windows.Forms.TableLayoutPanel; $G1.Dock = "Top"; $G1.AutoSize = $true; $G1.Padding = 10; $G1.ColumnCount = 2; $G1.RowCount = 10
 $G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 40)))
 $G1.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 60)))
+
 $LblAct = New-Object System.Windows.Forms.Label; $LblAct.Text = "Chế độ (Mode):"; $LblAct.ForeColor = "White"; $LblAct.AutoSize = $true
 $CbAction = New-Object System.Windows.Forms.ComboBox; $CbAction.Items.AddRange(@("Cài mới (Xóa sạch & Format)", "Cập nhật Ventoy (Giữ Data)")); $CbAction.SelectedIndex = 0; $CbAction.DropDownStyle = "DropDownList"; $CbAction.Width = 300
 $G1.Controls.Add($LblAct, 0, 0); $G1.Controls.Add($CbAction, 1, 0)
+
 $LblSty = New-Object System.Windows.Forms.Label; $LblSty.Text = "Kiểu Partition:"; $LblSty.ForeColor = "White"; $LblSty.AutoSize = $true
 $CbStyle = New-Object System.Windows.Forms.ComboBox; $CbStyle.Items.AddRange(@("MBR (Legacy + UEFI)", "GPT (UEFI Only)")); $CbStyle.SelectedIndex = 0; $CbStyle.DropDownStyle = "DropDownList"; $CbStyle.Width = 300
 $G1.Controls.Add($LblSty, 0, 1); $G1.Controls.Add($CbStyle, 1, 1)
+
 $LblName = New-Object System.Windows.Forms.Label; $LblName.Text = "Tên USB (Label):"; $LblName.ForeColor = "White"; $LblName.AutoSize = $true
 $TxtLabel = New-Object System.Windows.Forms.TextBox; $TxtLabel.Text = "PhatTan_Boot"; $TxtLabel.Width = 300; $TxtLabel.BackColor = $Theme.InputBg; $TxtLabel.ForeColor = "Cyan"
 $G1.Controls.Add($LblName, 0, 2); $G1.Controls.Add($TxtLabel, 1, 2)
+
 $LblFS = New-Object System.Windows.Forms.Label; $LblFS.Text = "Định dạng (Format):"; $LblFS.ForeColor = "White"; $LblFS.AutoSize = $true
 $CbFS = New-Object System.Windows.Forms.ComboBox; $CbFS.Items.AddRange(@("exFAT (Khuyên dùng)", "NTFS (Tương thích Win)", "FAT32 (Max 4GB/file)")); $CbFS.SelectedIndex = 0; $CbFS.DropDownStyle = "DropDownList"; $CbFS.Width = 300
 $G1.Controls.Add($LblFS, 0, 3); $G1.Controls.Add($CbFS, 1, 3)
+
+# --- NEW: CUSTOM ALIAS & PASSWORD ---
+$LblAlias = New-Object System.Windows.Forms.Label; $LblAlias.Text = "Tên Menu (Alias):"; $LblAlias.ForeColor = "Yellow"; $LblAlias.AutoSize = $true
+$TxtAlias = New-Object System.Windows.Forms.TextBox; $TxtAlias.Text = "PHAT TAN RESCUE USB"; $TxtAlias.Width = 300; $TxtAlias.BackColor = $Theme.InputBg; $TxtAlias.ForeColor = "Yellow"
+$G1.Controls.Add($LblAlias, 0, 4); $G1.Controls.Add($TxtAlias, 1, 4)
+
+$LblPass = New-Object System.Windows.Forms.Label; $LblPass.Text = "Password Boot (Optional):"; $LblPass.ForeColor = "Orange"; $LblPass.AutoSize = $true
+$TxtPass = New-Object System.Windows.Forms.TextBox; $TxtPass.Text = ""; $TxtPass.Width = 300; $TxtPass.BackColor = $Theme.InputBg; $TxtPass.ForeColor = "Orange"; $TxtPass.PasswordChar = "*"
+$G1.Controls.Add($LblPass, 0, 5); $G1.Controls.Add($TxtPass, 1, 5)
+
+$ChkMemtest = New-Object System.Windows.Forms.CheckBox; $ChkMemtest.Text = "Tải Memtest86+ v7.00 ISO (Test RAM)"; $ChkMemtest.Checked = $true; $ChkMemtest.ForeColor = "Cyan"; $ChkMemtest.AutoSize = $true
+$G1.Controls.Add($ChkMemtest, 0, 6); $G1.SetColumnSpan($ChkMemtest, 2)
+
 $ChkLive = New-Object System.Windows.Forms.CheckBox; $ChkLive.Text = "Tải & Cài LiveCD (NangCap_UsbBoot.iso)"; $ChkLive.Checked = $true; $ChkLive.ForeColor = "Yellow"; $ChkLive.AutoSize = $true
-$G1.Controls.Add($ChkLive, 0, 4); $G1.SetColumnSpan($ChkLive, 2)
+$G1.Controls.Add($ChkLive, 0, 7); $G1.SetColumnSpan($ChkLive, 2)
+
 $ChkDir = New-Object System.Windows.Forms.CheckBox; $ChkDir.Text = "Tạo Full Cấu trúc (DATA, ISO, MAS...)"; $ChkDir.Checked = $true; $ChkDir.ForeColor = "Lime"; $ChkDir.AutoSize = $true
-$G1.Controls.Add($ChkDir, 0, 5); $G1.SetColumnSpan($ChkDir, 2)
+$G1.Controls.Add($ChkDir, 0, 8); $G1.SetColumnSpan($ChkDir, 2)
+
 $ChkSec = New-Object System.Windows.Forms.CheckBox; $ChkSec.Text = "Bật Secure Boot Support"; $ChkSec.Checked = $true; $ChkSec.ForeColor = "Orange"; $ChkSec.AutoSize = $true
-$G1.Controls.Add($ChkSec, 0, 6); $G1.SetColumnSpan($ChkSec, 2)
-$ChkAntiBot = New-Object System.Windows.Forms.CheckBox; $ChkAntiBot.Text = "🛡️ Xác thực Math-Bot (Phép toán)"; $ChkAntiBot.Checked = $true; $ChkAntiBot.ForeColor = "Red"; $ChkAntiBot.AutoSize = $true
-$G1.Controls.Add($ChkAntiBot, 0, 7); $G1.SetColumnSpan($ChkAntiBot, 2)
+$G1.Controls.Add($ChkSec, 0, 9); $G1.SetColumnSpan($ChkSec, 2)
+
 $Tab1.Controls.Add($G1)
 
 # -- TAB 3: WIN 11 HACKS --
@@ -356,6 +354,17 @@ function Process-Ventoy {
                 if ($Mode -eq "INSTALL") { try { cmd /c "label $UsbRoot $LabelName" } catch {} }
                 $VentoyDir = "$UsbRoot\ventoy"; New-Item -Path $VentoyDir -ItemType Directory -Force | Out-Null
                 
+                # --- MEMTEST86+ (NEW) ---
+                if ($ChkMemtest.Checked) {
+                    try {
+                        Log-Msg "Đang tải Memtest86+ ISO (v7.00)..." "Cyan"
+                        $IsoRescueDir = "$UsbRoot\ISO_Rescue"
+                        if (!(Test-Path $IsoRescueDir)) { New-Item -Path $IsoRescueDir -ItemType Directory -Force | Out-Null }
+                        Download-File-Safe $Global:MemtestUrl "$IsoRescueDir\memtest86+.iso"
+                        Log-Msg "Memtest86+ OK -> $IsoRescueDir" "Success"
+                    } catch { Log-Msg "Lỗi tải Memtest: $($_.Exception.Message)" "Red" }
+                }
+
                 # MAS & LIVECD
                 if ($IsDir) { try { Download-File-Safe $Global:MasUrl "$UsbRoot\MAS_AIO.cmd"; Log-Msg "MAS OK" "Success" } catch {} }
 
@@ -389,7 +398,19 @@ function Process-Ventoy {
                 if ($ChkBypassCheck.Checked) { $JControl += @{ "VTOY_WIN11_BYPASS_CHECK" = "1" } }
                 if ($ChkBypassNRO.Checked) { $JControl += @{ "VTOY_WIN11_BYPASS_NRO" = "1" } }
 
-                $J = @{ "control" = $JControl; "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" } }
+                $J = @{ 
+                    "control" = $JControl; 
+                    "theme" = @{ "display_mode" = "GUI"; "gfxmode" = "1920x1080" }
+                    "menu_alias" = @( @{ "image" = "/ventoy/ventoy.png"; "alias" = $TxtAlias.Text } )
+                }
+                
+                # PASSWORD LOGIC (SHA256)
+                if ($TxtPass.Text -ne "") {
+                    $HashedPass = Get-Sha256 $TxtPass.Text
+                    $J.Add("password", @{ "menupwd" = $HashedPass })
+                    Log-Msg "Đã đặt Password Menu (SHA256)." "Cyan"
+                }
+
                 if ($ThemeConfig) { $J.theme.Add("file", $ThemeConfig) }
                 
                 $J | ConvertTo-Json -Depth 10 | Out-File "$VentoyDir\ventoy.json" -Encoding UTF8 -Force
