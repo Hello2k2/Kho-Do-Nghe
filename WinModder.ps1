@@ -212,7 +212,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V4.9 (VSS SNAPSHOT EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V5.0 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -279,29 +279,32 @@ $BtnStartCap.Add_Click({
     # 2. Khóa giao diện
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # 3. CAPTURE BẰNG NATIVE VSS (Siêu đơn giản)
-    Log $TxtLogCap "Đang khởi động Wimlib với chế độ Native VSS..." "INFO"
+    # 3. CAPTURE BẰNG NATIVE VSS
+    Log $TxtLogCap "Đang khởi động Wimlib (Native VSS)..." "INFO"
     
-    # Lưu ý các tham số:
-    # "C:\"       : Capture trực tiếp ổ C
-    # --snapshot  : Tự động tạo VSS để copy file đang mở (bypass lock)
-    # --compress  : LZX (Nén mạnh) hoặc LZX:50 (Nén cực mạnh) hoặc LZMS (Nén siêu mạnh như ESD)
-    # --exclude   : Loại bỏ file rác (swap, pagefile) ngay trong lệnh
+    # [FIX LỖI CÚ PHÁP Ở ĐÂY]
+    # Bỏ "--description", chỉ để lại chuỗi mô tả ở vị trí thứ 4
+    # Cấu trúc: capture NGUỒN ĐÍCH TÊN MÔ_TẢ OPTIONS
     
-    $WimArgs = "capture C:\ `"$WimTarget`" `"PhatTan_OS`" --description `"Build by PhatTanPC`" --compress=LZX --check --threads=0 --snapshot"
+    $WimArgs = "capture C:\ `"$WimTarget`" `"PhatTan_OS`" `"Build by PhatTanPC`" --compress=LZX --check --threads=0 --snapshot"
     
-    # Thêm danh sách loại trừ (Exclusion) trực tiếp bằng lệnh (Khỏi cần file .ini)
-    $Excludes = " --exclude=`"\hiberfil.sys`" --exclude=`"\pagefile.sys`" --exclude=`"\swapfile.sys`" --exclude=`"\System Volume Information`" --exclude=`"\$Recycle.Bin`""
-    $WimArgs += $Excludes
+    # Danh sách loại trừ (viết nối chuỗi cho gọn)
+    # Lưu ý: Wimlib cần đường dẫn tương đối so với gốc (root) nên để \ ở đầu là chuẩn
+    $Excludes = " --exclude=`"\hiberfil.sys`" --exclude=`"\pagefile.sys`" --exclude=`"\swapfile.sys`" --exclude=`"\System Volume Information`" --exclude=`"\$Recycle.Bin`" --exclude=`"\Users\*\AppData\Local\Temp`""
+    
+    $FinalArgs = $WimArgs + $Excludes
 
     # 4. Thực thi
-    $Proc = Start-Process $WimlibExe -ArgumentList $WimArgs -Wait -NoNewWindow -PassThru
+    # Mẹo: In lệnh ra Log để debug nếu cần
+    Log $TxtLogCap "Command: wimlib-imagex $FinalArgs" "DEBUG"
+
+    $Proc = Start-Process $WimlibExe -ArgumentList $FinalArgs -Wait -NoNewWindow -PassThru
     
     if ($Proc.ExitCode -eq 0) {
-        Log $TxtLogCap "SUCCESS! Wimlib đã capture xong (Không lỗi 40)." "SUCCESS"
+        Log $TxtLogCap "SUCCESS! Wimlib đã capture xong (Tuyệt vời!)." "SUCCESS"
         [System.Windows.Forms.MessageBox]::Show("Capture Thành Công!")
     } else {
-        Log $TxtLogCap "Wimlib thất bại! Code: $($Proc.ExitCode)" "ERR"
+        Log $TxtLogCap "Wimlib thất bại! Code: $($Proc.ExitCode). Check file log wimlib." "ERR"
     }
     
     # 5. Mở lại giao diện
