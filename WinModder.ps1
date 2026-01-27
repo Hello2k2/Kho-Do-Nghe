@@ -212,7 +212,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V4.0 (VSS SNAPSHOT EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V4.2 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
