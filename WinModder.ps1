@@ -212,7 +212,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V5.0 (VSS SNAPSHOT EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V5.1 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -270,44 +270,74 @@ $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.
 # --- CAPTURE LOGIC (VSS INTEGRATED) ---
 # --- CAPTURE LOGIC (VSS INTEGRATED + AUTO COMPRESS) ---
 $BtnStartCap.Add_Click({
-    # 1. Kiểm tra công cụ
-    if (!(Check-Tools) -or !(Check-Wimlib)) { return }
+    # 1. Kiểm tra công cụ & DLL (Quan trọng)
+    if (!(Check-Tools)) { return }
+    
+    # Check kỹ file DLL
+    if (!(Test-Path "$ToolsDir\libwim-15.dll")) {
+        Log $TxtLogCap "THIẾU FILE libwim-15.dll! Đang tải lại..." "ERR"
+        Check-Wimlib # Gọi hàm tải lại
+        return
+    }
+
     Update-Workspace; Prepare-Dirs
     $WimTarget = $TxtCapOut.Text
     $WimlibExe = "$ToolsDir\wimlib-imagex.exe"
     
-    # 2. Khóa giao diện
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # 3. CAPTURE BẰNG NATIVE VSS
     Log $TxtLogCap "Đang khởi động Wimlib (Native VSS)..." "INFO"
+
+    # 2. XÂY DỰNG LỆNH BẰNG MẢNG (ARRAY) - TRỊ TUYỆT ĐỐI LỖI CÚ PHÁP
+    # Dùng cách này PowerShell sẽ tự xử lý dấu ngoặc kép và ký tự đặc biệt
     
-    # [FIX LỖI CÚ PHÁP Ở ĐÂY]
-    # Bỏ "--description", chỉ để lại chuỗi mô tả ở vị trí thứ 4
-    # Cấu trúc: capture NGUỒN ĐÍCH TÊN MÔ_TẢ OPTIONS
-    
-    $WimArgs = "capture C:\ `"$WimTarget`" `"PhatTan_OS`" `"Build by PhatTanPC`" --compress=LZX --check --threads=0 --snapshot"
-    
-    # Danh sách loại trừ (viết nối chuỗi cho gọn)
-    # Lưu ý: Wimlib cần đường dẫn tương đối so với gốc (root) nên để \ ở đầu là chuẩn
-    $Excludes = " --exclude=`"\hiberfil.sys`" --exclude=`"\pagefile.sys`" --exclude=`"\swapfile.sys`" --exclude=`"\System Volume Information`" --exclude=`"\$Recycle.Bin`" --exclude=`"\Users\*\AppData\Local\Temp`""
+    $WimArgs = @(
+        "capture",
+        "C:\",
+        "$WimTarget",
+        "PhatTan_OS",
+        "Build by PhatTanPC",
+        "--compress=LZX", # Hoặc dùng LZMS nếu muốn nén siêu nhỏ
+        "--check",
+        "--threads=0",
+        "--snapshot"      # Native VSS
+    )
+
+    # Thêm danh sách loại trừ (Dùng dấu nháy đơn ' ' để PowerShell không hiểu nhầm dấu $)
+    $Excludes = @(
+        '--exclude=\hiberfil.sys',
+        '--exclude=\pagefile.sys',
+        '--exclude=\swapfile.sys',
+        '--exclude=\System Volume Information',
+        '--exclude=\$Recycle.Bin',       # Dấu $ nằm trong nháy đơn sẽ an toàn
+        '--exclude=\Users\*\AppData\Local\Temp'
+    )
     
     $FinalArgs = $WimArgs + $Excludes
 
-    # 4. Thực thi
-    # Mẹo: In lệnh ra Log để debug nếu cần
-    Log $TxtLogCap "Command: wimlib-imagex $FinalArgs" "DEBUG"
+    # 3. In lệnh ra để kiểm tra (Debug)
+    # Join mảng lại thành chuỗi để in ra log cho dễ nhìn
+    Log $TxtLogCap "Command: wimlib-imagex $($FinalArgs -join ' ')" "DEBUG"
 
-    $Proc = Start-Process $WimlibExe -ArgumentList $FinalArgs -Wait -NoNewWindow -PassThru
-    
-    if ($Proc.ExitCode -eq 0) {
-        Log $TxtLogCap "SUCCESS! Wimlib đã capture xong (Tuyệt vời!)." "SUCCESS"
-        [System.Windows.Forms.MessageBox]::Show("Capture Thành Công!")
-    } else {
-        Log $TxtLogCap "Wimlib thất bại! Code: $($Proc.ExitCode). Check file log wimlib." "ERR"
+    # 4. THỰC THI
+    try {
+        $Proc = Start-Process -FilePath $WimlibExe -ArgumentList $FinalArgs -Wait -NoNewWindow -PassThru
+        
+        if ($Proc.ExitCode -eq 0) {
+            Log $TxtLogCap "SUCCESS! Wimlib đã capture xong." "SUCCESS"
+            [System.Windows.Forms.MessageBox]::Show("Capture Thành Công!")
+        } 
+        elseif ($Proc.ExitCode -eq 3221225781) {
+             Log $TxtLogCap "LỖI THIẾU DLL! Hãy copy file libwim-15.dll vào cùng chỗ với exe." "ERR"
+        }
+        else {
+            Log $TxtLogCap "Wimlib thất bại! Code: $($Proc.ExitCode)." "ERR"
+            Log $TxtLogCap "Gợi ý: Nếu Code khác 0, có thể do bản Win Lite đã bị cắt bỏ dịch vụ VSS." "INFO"
+        }
+    } catch {
+        Log $TxtLogCap "Lỗi chạy process: $($_.Exception.Message)" "ERR"
     }
     
-    # 5. Mở lại giao diện
     $BtnStartCap.Enabled=$true; $Form.Cursor="Default"
 })
 # --- MODDING LOGIC (GIỮ NGUYÊN) ---
