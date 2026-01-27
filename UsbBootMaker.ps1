@@ -1,9 +1,8 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V12.3 FIXED THEME & LOGGING)
+    VENTOY BOOT MAKER - PHAT TAN PC (V12.4 FINAL FIX LINK)
     Updates:
-    - [FIX] Sửa lỗi không tải được Theme từ GitHub (Thêm User-Agent & TLS 1.2).
-    - [FIX] Sửa đường dẫn cấu trúc thư mục WhiteSur.
-    - [DEBUG] Mở khóa Log lỗi ở phần tải Theme.
+    - [FIX 404] Thay link MAS GitHub (hay lỗi) bằng link GitLab (ổn định).
+    - [FIX 404] Cập nhật link tải Theme WhiteSur dạng rút gọn.
 #>
 
 # --- 0. FORCE ADMIN ---
@@ -13,7 +12,7 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Exit
 }
 
-# 1. SETUP & SECURITY PROTOCOL (QUAN TRỌNG CHO GITHUB)
+# 1. SETUP & SECURITY PROTOCOL
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
@@ -24,7 +23,10 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # 2. CONFIG
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
 $Global:VentoyDirectLink = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
-$Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+
+# --- FIX 1: Đổi Link MAS sang GitLab (Tránh lỗi 404 GitHub) ---
+$Global:MasUrl = "https://gitlab.com/massgrave/microsoft-activation-scripts/-/raw/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
 if (!(Test-Path $Global:WorkDir)) { New-Item -ItemType Directory -Path $Global:WorkDir -Force | Out-Null }
@@ -40,10 +42,10 @@ $Global:AutoInstallLinks = @{
     "ubuntu_server.seed"     = "https://www.ventoy.net/download/preseed.cfg.txt"
 }
 
-# --- FIX: Cấu trúc thư mục theme đúng ---
+# --- FIX 2: Cập nhật Link Theme WhiteSur chuẩn ---
 $Global:DefaultThemes = @(
     @{ Name="Ventoy Default"; Url=""; File=""; Folder="" },
-    @{ Name="WhiteSur 4K (Demo)"; Url="https://github.com/vinceliuice/WhiteSur-grub-theme/archive/refs/heads/master.zip"; File="theme.txt"; Folder="WhiteSur-grub-theme-master/WhiteSur" }
+    @{ Name="WhiteSur 4K (Demo)"; Url="https://github.com/vinceliuice/WhiteSur-grub-theme/archive/master.zip"; File="theme.txt"; Folder="WhiteSur-grub-theme-master/WhiteSur" }
 )
 
 # 3. THEME GUI
@@ -71,7 +73,7 @@ function Log-Msg ($Msg, $Color="Lime") {
     try { "$(Get-Date -F 'HH:mm:ss')|$Msg" | Out-File $Global:DebugFile -Append -Encoding UTF8 } catch {}
 }
 
-# --- FIX: Hàm download có User-Agent ---
+# --- HAM DOWNLOAD AN TOAN (User-Agent) ---
 function Download-File-Safe ($Url, $Dest) {
     try {
         $WebClient = New-Object System.Net.WebClient
@@ -93,7 +95,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY MASTER V12.3 (FIXED)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY MASTER V12.4 (FINAL)"; $Form.Size = "950,880"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
