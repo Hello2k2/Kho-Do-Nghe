@@ -14,145 +14,168 @@ $Theme = @{
     Card      = [System.Drawing.Color]::FromArgb(35, 35, 40)
     Text      = [System.Drawing.Color]::FromArgb(240, 240, 240)
     BtnBack   = [System.Drawing.Color]::FromArgb(50, 50, 60)
-    BtnHover  = [System.Drawing.Color]::FromArgb(255, 0, 80) # Red Neon cho viec xoa
-    Accent    = [System.Drawing.Color]::FromArgb(255, 0, 80)
-    Border    = [System.Drawing.Color]::FromArgb(255, 0, 80)
+    Accent    = [System.Drawing.Color]::FromArgb(0, 255, 128) # Spring Green cho WinLite
+    Warn      = [System.Drawing.Color]::FromArgb(255, 160, 0)
 }
 
 # --- GUI SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS DEBLOATER PRO (V1.0)"
-$Form.Size = New-Object System.Drawing.Size(900, 650)
+$Form.Text = "WINLITE UNINSTALLER PRO (V2.0)"
+$Form.Size = New-Object System.Drawing.Size(950, 700)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.Back
 $Form.ForeColor = $Theme.Text
 $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
-$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "SYSTEM DEBLOATER (GỠ APP RÁC)"; $LblT.Font = "Impact, 20"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
-
-# --- PAINT HANDLER ---
-$GlowPaint = {
-    param($sender, $e)
-    $Pen = New-Object System.Drawing.Pen($Theme.Accent, 2)
-    $Rect = $sender.ClientRectangle; $Rect.Width-=2; $Rect.Height-=2; $Rect.X+=1; $Rect.Y+=1
-    $e.Graphics.DrawRectangle($Pen, $Rect); $Pen.Dispose()
-}
+$LblT = New-Object System.Windows.Forms.Label; $LblT.Text = "WINLITE APP MANAGER (QUÉT SÂU REGISTRY)"; $LblT.Font = "Impact, 18"; $LblT.ForeColor = $Theme.Accent; $LblT.AutoSize = $true; $LblT.Location = "20,15"; $Form.Controls.Add($LblT)
 
 # --- TAB CONTROL ---
-$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="20,70"; $TabControl.Size="845,450"; $Form.Controls.Add($TabControl)
+$TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="20,60"; $TabControl.Size="895,500"; $Form.Controls.Add($TabControl)
 
 # Helper UI
 function Add-Page ($Title) { $p=New-Object System.Windows.Forms.TabPage; $p.Text=$Title; $p.BackColor=$Theme.Card; $p.ForeColor=$Theme.Text; $TabControl.Controls.Add($p); return $p }
 
-# ==========================================
-# TAB 1: SAFE DEBLOAT (APP RÁC THÔNG THƯỜNG)
-# ==========================================
-$TabSafe = Add-Page "  1. SAFE LIST (KHUYÊN DÙNG)  "
+# TAB 1: CLASSIC APPS (WIN32/EXE) - QUAN TRỌNG CHO WINLITE
+$TabClassic = Add-Page "  1. CLASSIC APPS (WINLITE KHUYÊN DÙNG)  "
+$LvClassic = New-Object System.Windows.Forms.ListView
+$LvClassic.Location="10,10"; $LvClassic.Size="865,440"; $LvClassic.View="Details"; $LvClassic.CheckBoxes=$true; $LvClassic.GridLines=$true; $LvClassic.FullRowSelect=$true
+$LvClassic.BackColor=$Theme.Back; $LvClassic.ForeColor=$Theme.Text
+$LvClassic.Columns.Add("Tên Phần Mềm", 350); $LvClassic.Columns.Add("Phiên bản", 100); $LvClassic.Columns.Add("Lệnh Gỡ (Uninstall String)", 350)
+$TabClassic.Controls.Add($LvClassic)
 
-$LvSafe = New-Object System.Windows.Forms.ListView
-$LvSafe.Location="15,15"; $LvSafe.Size="805,380"; $LvSafe.View="Details"; $LvSafe.CheckBoxes=$true; $LvSafe.GridLines=$true; $LvSafe.FullRowSelect=$true
-$LvSafe.BackColor=$Theme.Back; $LvSafe.ForeColor=$Theme.Text
-$LvSafe.Columns.Add("Tên Ứng Dụng", 350); $LvSafe.Columns.Add("Package Name (ID)", 400)
-$TabSafe.Controls.Add($LvSafe)
+# TAB 2: MODERN APPS (STORE)
+$TabModern = Add-Page "  2. MODERN APPS (STORE/APPX)  "
+$LvModern = New-Object System.Windows.Forms.ListView
+$LvModern.Location="10,10"; $LvModern.Size="865,440"; $LvModern.View="Details"; $LvModern.CheckBoxes=$true; $LvModern.GridLines=$true; $LvModern.FullRowSelect=$true
+$LvModern.BackColor=$Theme.Back; $LvModern.ForeColor=$Theme.Text
+$LvModern.Columns.Add("Tên Ứng Dụng", 350); $LvModern.Columns.Add("Package ID", 450)
+$TabModern.Controls.Add($LvModern)
 
-# ==========================================
-# TAB 2: ADVANCED (TẤT CẢ APP)
-# ==========================================
-$TabAdv = Add-Page "  2. ADVANCED (TẤT CẢ APP)  "
-
-$LvAdv = New-Object System.Windows.Forms.ListView
-$LvAdv.Location="15,15"; $LvAdv.Size="805,380"; $LvAdv.View="Details"; $LvAdv.CheckBoxes=$true; $LvAdv.GridLines=$true; $LvAdv.FullRowSelect=$true
-$LvAdv.BackColor=$Theme.Back; $LvAdv.ForeColor=$Theme.Text
-$LvAdv.Columns.Add("Tên Ứng Dụng", 350); $LvAdv.Columns.Add("Package Name (ID)", 400)
-$TabAdv.Controls.Add($LvAdv)
-
-# --- ACTION BUTTONS ---
-$PnlAct = New-Object System.Windows.Forms.Panel; $PnlAct.Location="20,530"; $PnlAct.Size="845,70"; $PnlAct.BackColor=$Theme.Card; $PnlAct.Add_Paint($GlowPaint); $Form.Controls.Add($PnlAct)
+# --- ACTION PANEL ---
+$PnlAct = New-Object System.Windows.Forms.Panel; $PnlAct.Location="20,580"; $PnlAct.Size="895,70"; $PnlAct.BackColor=$Theme.Card; $Form.Controls.Add($PnlAct)
 
 function Add-Btn ($Txt, $X, $Col, $Cmd) {
-    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="$X,15"; $B.Size="180,40"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9, Bold"
-    $B.BackColor=$Col; $B.ForeColor="White"; $B.Cursor="Hand"; $B.Add_Click($Cmd)
+    $B = New-Object System.Windows.Forms.Button; $B.Text=$Txt; $B.Location="$X,15"; $B.Size="160,40"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9, Bold"
+    $B.BackColor=$Col; $B.ForeColor="Black"; $B.Cursor="Hand"; $B.Add_Click($Cmd)
     $PnlAct.Controls.Add($B)
 }
 
-Add-Btn "QUÉT APP (SCAN)" 20 "DimGray" { Load-Apps }
-Add-Btn "CHỌN TẤT CẢ" 220 "DimGray" { 
-    if ($TabControl.SelectedTab -eq $TabSafe) { foreach($i in $LvSafe.Items){$i.Checked=$true} }
-    else { foreach($i in $LvAdv.Items){$i.Checked=$true} }
+Add-Btn "LÀM MỚI (SCAN)" 20 "Cyan" { Load-All-Apps }
+Add-Btn "CHỌN TẤT CẢ" 200 "Silver" { 
+    if ($TabControl.SelectedTab -eq $TabClassic) { foreach($i in $LvClassic.Items){$i.Checked=$true} }
+    else { foreach($i in $LvModern.Items){$i.Checked=$true} }
 }
-Add-Btn "BỎ CHỌN" 420 "DimGray" { 
-    if ($TabControl.SelectedTab -eq $TabSafe) { foreach($i in $LvSafe.Items){$i.Checked=$false} }
-    else { foreach($i in $LvAdv.Items){$i.Checked=$false} }
+Add-Btn "BỎ CHỌN" 370 "Silver" { 
+    if ($TabControl.SelectedTab -eq $TabClassic) { foreach($i in $LvClassic.Items){$i.Checked=$false} }
+    else { foreach($i in $LvModern.Items){$i.Checked=$false} }
 }
 
-$BtnRemove = New-Object System.Windows.Forms.Button; $BtnRemove.Text="GỠ BỎ (REMOVE)"; $BtnRemove.Location="630,15"; $BtnRemove.Size="200,40"; $BtnRemove.FlatStyle="Flat"; $BtnRemove.Font="Segoe UI, 10, Bold"
-$BtnRemove.BackColor="Red"; $BtnRemove.ForeColor="White"; $BtnRemove.Cursor="Hand"
-$PnlAct.Controls.Add($BtnRemove)
+$BtnRun = New-Object System.Windows.Forms.Button; $BtnRun.Text="GỠ BỎ ĐÃ CHỌN"; $BtnRun.Location="680,15"; $BtnRun.Size="200,40"; $BtnRun.FlatStyle="Flat"; $BtnRun.Font="Segoe UI, 10, Bold"
+$BtnRun.BackColor="Red"; $BtnRun.ForeColor="White"; $BtnRun.Cursor="Hand"
+$PnlAct.Controls.Add($BtnRun)
 
-# --- LOGIC ---
-# Danh sách Bloatware an toàn để xóa
-$BloatList = @(
-    "Microsoft.3DBuilder", "Microsoft.BingWeather", "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Messaging", 
-    "Microsoft.Microsoft3DViewer", "Microsoft.MicrosoftOfficeHub", "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
-    "Microsoft.OneConnect", "Microsoft.People", "Microsoft.SkypeApp", "Microsoft.Wallet", "Microsoft.WindowsAlarms", 
-    "Microsoft.WindowsFeedbackHub", "Microsoft.WindowsMaps", "Microsoft.WindowsSoundRecorder", "Microsoft.Xbox.TCUI", 
-    "Microsoft.XboxApp", "Microsoft.XboxGameOverlay", "Microsoft.XboxGamingOverlay", "Microsoft.XboxIdentityProvider", 
-    "Microsoft.XboxSpeechToTextOverlay", "Microsoft.YourPhone", "Microsoft.ZuneMusic", "Microsoft.ZuneVideo",
-    "Disney", "Spotify", "Netflix", "TikTok", "Instagram", "Facebook", "Twitter", "CandyCrush"
-)
+# --- LOGIC FUNCTION ---
 
-function Load-Apps {
+function Load-All-Apps {
     $Form.Cursor = "WaitCursor"
-    $LvSafe.Items.Clear(); $LvAdv.Items.Clear()
     
-    # Lấy danh sách App (Non-System)
-    $Apps = Get-AppxPackage | Where-Object { $_.NonRemovable -eq $false -and $_.SignatureKind -eq "Store" } | Sort-Object Name
+    # 1. SCAN CLASSIC APPS (REGISTRY) - Fix cho WinLite
+    $LvClassic.Items.Clear()
+    $RegPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
     
-    foreach ($App in $Apps) {
-        $Item = New-Object System.Windows.Forms.ListViewItem($App.Name)
-        $Item.SubItems.Add($App.PackageFullName)
-        $Item.Tag = $App.PackageFullName # Lưu ID để xóa
-        
-        # Phân loại vào Tab Safe hoặc Adv
-        $IsBloat = $false
-        foreach ($B in $BloatList) { if ($App.Name -match $B) { $IsBloat = $true; break } }
-        
-        if ($IsBloat) { 
-            $LvSafe.Items.Add($Item) 
-            # Copy sang Adv luôn để dễ quản lý
-            $ItemClone = $Item.Clone(); $LvAdv.Items.Add($ItemClone)
-        } else {
-            $LvAdv.Items.Add($Item)
+    $ClassicList = @()
+    foreach ($Path in $RegPaths) {
+        Get-ItemProperty $Path -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -and $_.UninstallString } | ForEach-Object {
+            # Lọc bớt các bản update hệ thống
+            if ($_.DisplayName -notmatch "^Update for|Security Update|Hotfix") {
+                $ClassicList += $_
+            }
         }
     }
+    
+    # Sort và Add vào List
+    $ClassicList | Sort-Object DisplayName -Unique | ForEach-Object {
+        $Item = New-Object System.Windows.Forms.ListViewItem($_.DisplayName)
+        $Item.SubItems.Add([string]$_.DisplayVersion)
+        $Item.SubItems.Add($_.UninstallString)
+        $Item.Tag = $_.UninstallString # Lưu lệnh gỡ
+        $LvClassic.Items.Add($Item)
+    }
+
+    # 2. SCAN MODERN APPS (APPX)
+    $LvModern.Items.Clear()
+    try {
+        $Apps = Get-AppxPackage -ErrorAction Stop | Where-Object { $_.NonRemovable -eq $false } | Sort-Object Name
+        foreach ($App in $Apps) {
+            $Item = New-Object System.Windows.Forms.ListViewItem($App.Name)
+            $Item.SubItems.Add($App.PackageFullName)
+            $Item.Tag = $App.PackageFullName
+            $LvModern.Items.Add($Item)
+        }
+    } catch {
+        $Item = New-Object System.Windows.Forms.ListViewItem("KHÔNG HỖ TRỢ (WINLITE)")
+        $Item.ForeColor = "Red"
+        $LvModern.Items.Add($Item)
+    }
+
     $Form.Cursor = "Default"
-    [System.Windows.Forms.MessageBox]::Show("Đã quét xong danh sách ứng dụng!", "Thông báo")
+    $TabControl.Text = "Đã quét xong!"
 }
 
-$BtnRemove.Add_Click({
-    # Xác định Tab đang mở
-    $TargetLv = if ($TabControl.SelectedTab -eq $TabSafe) { $LvSafe } else { $LvAdv }
-    
-    # Lấy danh sách đã check
-    $CheckedItems = $TargetLv.CheckedItems
-    if ($CheckedItems.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn ít nhất 1 App!", "Lỗi"); return }
-    
-    if ([System.Windows.Forms.MessageBox]::Show("Bạn có chắc muốn GỠ BỎ $($CheckedItems.Count) ứng dụng đã chọn?`n`nHành động này không thể hoàn tác!", "Cảnh báo", "YesNo", "Warning") -eq "Yes") {
-        $Form.Cursor = "WaitCursor"
-        $Count = 0
-        foreach ($Item in $CheckedItems) {
-            $PkgName = $Item.Tag
-            try {
-                Remove-AppxPackage -Package $PkgName -ErrorAction Stop
-                $Count++
-            } catch {}
+# --- UNINSTALL LOGIC ---
+$BtnRun.Add_Click({
+    if ($TabControl.SelectedTab -eq $TabClassic) {
+        # GỠ CLASSIC APP
+        $Checked = $LvClassic.CheckedItems
+        if ($Checked.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn phần mềm!", "Lỗi"); return }
+        
+        foreach ($Item in $Checked) {
+            $CmdString = $Item.Tag
+            $AppName = $Item.Text
+            
+            # Xử lý lệnh gỡ (MsiExec hoặc Uninstall.exe)
+            if ($CmdString -match "MsiExec.exe") {
+                # Tự động thêm /quiet nếu là MSI (Cẩn thận)
+                # $CmdString = $CmdString -replace "/I", "/X" + " /quiet /norestart"
+                Start-Process cmd -ArgumentList "/c $CmdString" -Wait
+            } else {
+                # Nếu lệnh có dấu ngoặc kép, tách ra chạy
+                try {
+                    $Proc = Start-Process cmd -ArgumentList "/c `"$CmdString`"" -PassThru
+                } catch {
+                    [System.Windows.Forms.MessageBox]::Show("Không thể khởi chạy trình gỡ cài đặt của: $AppName", "Lỗi")
+                }
+            }
+            # Bỏ tick sau khi chạy
+            $Item.Checked = $false
+            $Item.ForeColor = "Gray"
         }
-        Load-Apps # Refresh lại list
-        $Form.Cursor = "Default"
-        [System.Windows.Forms.MessageBox]::Show("Đã gỡ bỏ thành công $Count ứng dụng!", "Hoàn tất")
+        [System.Windows.Forms.MessageBox]::Show("Đã gọi trình gỡ cài đặt. Vui lòng làm theo hướng dẫn trên màn hình (nếu có).", "Hoàn tất")
+    }
+    else {
+        # GỠ MODERN APP
+        $Checked = $LvModern.CheckedItems
+        if ($Checked.Count -eq 0) { return }
+        if ($Checked[0].Text -eq "KHÔNG HỖ TRỢ (WINLITE)") { return }
+
+        if ([System.Windows.Forms.MessageBox]::Show("Gỡ bỏ $($Checked.Count) ứng dụng Modern?", "Xác nhận", "YesNo") -eq "Yes") {
+            $Form.Cursor = "WaitCursor"
+            foreach ($Item in $Checked) {
+                try {
+                    Remove-AppxPackage -Package $Item.Tag -ErrorAction Stop
+                    $LvModern.Items.Remove($Item)
+                } catch {}
+            }
+            $Form.Cursor = "Default"
+            [System.Windows.Forms.MessageBox]::Show("Đã gỡ xong!", "Hoàn tất")
+        }
     }
 })
 
-$Form.Add_Shown({ Load-Apps })
+$Form.Add_Shown({ Load-All-Apps })
 $Form.ShowDialog() | Out-Null
