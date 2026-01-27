@@ -5,6 +5,11 @@
     "link": ""
   },
   {
+    "name": "Ventoy Flat Catppuccin",
+    "type": "GRUB",
+    "link": "https://github.com/KindaSuS1368/Ventoy-Flat-Catppuccin/releases/download/v1.1.0/theme-vfc.zip"
+  },
+  {
     "name": "Vimix 1080p (Clean)",
     "type": "GRUB",
     "link": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/THEME/Vimix-1080p.tar.xz"
