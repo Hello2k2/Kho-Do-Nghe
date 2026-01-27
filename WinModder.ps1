@@ -69,53 +69,61 @@ function Create-DismConfig {
 
 function Create-ShadowCopy {
     param($DriveLetter, $MountPoint, $Box)
+    $SW = [System.Diagnostics.Stopwatch]::StartNew() # Bắt đầu đếm giờ
     
-    Log $Box "Khởi tạo Volume Shadow Copy (VSS) cho $DriveLetter..." "VSS"
+    Log $Box "BẮT ĐẦU: Khởi tạo VSS Snapshot cho $DriveLetter..." "VSS"
     
     try {
-        # 1. Gọi WMI để tạo Shadow Copy
+        # FIX 1: Dùng Win32_ShadowCopy trực tiếp với xử lý đồng bộ tốt hơn
+        Log $Box "Đang gọi WMI Win32_ShadowCopy.Create... (Chỗ này hay bị treo nếu dịch vụ VSS đang bận)" "DEBUG"
         $WmiClass = [WMICLASS]"root\cimv2:Win32_ShadowCopy"
         $Result = $WmiClass.Create($DriveLetter, "ClientAccessible")
         
+        Log $Box "WMI Return Code: $($Result.ReturnValue) (Time: $($SW.Elapsed.Seconds)s)" "DEBUG"
+
         if ($Result.ReturnValue -ne 0) {
-            Log $Box "Lỗi tạo VSS. Mã lỗi WMI: $($Result.ReturnValue)" "ERR"
+            Log $Box "Lỗi tạo VSS. Code: $($Result.ReturnValue)" "ERR"
             return $false
         }
         
         $Global:CurrentShadowID = $Result.ShadowID
-        Log $Box "VSS ID Created: $($Global:CurrentShadowID)" "VSS"
         
-        # 2. Lấy đường dẫn thiết bị (Device Path) của Snapshot vừa tạo
-        # Định dạng: \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyX
-        $Snapshot = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $Global:CurrentShadowID }
+        # FIX 2: Tối ưu truy vấn Snapshot - Tránh dùng Get-WmiObject vì nó chậm
+        $Snapshot = Get-CimInstance -ClassName Win32_ShadowCopy -Filter "ID = '$($Global:CurrentShadowID)'"
         $DevicePath = $Snapshot.DeviceObject
         
-        if ([string]::IsNullOrEmpty($DevicePath)) {
-            Log $Box "Không tìm thấy Device Path của Snapshot." "ERR"
+        Log $Box "Device Path: $DevicePath (Time: $($SW.Elapsed.TotalSeconds)s)" "VSS"
+
+        # FIX 3: Tối ưu Symlink
+        if (Test-Path $MountPoint) { 
+             Log $Box "Đang dọn dẹp MountPoint cũ..." "DEBUG"
+             Remove-Item $MountPoint -Force -ErrorAction SilentlyContinue 
+        }
+
+        Log $Box "Đang tạo Symbolic Link..." "DEBUG"
+        # Thêm dấu \ vào cuối DevicePath cực kỳ quan trọng để DISM nhận diện đúng root
+        $CmdArgs = "/c mklink /d `"$MountPoint`" `"$DevicePath\`""
+        $P = Start-Process "cmd.exe" -ArgumentList $CmdArgs -NoNewWindow -Wait -PassThru
+        
+        if ($P.ExitCode -ne 0) {
+            Log $Box "Lỗi tạo Symlink! ExitCode: $($P.ExitCode)" "ERR"
             return $false
         }
-        
-        Log $Box "Snapshot Device Path: $DevicePath" "VSS"
-        
-        # 3. Tạo Symbolic Link để DISM có thể đọc được
-        # DISM không đọc được đường dẫn \\?\, nên ta map nó vào thư mục C:\WinMod_Temp\ShadowMount
-        if (Test-Path $MountPoint) { Remove-Item $MountPoint -Force -Recurse -ErrorAction SilentlyContinue }
-        
-        # Dùng CMD mklink vì PowerShell New-Item đôi khi lỗi với Device Path
-        $CmdArgs = "/c mklink /d `"$MountPoint`" `"$DevicePath\`""
-        Start-Process "cmd.exe" -ArgumentList $CmdArgs -NoNewWindow -Wait
-        
-        if (Test-Path "$MountPoint\Windows") {
-            Log $Box "VSS Mapped thành công tại: $MountPoint" "VSS"
+
+        # TEST CUỐI: Kiểm tra xem link có sống không
+        if (Test-Path "$MountPoint\Windows\System32") {
+            Log $Box "VSS READY! Tổng thời gian chuẩn bị: $($SW.Elapsed.TotalSeconds)s" "SUCCESS"
             return $true
         } else {
-            Log $Box "Lỗi Map VSS (Symlink failed)." "ERR"
+            Log $Box "Lỗi: Symlink tạo xong nhưng không truy cập được dữ liệu." "ERR"
             return $false
         }
         
     } catch {
-        Log $Box "VSS Exception: $($_.Exception.Message)" "ERR"
+        Log $Box "EXCEPTION: $($_.Exception.Message)" "ERR"
         return $false
+    } finally {
+        $SW.Stop()
     }
 }
 
