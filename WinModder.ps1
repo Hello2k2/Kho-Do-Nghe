@@ -34,7 +34,24 @@ function Log ($Box, $Msg, $Type="INFO") {
     $StatusLbl.Text = "Status: $Msg"
     [System.Windows.Forms.Application]::DoEvents()
 }
-
+function Check-Wimlib {
+    $WimlibZip = "$ToolsDir\wimlib.zip"
+    $WimlibExe = "$ToolsDir\wimlib-imagex.exe"
+    if (Test-Path $WimlibExe) { return $true }
+    
+    Log $TxtLogCap "Đang tải Wimlib Engine (Siêu tốc)..." "INFO"
+    try {
+        $Url = "https://wimlib.net/downloads/wimlib-1.14.4-windows-x86_64-bin.zip"
+        (New-Object System.Net.WebClient).DownloadFile($Url, $WimlibZip)
+        Expand-Archive $WimlibZip -DestinationPath "$ToolsDir\wimlib_temp" -Force
+        Get-ChildItem -Path "$ToolsDir\wimlib_temp" -Filter "wimlib-imagex.exe" -Recurse | Copy-Item -Destination $WimlibExe
+        Get-ChildItem -Path "$ToolsDir\wimlib_temp" -Filter "libwim-15.dll" -Recurse | Copy-Item -Destination $ToolsDir
+        return $true
+    } catch { 
+        Log $TxtLogCap "Lỗi tải Wimlib!" "ERR"
+        return $false 
+    }
+}
 # --- HÀM TẠO CONFIG (CHỈ CẦN LOẠI TRỪ RÁC, KHÔNG CẦN LO FILE LOCK NỮA) ---
 function Create-DismConfig {
     if (!(Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null }
@@ -253,47 +270,32 @@ $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.
 # --- CAPTURE LOGIC (VSS INTEGRATED) ---
 # --- CAPTURE LOGIC (VSS INTEGRATED + AUTO COMPRESS) ---
 $BtnStartCap.Add_Click({
-    if (!(Check-Tools)) { return }
+    if (!(Check-Tools) -or !(Check-Wimlib)) { return }
     Update-Workspace; Prepare-Dirs
-    $ConfigFile = Create-DismConfig
     $WimTarget = $TxtCapOut.Text
-    
-    # 1. KIỂM TRA DUNG LƯỢNG TRỐNG ĐỂ CHỌN MỨC NÉN
-    $SelDriveLetter = $CboDrives.SelectedItem.ToString().Split(" ")[0]
-    $DriveInfo = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID = '$SelDriveLetter'"
-    $FreeGB = [Math]::Round($DriveInfo.FreeSpace / 1GB, 1)
-    
-    # Logic: Nếu trống dưới 25GB thì dùng 'fast' để cứu vãn, trên 25GB thì chơi 'max' cho nhẹ file
-    $CompressLevel = "max"
-    if ($FreeGB -lt 25) {
-        $CompressLevel = "fast"
-        Log $TxtLogCap "CẢNH BÁO: Dung lượng thấp ($FreeGB GB). Tự động chuyển về nén FAST để tránh treo." "DEBUG"
-    } else {
-        Log $TxtLogCap "Dung lượng tốt ($FreeGB GB). Sử dụng nén MAX." "INFO"
-    }
+    $WimlibExe = "$ToolsDir\wimlib-imagex.exe"
     
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # BƯỚC 1: TẠO SHADOW COPY
+    # BƯỚC 1: TẠO VSS (Vẫn dùng VSS để tránh file lock)
     $VssOk = Create-ShadowCopy "C:\" $Global:ShadowMount $TxtLogCap
     
     if ($VssOk) {
-        # BƯỚC 2: CAPTURE VỚI MỨC NÉN TỰ ĐỘNG
-        Log $TxtLogCap "Đang Capture từ Snapshot (Compression: $CompressLevel)..." "INFO"
+        Log $TxtLogCap "Wimlib Engine khởi động. Đang Capture..." "SUCCESS"
         
-        # Ép DISM dùng ScratchDir riêng để không làm rác ổ hệ thống
-        $DismArgs = "/Capture-Image /ImageFile:`"$WimTarget`" /CaptureDir:`"$Global:ShadowMount`" /Name:`"MyWin_VSS`" /Compress:$CompressLevel /ScratchDir:`"$Global:ScratchDir`" /ConfigFile:`"$ConfigFile`""
+        # BƯỚC 2: CAPTURE BẰNG WIMLIB (Dùng nén LZX tương đương MAX của DISM nhưng nhanh hơn)
+        # Tham số --solid giúp file nén cực nhỏ (giống .esd)
+        $WimArgs = "capture `"$Global:ShadowMount`" `"$WimTarget`" `"PhatTan_OS`" --description `"Build by Wimlib`" --compress=LZX --check --threads=0"
         
-        $Proc = Start-Process "dism" -ArgumentList $DismArgs -Wait -NoNewWindow -PassThru
+        $Proc = Start-Process $WimlibExe -ArgumentList $WimArgs -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
-            Log $TxtLogCap "THÀNH CÔNG! Đã tạo WIM sạch." "INFO"
-            [System.Windows.Forms.MessageBox]::Show("Capture Thành Công! Mức nén: $CompressLevel")
+            Log $TxtLogCap "DONE! Wimlib đã hoàn thành trong nháy mắt." "SUCCESS"
+            [System.Windows.Forms.MessageBox]::Show("Capture Wimlib Thành Công!")
         } else {
-            Log $TxtLogCap "Lỗi Capture (Code $($Proc.ExitCode)). Kiểm tra lại dung lượng!" "ERR"
+            Log $TxtLogCap "Wimlib báo lỗi! Code: $($Proc.ExitCode)" "ERR"
         }
         
-        # BƯỚC 3: DỌN DẸP VSS
         Cleanup-ShadowCopy $Global:ShadowMount $TxtLogCap
     }
     
