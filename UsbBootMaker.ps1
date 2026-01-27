@@ -122,7 +122,7 @@ $F_Bold  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontSty
 $F_Code  = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Regular)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN VENTOY V12.9 (RAR SUPPORT)"; $Form.Size = "950,900"; $Form.StartPosition = "CenterScreen"
+$Form.Text = "PHAT TAN VENTOY V12.9.1 (RAR SUPPORT)"; $Form.Size = "950,900"; $Form.StartPosition = "CenterScreen"
 $Form.BackColor = $Theme.BgForm; $Form.ForeColor = $Theme.Text; $Form.Padding = 10
 
 $MainTable = New-Object System.Windows.Forms.TableLayoutPanel; $MainTable.Dock = "Fill"; $MainTable.ColumnCount = 1; $MainTable.RowCount = 5
