@@ -212,7 +212,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V5.1 (VSS SNAPSHOT EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V5.2 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -270,14 +270,11 @@ $BtnCapBrowse.Add_Click({ $S=New-Object System.Windows.Forms.SaveFileDialog; $S.
 # --- CAPTURE LOGIC (VSS INTEGRATED) ---
 # --- CAPTURE LOGIC (VSS INTEGRATED + AUTO COMPRESS) ---
 $BtnStartCap.Add_Click({
-    # 1. Kiểm tra công cụ & DLL (Quan trọng)
+    # 1. Kiểm tra công cụ & DLL
     if (!(Check-Tools)) { return }
-    
-    # Check kỹ file DLL
     if (!(Test-Path "$ToolsDir\libwim-15.dll")) {
         Log $TxtLogCap "THIẾU FILE libwim-15.dll! Đang tải lại..." "ERR"
-        Check-Wimlib # Gọi hàm tải lại
-        return
+        Check-Wimlib; return
     }
 
     Update-Workspace; Prepare-Dirs
@@ -285,11 +282,27 @@ $BtnStartCap.Add_Click({
     $WimlibExe = "$ToolsDir\wimlib-imagex.exe"
     
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
-    
     Log $TxtLogCap "Đang khởi động Wimlib (Native VSS)..." "INFO"
 
-    # 2. XÂY DỰNG LỆNH BẰNG MẢNG (ARRAY) - TRỊ TUYỆT ĐỐI LỖI CÚ PHÁP
-    # Dùng cách này PowerShell sẽ tự xử lý dấu ngoặc kép và ký tự đặc biệt
+    # [BƯỚC ĐỘT PHÁ] TẠO FILE CONFIG ĐỂ TRÁNH LỖI CÚ PHÁP
+    # Thay vì gõ lệnh dài ngoằng, ta viết danh sách loại trừ vào file này
+    $WimConfigFile = "$ToolsDir\WimExcludes.ini"
+    
+    $ConfigContent = @"
+[ExclusionList]
+\hiberfil.sys
+\pagefile.sys
+\swapfile.sys
+\System Volume Information
+\$Recycle.Bin
+\Users\*\AppData\Local\Temp
+\Config.Msi
+"@
+    [System.IO.File]::WriteAllText($WimConfigFile, $ConfigContent)
+    Log $TxtLogCap "Đã tạo file cấu hình loại trừ tại: $WimConfigFile" "DEBUG"
+
+    # 2. XÂY DỰNG LỆNH GỌN GÀNG HƠN
+    # Bây giờ lệnh chỉ cần trỏ vào file config thôi
     
     $WimArgs = @(
         "capture",
@@ -297,42 +310,29 @@ $BtnStartCap.Add_Click({
         "$WimTarget",
         "PhatTan_OS",
         "Build by PhatTanPC",
-        "--compress=LZX", # Hoặc dùng LZMS nếu muốn nén siêu nhỏ
+        "--compress=LZX",
         "--check",
         "--threads=0",
-        "--snapshot"      # Native VSS
+        "--snapshot",            # VSS tự động
+        "--config=$WimConfigFile" # <--- CHÌA KHÓA GIẢI QUYẾT VẤN ĐỀ Ở ĐÂY
     )
 
-    # Thêm danh sách loại trừ (Dùng dấu nháy đơn ' ' để PowerShell không hiểu nhầm dấu $)
-    $Excludes = @(
-        '--exclude=\hiberfil.sys',
-        '--exclude=\pagefile.sys',
-        '--exclude=\swapfile.sys',
-        '--exclude=\System Volume Information',
-        '--exclude=\$Recycle.Bin',       # Dấu $ nằm trong nháy đơn sẽ an toàn
-        '--exclude=\Users\*\AppData\Local\Temp'
-    )
-    
-    $FinalArgs = $WimArgs + $Excludes
-
-    # 3. In lệnh ra để kiểm tra (Debug)
-    # Join mảng lại thành chuỗi để in ra log cho dễ nhìn
-    Log $TxtLogCap "Command: wimlib-imagex $($FinalArgs -join ' ')" "DEBUG"
+    # 3. Debug lệnh
+    Log $TxtLogCap "Command: wimlib-imagex $($WimArgs -join ' ')" "DEBUG"
 
     # 4. THỰC THI
     try {
-        $Proc = Start-Process -FilePath $WimlibExe -ArgumentList $FinalArgs -Wait -NoNewWindow -PassThru
+        $Proc = Start-Process -FilePath $WimlibExe -ArgumentList $WimArgs -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
-            Log $TxtLogCap "SUCCESS! Wimlib đã capture xong." "SUCCESS"
+            Log $TxtLogCap "SUCCESS! Wimlib đã capture xong (Quá mượt!)." "SUCCESS"
             [System.Windows.Forms.MessageBox]::Show("Capture Thành Công!")
         } 
-        elseif ($Proc.ExitCode -eq 3221225781) {
-             Log $TxtLogCap "LỖI THIẾU DLL! Hãy copy file libwim-15.dll vào cùng chỗ với exe." "ERR"
-        }
         else {
             Log $TxtLogCap "Wimlib thất bại! Code: $($Proc.ExitCode)." "ERR"
-            Log $TxtLogCap "Gợi ý: Nếu Code khác 0, có thể do bản Win Lite đã bị cắt bỏ dịch vụ VSS." "INFO"
+            
+            # Đọc file log lỗi của Wimlib (nếu có) để hiển thị cho ông xem
+            # (Thường Wimlib in lỗi ra stderr, ở đây ta đoán code thôi)
         }
     } catch {
         Log $TxtLogCap "Lỗi chạy process: $($_.Exception.Message)" "ERR"
