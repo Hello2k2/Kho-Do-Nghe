@@ -212,7 +212,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V4.2 (VSS SNAPSHOT EDITION)"
+$Form.Text = "WINDOWS MODDER STUDIO V4.5 (VSS SNAPSHOT EDITION)"
 $Form.Size = New-Object System.Drawing.Size(950, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -277,23 +277,26 @@ $BtnStartCap.Add_Click({
     
     $BtnStartCap.Enabled=$false; $Form.Cursor="WaitCursor"
     
-    # BƯỚC 1: TẠO VSS (Vẫn dùng VSS để tránh file lock)
+    # BƯỚC 1: TẠO VSS
     $VssOk = Create-ShadowCopy "C:\" $Global:ShadowMount $TxtLogCap
     
     if ($VssOk) {
-        Log $TxtLogCap "Wimlib Engine khởi động. Đang Capture..." "SUCCESS"
+        # TUYỆT ĐỐI KHÔNG CHẠY Grant-FullAccess Ở ĐÂY!
+        # Snapshot là Read-only, quét icacls sẽ gây treo máy.
+
+        Log $TxtLogCap "Wimlib đang Capture trực tiếp từ Snapshot..." "SUCCESS"
         
-        # BƯỚC 2: CAPTURE BẰNG WIMLIB (Dùng nén LZX tương đương MAX của DISM nhưng nhanh hơn)
-        # Tham số --solid giúp file nén cực nhỏ (giống .esd)
-        $WimArgs = "capture `"$Global:ShadowMount`" `"$WimTarget`" `"PhatTan_OS`" --description `"Build by Wimlib`" --compress=LZX --check --threads=0"
+        # BƯỚC 2: CAPTURE BẰNG WIMLIB
+        # Thêm --rpfix để fix các điểm liên kết (reparse points) cho chuẩn
+        $WimArgs = "capture `"$Global:ShadowMount`" `"$WimTarget`" `"PhatTan_OS`" --compress=LZX --check --threads=0 --rpfix"
         
         $Proc = Start-Process $WimlibExe -ArgumentList $WimArgs -Wait -NoNewWindow -PassThru
         
         if ($Proc.ExitCode -eq 0) {
-            Log $TxtLogCap "DONE! Wimlib đã hoàn thành trong nháy mắt." "SUCCESS"
-            [System.Windows.Forms.MessageBox]::Show("Capture Wimlib Thành Công!")
+            Log $TxtLogCap "DONE! Wimlib đã hoàn thành." "SUCCESS"
+            [System.Windows.Forms.MessageBox]::Show("Capture Thành Công!")
         } else {
-            Log $TxtLogCap "Wimlib báo lỗi! Code: $($Proc.ExitCode)" "ERR"
+            Log $TxtLogCap "Lỗi Wimlib! Code: $($Proc.ExitCode)" "ERR"
         }
         
         Cleanup-ShadowCopy $Global:ShadowMount $TxtLogCap
@@ -301,7 +304,6 @@ $BtnStartCap.Add_Click({
     
     $BtnStartCap.Enabled=$true; $Form.Cursor="Default"
 })
-
 # --- MODDING LOGIC (GIỮ NGUYÊN) ---
 $BtnIsoSrc.Add_Click({ $O=New-Object System.Windows.Forms.OpenFileDialog; $O.Filter="ISO|*.iso"; if($O.ShowDialog()-eq"OK"){$TxtIsoSrc.Text=$O.FileName; $GbAct.Enabled=$true} })
 function Grant-FullAccess ($Path) { 
