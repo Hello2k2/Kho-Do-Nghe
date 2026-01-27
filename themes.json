@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Mặc định (Ventoy)",
+    "type": "GRUB",
+    "link": ""
+  },
+  {
+    "name": "Vimix 1080p (Clean)",
+    "type": "GRUB",
+    "link": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/THEME/Vimix-1080p.tar.xz"
+  },
+  {
+    "name": "StarRail - Acheron",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Acheron.tar.gz"
+  },
+  {
+    "name": "StarRail - Firefly",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Firefly.tar.gz"
+  },
+  {
+    "name": "StarRail - Kafka",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Kafka.tar.gz"
+  },
+  {
+    "name": "StarRail - Jingliu",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Jingliu.tar.gz"
+  },
+  {
+    "name": "StarRail - RuanMei",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/RuanMei.tar.gz"
+  },
+  {
+    "name": "StarRail - BlackSwan",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/BlackSwan.tar.gz"
+  },
+  {
+    "name": "StarRail - Sparkle",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Sparkle.tar.gz"
+  },
+  {
+    "name": "StarRail - Robin",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Robin.tar.gz"
+  },
+  {
+    "name": "StarRail - March 7th (The Hunt)",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/March7th-TheHunt.tar.gz"
+  },
+  {
+    "name": "StarRail - Feixiao",
+    "type": "GRUB",
+    "link": "https://github.com/voidlhf/StarRailGrubThemes/releases/download/20251217-115754/Feixiao.tar.gz"
+  }
+]
