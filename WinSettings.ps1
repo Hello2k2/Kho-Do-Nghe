@@ -1,8 +1,8 @@
 <#
-    TITANIUM GOD MODE V4.0 - THE NEXT LEVEL
-    Architecture: Modern UI (Borderless) + Sidebar Nav + Real-time Monitor
-    Engine: PowerShell + WinForms + GDI+
-    Author: Upgraded by Gemini
+    TITANIUM GOD MODE V5.0 - SINGULARITY EDITION
+    Architecture: Modern UI + GDI+ Vector Gauges + Winget Integration
+    Engine: PowerShell 5.1/7 + WinForms
+    Upgraded by: Gemini
 #>
 
 # --- 0. SAFETY & INIT ---
@@ -10,22 +10,24 @@ $ErrorActionPreference = "SilentlyContinue"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Check Admin
+# Check Admin & Elevate
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- 1. CORE THEME CONFIG ---
+# --- 1. CORE THEME CONFIG (CYBERPUNK PALETTE) ---
 $Theme = @{
-    BgForm      = [System.Drawing.Color]::FromArgb(18, 18, 24)       # Deep Dark Blue/Black
-    BgSidebar   = [System.Drawing.Color]::FromArgb(25, 25, 35)       # Lighter Sidebar
-    BgContent   = [System.Drawing.Color]::FromArgb(30, 30, 40)       # Content Area
-    Accent      = [System.Drawing.Color]::FromArgb(0, 255, 180)      # Cyber Green
-    AccentRed   = [System.Drawing.Color]::FromArgb(255, 60, 90)      # Cyber Red
+    BgForm      = [System.Drawing.Color]::FromArgb(10, 10, 15)       # Void Black
+    BgSidebar   = [System.Drawing.Color]::FromArgb(20, 20, 28)       # Deep Grey
+    BgContent   = [System.Drawing.Color]::FromArgb(28, 28, 38)       # Panel Bg
+    BgInput     = [System.Drawing.Color]::FromArgb(15, 15, 20)       # Inputs
+    Accent      = [System.Drawing.Color]::FromArgb(0, 210, 255)      # Neon Cyan
+    Accent2     = [System.Drawing.Color]::FromArgb(180, 0, 255)      # Neon Purple
+    AccentRed   = [System.Drawing.Color]::FromArgb(255, 50, 80)      # Danger Red
     TextMain    = [System.Drawing.Color]::WhiteSmoke
-    TextMuted   = [System.Drawing.Color]::Gray
-    Border      = [System.Drawing.Color]::FromArgb(50, 50, 65)
-    FontLogo    = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    TextMuted   = [System.Drawing.Color]::FromArgb(120, 120, 140)
+    Border      = [System.Drawing.Color]::FromArgb(60, 60, 80)
+    FontLogo    = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     FontHead    = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
     FontNorm    = New-Object System.Drawing.Font("Segoe UI", 9)
     FontMono    = New-Object System.Drawing.Font("Consolas", 9)
@@ -33,37 +35,36 @@ $Theme = @{
 
 # --- 2. MAIN FORM SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM GOD MODE V4.0"
-$Form.Size = New-Object System.Drawing.Size(1000, 650)
+$Form.Text = "TITANIUM V5.0"
+$Form.Size = New-Object System.Drawing.Size(1100, 700)
 $Form.StartPosition = "CenterScreen"
-$Form.FormBorderStyle = "None" # Borderless Modern Look
+$Form.FormBorderStyle = "None"
 $Form.BackColor = $Theme.BgForm
 $Form.ForeColor = $Theme.TextMain
+$Form.DoubleBuffered = $true # Smooth rendering
 
-# Enable Dragging on Borderless Form
-$IsDragging = $false
-$DragStart = [System.Drawing.Point]::Empty
+# Drag Logic
+$IsDragging = $false; $DragStart = [System.Drawing.Point]::Empty
 $Form.Add_MouseDown({ $Global:IsDragging = $true; $Global:DragStart = $_.Location })
 $Form.Add_MouseMove({ if ($Global:IsDragging) { $Form.Location = [System.Drawing.Point]::Add($Form.Location, [System.Drawing.Size]::Subtract($_.Location, $Global:DragStart)) } })
 $Form.Add_MouseUp({ $Global:IsDragging = $false })
 
 # --- 3. UI COMPONENTS BUILDER ---
 
-# > Custom Button Builder
 function Add-NavBtn ($Parent, $Text, $Icon, $Y, $PanelToOpen) {
     $Btn = New-Object System.Windows.Forms.Label
     $Btn.Text = "  $Icon   $Text"
-    $Btn.Size = New-Object System.Drawing.Size(200, 45)
+    $Btn.Size = New-Object System.Drawing.Size(220, 50)
     $Btn.Location = New-Object System.Drawing.Point(0, $Y)
     $Btn.Font = $Theme.FontHead
     $Btn.ForeColor = $Theme.TextMuted
     $Btn.TextAlign = "MiddleLeft"
     $Btn.Cursor = "Hand"
-    $Btn.Tag = $PanelToOpen # Link to content panel
+    $Btn.Tag = $PanelToOpen
 
     $Btn.Add_MouseEnter({ 
         $this.ForeColor = $Theme.Accent
-        $this.BackColor = [System.Drawing.Color]::FromArgb(40,40,50)
+        $this.BackColor = [System.Drawing.Color]::FromArgb(35,35,45)
     })
     $Btn.Add_MouseLeave({ 
         if ($script:ActivePanel -ne $this.Tag) {
@@ -73,16 +74,14 @@ function Add-NavBtn ($Parent, $Text, $Icon, $Y, $PanelToOpen) {
     })
     $Btn.Add_Click({ Switch-Panel $this })
     $Parent.Controls.Add($Btn)
-    return $Btn
 }
 
-# > Action Button Builder
-function Add-ActionBtn ($Parent, $Text, $Cmd, $X, $Y, $IsDanger=$false) {
+function Add-ActionBtn ($Parent, $Text, $Cmd, $X, $Y, $IsDanger=$false, $IsWide=$false) {
     $Btn = New-Object System.Windows.Forms.Button
     $Btn.Text = $Text
     $Btn.Tag = $Cmd
     $Btn.Location = New-Object System.Drawing.Point($X, $Y)
-    $Btn.Size = New-Object System.Drawing.Size(220, 35)
+    $Btn.Size = if($IsWide){New-Object System.Drawing.Size(460, 35)}else{New-Object System.Drawing.Size(220, 35)}
     $Btn.FlatStyle = "Flat"
     $Btn.Font = $Theme.FontNorm
     $Btn.Cursor = "Hand"
@@ -100,157 +99,148 @@ function Add-ActionBtn ($Parent, $Text, $Cmd, $X, $Y, $IsDanger=$false) {
     $Btn.Add_MouseEnter({ $this.BackColor = if($IsDanger){[System.Drawing.Color]::FromArgb(50,20,20)}else{[System.Drawing.Color]::FromArgb(50,50,60)} })
     $Btn.Add_MouseLeave({ $this.BackColor = $Theme.BgContent })
     $Btn.Add_Click({ Run-Command $this.Tag $this.Text })
-    
     $Parent.Controls.Add($Btn)
 }
 
-# > Header Label Builder
 function Add-SectionTitle ($Parent, $Text, $Y) {
-    $L = New-Object System.Windows.Forms.Label
-    $L.Text = $Text
-    $L.Font = $Theme.FontHead
-    $L.ForeColor = $Theme.Accent
-    $L.Location = New-Object System.Drawing.Point(20, $Y)
-    $L.AutoSize = $true
+    $L = New-Object System.Windows.Forms.Label; $L.Text = $Text
+    $L.Font = $Theme.FontHead; $L.ForeColor = $Theme.Accent
+    $L.Location = New-Object System.Drawing.Point(30, $Y); $L.AutoSize = $true
     $Parent.Controls.Add($L)
-    
-    $Line = New-Object System.Windows.Forms.Panel
-    $Line.Size = New-Object System.Drawing.Size(700, 1)
-    $Line.BackColor = $Theme.Border
-    $Line.Location = New-Object System.Drawing.Point(20, $Y+25)
+    $Line = New-Object System.Windows.Forms.Panel; $Line.Size = New-Object System.Drawing.Size(800, 1)
+    $Line.BackColor = $Theme.Border; $Line.Location = New-Object System.Drawing.Point(30, $Y+28)
     $Parent.Controls.Add($Line)
 }
 
 # --- 4. LAYOUT STRUCTURE ---
 
-# [SIDEBAR]
-$Sidebar = New-Object System.Windows.Forms.Panel
-$Sidebar.Dock = "Left"
-$Sidebar.Width = 200
-$Sidebar.BackColor = $Theme.BgSidebar
+# Sidebar
+$Sidebar = New-Object System.Windows.Forms.Panel; $Sidebar.Dock = "Left"; $Sidebar.Width = 220; $Sidebar.BackColor = $Theme.BgSidebar
 $Form.Controls.Add($Sidebar)
 
-# Logo Area
-$PnlLogo = New-Object System.Windows.Forms.Panel; $PnlLogo.Size = New-Object System.Drawing.Size(200, 60); $PnlLogo.Dock="Top"; $PnlLogo.BackColor="Transparent"
-$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text = "TITANIUM"; $LblLogo.Font = $Theme.FontLogo; $LblLogo.ForeColor = $Theme.Accent; $LblLogo.AutoSize=$true; $LblLogo.Location=New-Object System.Drawing.Point(20, 15)
-$PnlLogo.Controls.Add($LblLogo); $Sidebar.Controls.Add($PnlLogo)
+# Logo
+$PnlLogo = New-Object System.Windows.Forms.Panel; $PnlLogo.Size = New-Object System.Drawing.Size(220, 80); $PnlLogo.Dock="Top"; $PnlLogo.BackColor="Transparent"
+$LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text = "TITANIUM"; $LblLogo.Font = $Theme.FontLogo; $LblLogo.ForeColor = $Theme.Accent; $LblLogo.AutoSize=$true; $LblLogo.Location=New-Object System.Drawing.Point(20, 20)
+$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "V5.0 SINGULARITY"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.Accent2; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
+$PnlLogo.Controls.Add($LblLogo); $PnlLogo.Controls.Add($LblVer); $Sidebar.Controls.Add($PnlLogo)
 
-# [CONTENT CONTAINER]
-$ContentContainer = New-Object System.Windows.Forms.Panel
-$ContentContainer.Dock = "Fill"
-$ContentContainer.BackColor = $Theme.BgForm
+# Content Area
+$ContentContainer = New-Object System.Windows.Forms.Panel; $ContentContainer.Dock = "Fill"; $ContentContainer.BackColor = $Theme.BgForm
 $Form.Controls.Add($ContentContainer)
 
-# [TOP BAR (Close/Min)]
-$TopBar = New-Object System.Windows.Forms.Panel; $TopBar.Dock="Top"; $TopBar.Height=30; $TopBar.BackColor="Transparent"
-# Drag Logic for TopBar
+# Top Bar
+$TopBar = New-Object System.Windows.Forms.Panel; $TopBar.Dock="Top"; $TopBar.Height=35; $TopBar.BackColor="Transparent"
 $TopBar.Add_MouseDown({ $Global:IsDragging = $true; $Global:DragStart = $_.Location })
 $TopBar.Add_MouseMove({ if ($Global:IsDragging) { $Form.Location = [System.Drawing.Point]::Add($Form.Location, [System.Drawing.Size]::Subtract($_.Location, $Global:DragStart)) } })
 $TopBar.Add_MouseUp({ $Global:IsDragging = $false })
 
-$BtnClose = New-Object System.Windows.Forms.Label; $BtnClose.Text="✕"; $BtnClose.Dock="Right"; $BtnClose.Width=40; $BtnClose.TextAlign="MiddleCenter"; $BtnClose.ForeColor=$Theme.AccentRed; $BtnClose.Cursor="Hand"
+$BtnClose = New-Object System.Windows.Forms.Label; $BtnClose.Text="✕"; $BtnClose.Dock="Right"; $BtnClose.Width=45; $BtnClose.TextAlign="MiddleCenter"; $BtnClose.ForeColor=$Theme.AccentRed; $BtnClose.Cursor="Hand"; $BtnClose.Font=$Theme.FontHead
 $BtnClose.Add_Click({ $Form.Close() })
-$BtnMin = New-Object System.Windows.Forms.Label; $BtnMin.Text="—"; $BtnMin.Dock="Right"; $BtnMin.Width=40; $BtnMin.TextAlign="MiddleCenter"; $BtnMin.ForeColor="White"; $BtnMin.Cursor="Hand"
+$BtnMin = New-Object System.Windows.Forms.Label; $BtnMin.Text="—"; $BtnMin.Dock="Right"; $BtnMin.Width=45; $BtnMin.TextAlign="MiddleCenter"; $BtnMin.ForeColor="White"; $BtnMin.Cursor="Hand"; $BtnMin.Font=$Theme.FontHead
 $BtnMin.Add_Click({ $Form.WindowState = "Minimized" })
 $TopBar.Controls.Add($BtnClose); $TopBar.Controls.Add($BtnMin)
 $ContentContainer.Controls.Add($TopBar)
 
-# [STATUS BAR / LOG]
-$StatusBar = New-Object System.Windows.Forms.Panel; $StatusBar.Dock="Bottom"; $StatusBar.Height=30; $StatusBar.BackColor=$Theme.BgSidebar
-$LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text="Ready."; $LblStatus.ForeColor=$Theme.Accent; $LblStatus.Dock="Fill"; $LblStatus.TextAlign="MiddleLeft"; $LblStatus.Padding=New-Object System.Windows.Forms.Padding(10,0,0,0)
+# Status Log
+$StatusBar = New-Object System.Windows.Forms.Panel; $StatusBar.Dock="Bottom"; $StatusBar.Height=35; $StatusBar.BackColor=$Theme.BgSidebar
+$LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text="System initialized. Waiting for command..."; $LblStatus.ForeColor=$Theme.Accent; $LblStatus.Dock="Fill"; $LblStatus.TextAlign="MiddleLeft"; $LblStatus.Padding=New-Object System.Windows.Forms.Padding(15,0,0,0); $LblStatus.Font=$Theme.FontMono
 $StatusBar.Controls.Add($LblStatus)
 $ContentContainer.Controls.Add($StatusBar)
 
 # --- 5. PANELS & CONTENT ---
-$Panels = @()
-
+$Global:Panels = @()
 function Make-Panel ($Name) {
-    $P = New-Object System.Windows.Forms.Panel
-    $P.Dock = "Fill"
-    $P.BackColor = $Theme.BgForm
-    $P.Visible = $false
-    $ContentContainer.Controls.Add($P)
-    $P.BringToFront()
-    $Global:Panels += $P
-    return $P
+    $P = New-Object System.Windows.Forms.Panel; $P.Dock = "Fill"; $P.BackColor = $Theme.BgForm; $P.Visible = $false
+    $ContentContainer.Controls.Add($P); $P.BringToFront(); $Global:Panels += $P; return $P
 }
 
-# --- P1: DASHBOARD ---
+# --- P1: DASHBOARD (WITH GDI+ GAUGES) ---
 $P_Dash = Make-Panel "Dashboard"
-Add-SectionTitle $P_Dash "SYSTEM MONITOR" 20
-# RAM/CPU Circles (Simulated with Progress Bars for simplicity in GDI)
-$LblCPU = New-Object System.Windows.Forms.Label; $LblCPU.Location=New-Object System.Drawing.Point(30, 60); $LblCPU.AutoSize=$true; $LblCPU.ForeColor="White"; $P_Dash.Controls.Add($LblCPU)
-$LblRAM = New-Object System.Windows.Forms.Label; $LblRAM.Location=New-Object System.Drawing.Point(200, 60); $LblRAM.AutoSize=$true; $LblRAM.ForeColor="White"; $P_Dash.Controls.Add($LblRAM)
+Add-SectionTitle $P_Dash "REAL-TIME MONITOR" 20
 
-$TxtInfo = New-Object System.Windows.Forms.TextBox; $TxtInfo.Multiline=$true; $TxtInfo.Location=New-Object System.Drawing.Point(30, 100); $TxtInfo.Size=New-Object System.Drawing.Size(700, 300); $TxtInfo.BackColor=$Theme.BgSidebar; $TxtInfo.ForeColor=$Theme.TextMain; $TxtInfo.BorderStyle="None"; $TxtInfo.Font=$Theme.FontMono; $TxtInfo.ReadOnly=$true
+# Gauge Container
+$GaugeBox = New-Object System.Windows.Forms.PictureBox
+$GaugeBox.Location = New-Object System.Drawing.Point(30, 60)
+$GaugeBox.Size = New-Object System.Drawing.Size(820, 160)
+$GaugeBox.BackColor = "Transparent"
+$P_Dash.Controls.Add($GaugeBox)
+
+$TxtInfo = New-Object System.Windows.Forms.TextBox; $TxtInfo.Multiline=$true; $TxtInfo.Location=New-Object System.Drawing.Point(30, 240); $TxtInfo.Size=New-Object System.Drawing.Size(820, 300); $TxtInfo.BackColor=$Theme.BgInput; $TxtInfo.ForeColor=$Theme.TextMain; $TxtInfo.BorderStyle="None"; $TxtInfo.Font=$Theme.FontMono; $TxtInfo.ReadOnly=$true
 $P_Dash.Controls.Add($TxtInfo)
-Add-ActionBtn $P_Dash "Tạo Restore Point (An Toàn)" "CreateRestore" 30 420 $false
 
 # --- P2: OPTIMIZE ---
 $P_Opt = Make-Panel "Optimize"
-Add-SectionTitle $P_Opt "DỌN DẸP & TỐI ƯU" 20
-Add-ActionBtn $P_Opt "Dọn Rác Hệ Thống (Temp)" "CleanTemp" 30 60
-Add-ActionBtn $P_Opt "Xóa Cache Windows Update" "CleanUpd" 270 60
-Add-ActionBtn $P_Opt "Bật Ultimate Performance" "UltPerf" 30 110
-Add-ActionBtn $P_Opt "Tắt Apps Chạy Ngầm" "OffBgApps" 270 110
-Add-ActionBtn $P_Opt "Tắt Telemetry (Theo dõi)" "OffTele" 30 160
-Add-ActionBtn $P_Opt "Flush DNS Cache" "FlushDns" 270 160
+Add-SectionTitle $P_Opt "QUICK OPTIMIZATION" 20
+Add-ActionBtn $P_Opt "Deep Clean (Temp & Logs)" "CleanDeep" 30 60 $false $true
+Add-ActionBtn $P_Opt "Reset Windows Update" "CleanUpd" 30 110
+Add-ActionBtn $P_Opt "Enable Ultimate Power" "UltPerf" 270 110
+Add-ActionBtn $P_Opt "Disable Telemetry" "OffTele" 30 160
+Add-ActionBtn $P_Opt "Disable Background Apps" "OffBgApps" 270 160
 
-Add-SectionTitle $P_Opt "BLOATWARE KILLER" 220
-Add-ActionBtn $P_Opt "Gỡ Cortana" "DelCortana" 30 260 $true
-Add-ActionBtn $P_Opt "Gỡ Xbox Apps" "DelXbox" 270 260 $true
-Add-ActionBtn $P_Opt "Gỡ OneDrive" "DelOneDrive" 30 310 $true
+Add-SectionTitle $P_Opt "DEBLOATER" 220
+Add-ActionBtn $P_Opt "Remove Cortana" "DelCortana" 30 260 $true
+Add-ActionBtn $P_Opt "Remove Xbox Bloat" "DelXbox" 270 260 $true
+Add-ActionBtn $P_Opt "Remove OneDrive" "DelOneDrive" 30 310 $true
+Add-ActionBtn $P_Opt "Remove Edge (Risky)" "DelEdge" 270 310 $true
 
-# --- P3: INTERFACE ---
-$P_UI = Make-Panel "Interface"
-Add-SectionTitle $P_UI "CUSTOMIZE WINDOWS" 20
-Add-ActionBtn $P_UI "Bật Dark Mode" "DarkMode" 30 60
-Add-ActionBtn $P_UI "Bật Light Mode" "LightMode" 270 60
-Add-ActionBtn $P_UI "Menu Chuột Phải Win 10" "OldMenu" 30 110
-Add-ActionBtn $P_UI "Hiện File Ẩn" "ShowHidden" 270 110
-Add-ActionBtn $P_UI "Restart Explorer" "RestartExp" 30 160 $true
+# --- P3: REPAIR (NEW) ---
+$P_Repair = Make-Panel "Repair"
+Add-SectionTitle $P_Repair "SYSTEM REPAIR & INTEGRITY" 20
+Add-ActionBtn $P_Repair "SFC Scan (Fix Files)" "RunSFC" 30 60
+Add-ActionBtn $P_Repair "DISM Restore Health" "RunDISM" 270 60
+Add-ActionBtn $P_Repair "Check Disk (C:)" "RunChkDsk" 30 110
+Add-ActionBtn $P_Repair "Restart Explorer.exe" "RestartExp" 270 110
 
-# --- P4: NETWORK ---
-$P_Net = Make-Panel "Network"
-Add-SectionTitle $P_Net "DNS & MẠNG" 20
-Add-ActionBtn $P_Net "DNS Google (8.8.8.8)" "DnsGo" 30 60
-Add-ActionBtn $P_Net "DNS Cloudflare (1.1.1.1)" "DnsCf" 270 60
-Add-ActionBtn $P_Net "DNS Tự Động (DHCP)" "DnsAuto" 30 110
-Add-ActionBtn $P_Net "Reset Mạng (Fix lỗi)" "NetReset" 270 110 $true
+Add-SectionTitle $P_Repair "NETWORK FIXES" 170
+Add-ActionBtn $P_Repair "Flush DNS" "FlushDns" 30 210
+Add-ActionBtn $P_Repair "Reset TCP/IP Stack" "NetReset" 270 210 $true
+
+# --- P4: SOFTWARE HUB (NEW) ---
+$P_Soft = Make-Panel "Software"
+Add-SectionTitle $P_Soft "ONE-CLICK INSTALLER (Via Winget)" 20
+# Web
+Add-ActionBtn $P_Soft "Google Chrome" "InstChrome" 30 60
+Add-ActionBtn $P_Soft "Firefox" "InstFirefox" 270 60
+Add-ActionBtn $P_Soft "Brave Browser" "InstBrave" 510 60
+# Dev/Chat
+Add-ActionBtn $P_Soft "VS Code" "InstVSCode" 30 110
+Add-ActionBtn $P_Soft "Discord" "InstDiscord" 270 110
+Add-ActionBtn $P_Soft "Notepad++" "InstNpp" 510 110
+# Tools
+Add-ActionBtn $P_Soft "7-Zip" "Inst7Zip" 30 160
+Add-ActionBtn $P_Soft "AnyDesk" "InstAnyDesk" 270 160
+Add-ActionBtn $P_Soft "VLC Player" "InstVLC" 510 160
 
 # --- P5: TOOLS ---
 $P_Tool = Make-Panel "Tools"
-Add-SectionTitle $P_Tool "SHORTCUTS" 20
+Add-SectionTitle $P_Tool "ADMIN SHORTCUTS" 20
 Add-ActionBtn $P_Tool "Control Panel" "OpenControl" 30 60
 Add-ActionBtn $P_Tool "Registry Editor" "OpenReg" 270 60
-Add-ActionBtn $P_Tool "Services" "OpenSvc" 30 110
+Add-ActionBtn $P_Tool "Services Manager" "OpenSvc" 30 110
 Add-ActionBtn $P_Tool "Network Connections" "OpenNcpa" 270 110
 Add-ActionBtn $P_Tool "God Mode Folder" "GodMode" 30 160
+Add-ActionBtn $P_Tool "Task Manager" "OpenTaskMgr" 270 160
 
-# --- NAV BUTTONS ---
-Add-NavBtn $Sidebar "Dashboard" "📊" 80 $P_Dash
-Add-NavBtn $Sidebar "Tối Ưu Hóa" "🚀" 130 $P_Opt
-Add-NavBtn $Sidebar "Giao Diện" "🎨" 180 $P_UI
-Add-NavBtn $Sidebar "Internet" "🌐" 230 $P_Net
-Add-NavBtn $Sidebar "Công Cụ" "🛠️" 280 $P_Tool
+# --- NAV LINKING ---
+Add-NavBtn $Sidebar "Dashboard" "📊" 100 $P_Dash
+Add-NavBtn $Sidebar "Optimize" "🚀" 150 $P_Opt
+Add-NavBtn $Sidebar "Sys Repair" "❤️" 200 $P_Repair
+Add-NavBtn $Sidebar "Software" "💾" 250 $P_Soft
+Add-NavBtn $Sidebar "Tools" "🛠️" 300 $P_Tool
 
 # --- 6. LOGIC ENGINE ---
 $script:ActivePanel = $null
+$Global:CpuLoad = 0
+$Global:RamLoad = 0
+$Global:RamText = ""
 
 function Switch-Panel ($Btn) {
-    # Reset all buttons
     $Sidebar.Controls | Where-Object { $_.GetType().Name -eq "Label" -and $_.Tag -ne $null } | ForEach-Object {
-        $_.ForeColor = $Theme.TextMuted
-        $_.BackColor = "Transparent"
+        $_.ForeColor = $Theme.TextMuted; $_.BackColor = "Transparent"
     }
-    # Hide all panels
     $Global:Panels | ForEach-Object { $_.Visible = $false }
-    
-    # Activate
-    $Btn.ForeColor = $Theme.Accent
-    $Btn.BackColor = [System.Drawing.Color]::FromArgb(40,40,50)
-    $Btn.Tag.Visible = $true
-    $script:ActivePanel = $Btn.Tag
+    $Btn.ForeColor = $Theme.Accent; $Btn.BackColor = [System.Drawing.Color]::FromArgb(35,35,45)
+    $Btn.Tag.Visible = $true; $script:ActivePanel = $Btn.Tag
 }
 
 function Log ($Msg) {
@@ -264,58 +254,125 @@ function Set-Reg ($Path, $Name, $Val) {
 }
 
 function Run-Command ($Cmd, $Desc) {
-    Log "Đang thực hiện: $Desc..."
+    Log "Executing: $Desc..."
     $Form.Cursor = "WaitCursor"
     
     switch ($Cmd) {
-        "CreateRestore" { Checkpoint-Computer -Description "TitaniumV4_Backup" -RestorePointType "MODIFY_SETTINGS"; Log "Đã tạo Restore Point!" }
-        "CleanTemp" { Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue; Log "Đã dọn dẹp Temp!" }
-        "CleanUpd"  { Stop-Service wuauserv; Remove-Item "$env:windir\SoftwareDistribution\Download\*" -Recurse -Force; Start-Service wuauserv; Log "Đã xóa Cache Update!" }
-        "UltPerf" { powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61; Log "Đã thêm Ultimate Performance!" }
-        "OffBgApps" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" "GlobalUserDisabled" 1; Log "Đã tắt Apps chạy ngầm!" }
-        "OffTele" { Set-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0; Log "Đã tắt Telemetry!" }
-        "FlushDns" { ipconfig /flushdns; Log "DNS Cache đã xóa!" }
-        "DelCortana" { Get-AppxPackage -allusers *Cortana* | Remove-AppxPackage; Log "Đã gỡ Cortana!" }
-        "DelXbox" { Get-AppxPackage *xbox* | Remove-AppxPackage; Log "Đã gỡ Xbox Apps!" }
-        "DelOneDrive" { Stop-Process -Name "OneDrive" -Force; Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" "/uninstall" -Wait; Log "Đã gỡ OneDrive!" }
-        "DarkMode" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "AppsUseLightTheme" 0; Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "SystemUsesLightTheme" 0; Log "Dark Mode ON" }
-        "LightMode" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "AppsUseLightTheme" 1; Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "SystemUsesLightTheme" 1; Log "Light Mode ON" }
-        "OldMenu" { Set-Reg "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" "" ""; Log "Đã bật Menu cũ (Cần Restart Explorer)" }
-        "ShowHidden" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "Hidden" 1; Log "Đã hiện file ẩn" }
-        "RestartExp" { Stop-Process -Name explorer -Force; Log "Đã khởi động lại Explorer" }
-        "DnsGo" { Get-NetAdapter | Where Status -eq Up | Set-DnsClientServerAddress -ServerAddresses ("8.8.8.8","8.8.4.4"); Log "Đã set DNS Google" }
-        "DnsCf" { Get-NetAdapter | Where Status -eq Up | Set-DnsClientServerAddress -ServerAddresses ("1.1.1.1","1.0.0.1"); Log "Đã set DNS Cloudflare" }
-        "DnsAuto" { Get-NetAdapter | Where Status -eq Up | Set-DnsClientServerAddress -ResetServerAddresses; Log "Đã set Auto DNS" }
-        "NetReset" { netsh int ip reset; netsh winsock reset; Log "Đã reset mạng (Cần Reboot)" }
-        "GodMode" { New-Item "$env:USERPROFILE\Desktop\GodMode.{ED7BA470-8E54-465E-825C-99712043E01C}" -ItemType Directory -Force; Log "Đã tạo GodMode trên Desktop" }
+        # Optimize
+        "CleanDeep" { 
+            Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "$env:windir\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Log "Deep Clean Complete." 
+        }
+        "CleanUpd"  { Stop-Service wuauserv; Remove-Item "$env:windir\SoftwareDistribution\Download\*" -Recurse -Force; Start-Service wuauserv; Log "Update Cache Cleared." }
+        "UltPerf" { powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61; Log "Ultimate Performance Plan Added." }
+        "OffBgApps" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" "GlobalUserDisabled" 1; Log "Background Apps Disabled." }
+        "OffTele" { Set-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0; Log "Telemetry Disabled." }
+        "DelCortana" { Get-AppxPackage -allusers *Cortana* | Remove-AppxPackage; Log "Cortana Removed." }
+        "DelXbox" { Get-AppxPackage *xbox* | Remove-AppxPackage; Log "Xbox Apps Removed." }
+        "DelOneDrive" { Stop-Process -Name "OneDrive" -Force; Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" "/uninstall" -Wait; Log "OneDrive Removed." }
+        
+        # Repair
+        "RunSFC" { Start-Process "sfc" "/scannow" -Verb RunAs; Log "SFC Launched in new window." }
+        "RunDISM" { Start-Process "dism" "/online /cleanup-image /restorehealth" -Verb RunAs; Log "DISM Launched in new window." }
+        "RunChkDsk" { Start-Process "cmd" "/k chkdsk C:" -Verb RunAs; Log "ChkDsk Launched." }
+        "RestartExp" { Stop-Process -Name explorer -Force; Log "Explorer Restarted." }
+        "FlushDns" { ipconfig /flushdns; Log "DNS Flushed." }
+        "NetReset" { netsh int ip reset; netsh winsock reset; Log "Network Reset. Reboot required." }
+
+        # Software (Winget)
+        "InstChrome" { Start-Process "winget" "install Google.Chrome -e --silent"; Log "Installing Chrome..." }
+        "InstFirefox" { Start-Process "winget" "install Mozilla.Firefox -e --silent"; Log "Installing Firefox..." }
+        "InstVSCode" { Start-Process "winget" "install Microsoft.VisualStudioCode -e --silent"; Log "Installing VS Code..." }
+        "InstDiscord" { Start-Process "winget" "install Discord.Discord -e --silent"; Log "Installing Discord..." }
+        "Inst7Zip" { Start-Process "winget" "install 7zip.7zip -e --silent"; Log "Installing 7-Zip..." }
+        "InstVLC" { Start-Process "winget" "install VideoLAN.VLC -e --silent"; Log "Installing VLC..." }
+
         # Shortcuts
         "OpenControl" { Start-Process "control" }
         "OpenReg" { Start-Process "regedit" }
-        "OpenSvc" { Start-Process "services.msc" }
-        "OpenNcpa" { Start-Process "ncpa.cpl" }
+        "OpenTaskMgr" { Start-Process "taskmgr" }
+        "GodMode" { New-Item "$env:USERPROFILE\Desktop\GodMode.{ED7BA470-8E54-465E-825C-99712043E01C}" -ItemType Directory -Force; Log "GodMode Created on Desktop." }
     }
     $Form.Cursor = "Default"
 }
 
-# --- 7. REAL-TIME MONITOR ---
+# --- 7. GDI+ RENDERING (The "Iron Man" HUD) ---
+$GaugeBox.Add_Paint({
+    param($sender, $e)
+    $g = $e.Graphics
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+    # Helper to draw arc
+    $DrawArc = { param($x, $val, $color, $label) 
+        $rect = New-Object System.Drawing.Rectangle $x, 10, 140, 140
+        $penBg = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(40,40,50)), 15
+        $penVal = New-Object System.Drawing.Pen $color, 15
+        $penVal.StartCap = "Round"; $penVal.EndCap = "Round"
+        
+        $angle = [Math]::Min(360, [Math]::Max(0, ($val / 100) * 360))
+        
+        $g.DrawArc($penBg, $rect, -90, 360)
+        if($val -gt 0) { $g.DrawArc($penVal, $rect, -90, $angle) }
+        
+        # Text Center
+        $fontBig = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
+        $fontSm = New-Object System.Drawing.Font("Segoe UI", 10)
+        
+        $txtSize = $g.MeasureString("$([int]$val)%", $fontBig)
+        $g.DrawString("$([int]$val)%", $fontBig, [System.Drawing.Brushes]::White, ($x + 70 - $txtSize.Width/2), 60)
+        
+        $lblSize = $g.MeasureString($label, $fontSm)
+        $g.DrawString($label, $fontSm, [System.Drawing.Brushes]::Gray, ($x + 70 - $lblSize.Width/2), 95)
+    }
+
+    & $DrawArc 50 $Global:CpuLoad $Theme.Accent "CPU LOAD"
+    & $DrawArc 250 $Global:RamLoad $Theme.Accent2 "RAM USAGE"
+})
+
+# --- 8. REAL-TIME MONITOR ENGINE ---
 $Timer = New-Object System.Windows.Forms.Timer
-$Timer.Interval = 2000 # 2 seconds
+$Timer.Interval = 1500
 $Timer.Add_Tick({
+    # Get Stats
     $OS = Get-CimInstance Win32_OperatingSystem
-    $TotalRAM = [Math]::Round(($OS.TotalVisibleMemorySize / 1MB), 1)
-    $FreeRAM = [Math]::Round(($OS.FreePhysicalMemory / 1MB), 1)
-    $UsedRAM = [Math]::Round($TotalRAM - $FreeRAM, 1)
+    $Global:CpuLoad = (Get-CimInstance Win32_Processor).LoadPercentage
     
-    $LblCPU.Text = "CPU: $(Get-WmiObject Win32_Processor | Select -ExpandProperty LoadPercentage)%"
-    $LblRAM.Text = "RAM: $UsedRAM GB / $TotalRAM GB"
+    $TotalRAM = $OS.TotalVisibleMemorySize / 1MB
+    $FreeRAM = $OS.FreePhysicalMemory / 1MB
+    $Global:RamLoad = (($TotalRAM - $FreeRAM) / $TotalRAM) * 100
     
-    # Update Info Box once
+    # Trigger Repaint
+    $GaugeBox.Invalidate()
+
+    # Update Text Info
     if ($TxtInfo.Text -eq "") {
-         $TxtInfo.Text = "OS: $($OS.Caption)`r`nBuild: $($OS.BuildNumber)`r`nUser: $env:USERNAME`r`nArch: $($OS.OSArchitecture)"
+        $GPU = (Get-CimInstance Win32_VideoController).Name
+        $Disk = (Get-CimInstance Win32_LogicalDisk | Where DeviceID -eq "C:").Size / 1GB
+        $TxtInfo.Text = @"
+SYSTEM DIAGNOSTICS
+------------------
+OS Version : $($OS.Caption)
+Build      : $($OS.BuildNumber)
+Architecture : $($OS.OSArchitecture)
+User       : $env:USERNAME
+
+HARDWARE
+------------------
+CPU        : $( (Get-CimInstance Win32_Processor).Name )
+GPU        : $GPU
+RAM Total  : $([Math]::Round($TotalRAM/1024, 1)) GB
+System Disk: $([Math]::Round($Disk, 0)) GB (C:)
+
+STATUS
+------------------
+Uptime     : $( (Get-Date) - $OS.LastBootUpTime | Select -ExpandProperty TotalHours | ForEach {[Math]::Round($_, 1)} ) Hours
+Processes  : $( (Get-Process).Count ) Active
+"@
     }
 })
 $Timer.Start()
 
-# --- INIT START ---
-Switch-Panel ($Sidebar.Controls | Where Text -match "Dashboard" | Select -First 1)
+# --- INIT ---
+Switch-Panel ($Sidebar.Controls | Where Tag -eq $P_Dash | Select -First 1)
 $Form.ShowDialog() | Out-Null
