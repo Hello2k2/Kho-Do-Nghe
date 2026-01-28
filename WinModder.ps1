@@ -179,7 +179,7 @@ function Prepare-Dirs {
 # GUI SETUP
 # =========================================================================================
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WINDOWS MODDER STUDIO V6.0 (HYBRID ENGINE)"
+$Form.Text = "WINDOWS MODDER STUDIO V7.0 (HYBRID ENGINE)"
 $Form.Size = New-Object System.Drawing.Size(950, 750)
 $Form.StartPosition = "CenterScreen"
 $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
@@ -232,7 +232,8 @@ $GbAct = New-Object System.Windows.Forms.GroupBox; $GbAct.Text="MENU EDIT"; $GbA
 function Add-Btn ($T, $X, $Y, $C, $Fn) { $b=New-Object System.Windows.Forms.Button; $b.Text=$T; $b.Location="$X,$Y"; $b.Size="250,40"; $b.BackColor=$C; $b.ForeColor="Black"; $b.FlatStyle="Flat"; $b.Add_Click($Fn); $GbAct.Controls.Add($b) }
 Add-Btn "1. MOUNT ISO" 30 30 "Cyan" { Start-Mount }; Add-Btn "2. ADD FOLDER" 30 80 "White" { Add-Folder }
 Add-Btn "3. ADD DRIVERS" 30 130 "White" { Add-Driver }; Add-Btn "4. ADD DESKTOP FILE" 30 180 "White" { Add-DesktopFile }
-Add-Btn "DỌN DẸP LỖI" 560 30 "Red" { Force-Cleanup }
+Add-Btn "4.DỌN DẸP LỖI" 560 30 "Red" { Force-Cleanup }
+Add-Btn "5. TẮT TÍNH NĂNG RÁC (DEBLOAT)" 30 230 "OrangeRed" { Optimize-Image }
 
 $LblInfo = New-Object System.Windows.Forms.Label; $LblInfo.Text="STATUS: UNMOUNTED"; $LblInfo.Location="300,40"; $LblInfo.AutoSize=$true; $LblInfo.Font="Segoe UI, 10, Bold"; $GbAct.Controls.Add($LblInfo)
 $TxtLogMod = New-Object System.Windows.Forms.TextBox; $TxtLogMod.Multiline=$true; $TxtLogMod.Location="300,80"; $TxtLogMod.Size="510,200"; $TxtLogMod.BackColor="Black"; $TxtLogMod.ForeColor="Cyan"; $TxtLogMod.ScrollBars="Vertical"; $TxtLogMod.ReadOnly=$true; $TxtLogMod.Font="Consolas, 9"; $GbAct.Controls.Add($TxtLogMod)
@@ -359,7 +360,149 @@ function Ensure-Dir($path) { if (!(Test-Path $path)) { New-Item -ItemType Direct
 function Add-Folder { $FBD=New-Object System.Windows.Forms.FolderBrowserDialog; if($FBD.ShowDialog()-eq"OK"){Copy-Item $FBD.SelectedPath $Global:MountDir -Recurse -Force; Log $TxtLogMod "Added Folder"} }
 function Add-Driver { $FBD=New-Object System.Windows.Forms.FolderBrowserDialog; if($FBD.ShowDialog()-eq"OK"){Log $TxtLogMod "Injecting Drivers..."; Start-Process "dism" -ArgumentList "/Image:`"$Global:MountDir`" /Add-Driver /Driver:`"$($FBD.SelectedPath)`" /Recurse /ScratchDir:`"$Global:ScratchDir`"" -Wait -NoNewWindow; Log $TxtLogMod "Done"} }
 function Add-DesktopFile { $O=New-Object System.Windows.Forms.OpenFileDialog; if($O.ShowDialog()-eq"OK"){Copy-Item $O.FileName "$Global:MountDir\Users\Public\Desktop" -Force; Log $TxtLogMod "Added File"} }
+# --- HÀM HIỆN MENU CHỌN (CHECKLIST) ---
+function Show-TweakMenu {
+    $TweakForm = New-Object System.Windows.Forms.Form
+    $TweakForm.Text = "MENU TỐI ƯU HÓA (DEBLOAT)"
+    $TweakForm.Size = New-Object System.Drawing.Size(450, 500)
+    $TweakForm.StartPosition = "CenterScreen"
+    $TweakForm.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 45)
+    $TweakForm.ForeColor = "White"
 
+    $Lbl = New-Object System.Windows.Forms.Label
+    $Lbl.Text = "Chọn các thành phần muốn TẮT hoặc XÓA:"
+    $Lbl.Location = "10, 10"; $Lbl.AutoSize = $true
+    $TweakForm.Controls.Add($Lbl)
+
+    # CheckedListBox để chọn nhiều món
+    $CLB = New-Object System.Windows.Forms.CheckedListBox
+    $CLB.Location = "10, 40"; $CLB.Size = "410, 350"
+    $CLB.BackColor = [System.Drawing.Color]::FromArgb(60, 60, 65)
+    $CLB.ForeColor = "Cyan"
+    $CLB.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    
+    # --- DANH SÁCH MÓN ĂN CHƠI ---
+    $CLB.Items.Add("1. Xóa Apps Rác (Bing, Zune, Maps, Solitaire...)") 
+    $CLB.Items.Add("2. Tắt Telemetry (Theo dõi người dùng)")
+    $CLB.Items.Add("3. Tắt Cortana & Web Search (Tiết kiệm RAM)")
+    $CLB.Items.Add("4. Tắt Windows Defender (Cơ bản - RegEdit)")
+    $CLB.Items.Add("5. Tắt Windows Update (Chặn cập nhật tự động)")
+    $CLB.Items.Add("6. Tắt OneDrive (Không cho khởi động cùng Win)")
+    $CLB.Items.Add("7. Tắt Action Center (Thông báo bên phải)")
+    $CLB.Items.Add("8. Bật Windows Photo Viewer cũ (Xem ảnh nhanh)")
+
+    # Check sẵn mấy cái cơ bản an toàn
+    $CLB.SetItemChecked(0, $true) # Apps
+    $CLB.SetItemChecked(1, $true) # Telemetry
+    $CLB.SetItemChecked(2, $true) # Cortana
+
+    $TweakForm.Controls.Add($CLB)
+
+    $BtnOK = New-Object System.Windows.Forms.Button
+    $BtnOK.Text = "THỰC HIỆN"; $BtnOK.DialogResult = "OK"
+    $BtnOK.Location = "10, 410"; $BtnOK.Size = "200, 40"
+    $BtnOK.BackColor = "Green"; $BtnOK.ForeColor = "White"
+    $TweakForm.Controls.Add($BtnOK)
+
+    $BtnCancel = New-Object System.Windows.Forms.Button
+    $BtnCancel.Text = "HỦY BỎ"; $BtnCancel.DialogResult = "Cancel"
+    $BtnCancel.Location = "220, 410"; $BtnCancel.Size = "190, 40"
+    $BtnCancel.BackColor = "Red"; $BtnCancel.ForeColor = "White"
+    $TweakForm.Controls.Add($BtnCancel)
+
+    if ($TweakForm.ShowDialog() -eq "OK") {
+        return $CLB.CheckedItems
+    }
+    return $null
+}
+
+# --- HÀM XỬ LÝ CHÍNH (THAY THẾ HÀM CŨ) ---
+function Optimize-Image {
+    if (!(Test-Path "$Global:MountDir\Windows")) { 
+        Log $TxtLogMod "Chưa Mount WIM! Hãy chạy bước 1 trước." "ERR"; return 
+    }
+
+    # 1. Gọi Menu lên cho người dùng chọn
+    $SelectedTweaks = Show-TweakMenu
+    if ($SelectedTweaks -eq $null) { return } # Nếu bấm Hủy thì thôi
+
+    $Form.Cursor="WaitCursor"
+    Log $TxtLogMod "--- BẮT ĐẦU TỐI ƯU HÓA THEO YÊU CẦU ---" "INFO"
+
+    # 2. XỬ LÝ CÁC MỤC LIÊN QUAN ĐẾN APP (KHÔNG CẦN REGISTRY LOAD)
+    if ($SelectedTweaks -contains "1. Xóa Apps Rác (Bing, Zune, Maps, Solitaire...)") {
+        Log $TxtLogMod "Đang xóa Apps rác..." "INFO"
+        $BloatApps = @("BingWeather", "BingNews", "GetHelp", "Getstarted", "Messaging", "Microsoft3DViewer", "MicrosoftOfficeHub", "MicrosoftSolitaireCollection", "OneConnect", "People", "SkypeApp", "WindowsFeedbackHub", "WindowsMaps", "YourPhone", "ZuneMusic", "ZuneVideo")
+        foreach ($App in $BloatApps) {
+            Get-AppxProvisionedPackage -Path $Global:MountDir | Where-Object { $_.DisplayName -like "*$App*" } | ForEach-Object {
+                Remove-AppxProvisionedPackage -Path $Global:MountDir -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null
+            }
+        }
+        Log $TxtLogMod "-> Đã xóa Apps xong." "DEBUG"
+    }
+
+    # 3. XỬ LÝ CÁC MỤC LIÊN QUAN ĐẾN REGISTRY
+    # Chỉ load Registry nếu có chọn các mục tweak
+    $NeedReg = $false
+    foreach ($item in $SelectedTweaks) { if ($item -ne "1. Xóa Apps Rác (Bing, Zune, Maps, Solitaire...)") { $NeedReg = $true } }
+
+    if ($NeedReg) {
+        Log $TxtLogMod "Đang load Registry (SOFTWARE Hive)..." "INFO"
+        reg load HKLM\WIM_SOFT "$Global:MountDir\Windows\System32\config\SOFTWARE" | Out-Null
+        
+        if ($LASTEXITCODE -eq 0) {
+            
+            # --- Tweak 2: Telemetry ---
+            if ($SelectedTweaks -contains "2. Tắt Telemetry (Theo dõi người dùng)") {
+                Log $TxtLogMod "-> Tắt Telemetry..."
+                reg add "HKLM\WIM_SOFT\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 0 /f | Out-Null
+            }
+
+            # --- Tweak 3: Cortana ---
+            if ($SelectedTweaks -contains "3. Tắt Cortana & Web Search (Tiết kiệm RAM)") {
+                Log $TxtLogMod "-> Tắt Cortana..."
+                reg add "HKLM\WIM_SOFT\Policies\Microsoft\Windows\Windows Search" /v AllowCortana /t REG_DWORD /d 0 /f | Out-Null
+                reg add "HKLM\WIM_SOFT\Policies\Microsoft\Windows\Windows Search" /v DisableWebSearch /t REG_DWORD /d 1 /f | Out-Null
+            }
+
+            # --- Tweak 4: Defender (Soft Disable) ---
+            if ($SelectedTweaks -contains "4. Tắt Windows Defender (Cơ bản - RegEdit)") {
+                Log $TxtLogMod "-> Tắt Windows Defender (Reg)..."
+                reg add "HKLM\WIM_SOFT\Policies\Microsoft\Windows Defender" /v DisableAntiSpyware /t REG_DWORD /d 1 /f | Out-Null
+            }
+
+            # --- Tweak 5: Windows Update ---
+            if ($SelectedTweaks -contains "5. Tắt Windows Update (Chặn cập nhật tự động)") {
+                Log $TxtLogMod "-> Tắt Auto Update..."
+                reg add "HKLM\WIM_SOFT\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f | Out-Null
+            }
+
+            # --- Tweak 6: OneDrive ---
+            if ($SelectedTweaks -contains "6. Tắt OneDrive (Không cho khởi động cùng Win)") {
+                Log $TxtLogMod "-> Chặn OneDrive Setup..."
+                reg add "HKLM\WIM_SOFT\Policies\Microsoft\Windows\OneDrive" /v DisableFileSyncNGSC /t REG_DWORD /d 1 /f | Out-Null
+            }
+            
+            # --- Tweak 8: Photo Viewer ---
+            if ($SelectedTweaks -contains "8. Bật Windows Photo Viewer cũ (Xem ảnh nhanh)") {
+                Log $TxtLogMod "-> Kích hoạt Classic Photo Viewer..."
+                # (Phần này code hơi dài nên tôi dùng lệnh kích hoạt cơ bản của File Association)
+                reg add "HKLM\WIM_SOFT\Microsoft\Windows Photo Viewer\Capabilities\FileAssociations" /v ".jpg" /t REG_SZ /d "PhotoViewer.FileAssoc.Tiff" /f | Out-Null
+                reg add "HKLM\WIM_SOFT\Microsoft\Windows Photo Viewer\Capabilities\FileAssociations" /v ".png" /t REG_SZ /d "PhotoViewer.FileAssoc.Tiff" /f | Out-Null
+            }
+
+            # Unload Registry
+            reg unload HKLM\WIM_SOFT | Out-Null
+            Log $TxtLogMod "Đã lưu cấu hình Registry." "SUCCESS"
+        } else {
+            Log $TxtLogMod "Lỗi Load Registry! Không thể Tweak." "ERR"
+        }
+    }
+    
+    Log $TxtLogMod "--- HOÀN TẤT TỐI ƯU ---" "SUCCESS"
+    [System.Windows.Forms.MessageBox]::Show("Xử lý xong các yêu cầu!")
+    $Form.Cursor="Default"
+}
 # --- REBUILD ISO (TAB 2) ---
 $BtnBuild.Add_Click({
     if (!(Check-Tools)) { return }
