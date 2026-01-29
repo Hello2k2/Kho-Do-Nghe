@@ -1,9 +1,9 @@
 <#
     TITANIUM GOD MODE V6.6 - CLOUD CONFIG EDITION
     Tính năng: 
-    - Load cấu hình Language/Region từ GitHub JSON.
-    - Sửa lỗi hiển thị thông tin hệ thống (Màu sắc, xuống dòng).
-    - Hiển thị Múi giờ kèm UTC Offset (UTC+07:00).
+    - Load cấu hình (Region, Keyboard, Timezone) từ GitHub JSON.
+    - Sửa lỗi hiển thị System Info (Xuống dòng, Màu Cyan).
+    - Tab Hệ thống: Chỉnh giờ, Múi giờ, Vùng, Bàn phím, 12h/24h.
     Kiến trúc: Hamburger Menu + GDI+ + Networking
 #>
 
@@ -19,18 +19,25 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# --- 1. TẢI CẤU HÌNH TỪ GITHUB (QUAN TRỌNG) ---
+# --- 1. TẢI CẤU HÌNH TỪ GITHUB ---
 $Global:JsonData = $null
 try {
-    # Dùng link RAW để tải nội dung file
+    # Link RAW file JSON của bạn
     $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/language.json"
     $Global:JsonData = Invoke-RestMethod -Uri $JsonUrl -Method Get -TimeoutSec 5
 } catch {
-    # Dữ liệu dự phòng nếu mất mạng
+    # Dữ liệu dự phòng (Offline Fallback)
     $Global:JsonData = @{
         regions = @(
             @{code="vi-VN"; name="Vietnam (Offline)"},
             @{code="en-US"; name="US (Offline)"}
+        )
+        timezones = @(
+            @{id="SE Asia Standard Time"; name="(UTC+07:00) Bangkok, Hanoi, Jakarta"},
+            @{id="Pacific Standard Time"; name="(UTC-08:00) Pacific Time (US & Canada)"}
+        )
+        keyboards = @(
+            @{id="0409:00000409"; name="US (Offline)"}
         )
     }
 }
@@ -40,18 +47,18 @@ $Theme = @{
     BgForm      = [System.Drawing.Color]::FromArgb(10, 10, 15)
     BgSidebar   = [System.Drawing.Color]::FromArgb(20, 20, 28)
     BgContent   = [System.Drawing.Color]::FromArgb(28, 28, 38)
-    BgInput     = [System.Drawing.Color]::FromArgb(40, 40, 50)
+    BgInput     = [System.Drawing.Color]::FromArgb(45, 45, 55)
     Accent      = [System.Drawing.Color]::FromArgb(0, 210, 255)      # Xanh Neon
     Accent2     = [System.Drawing.Color]::FromArgb(180, 0, 255)      # Tím Neon
     AccentRed   = [System.Drawing.Color]::FromArgb(255, 50, 80)      # Đỏ
     AccentGold  = [System.Drawing.Color]::FromArgb(255, 180, 0)      # Vàng
     TextMain    = [System.Drawing.Color]::WhiteSmoke
-    TextHighlight = [System.Drawing.Color]::Cyan                     # Màu chữ Info mới
+    TextInfo    = [System.Drawing.Color]::FromArgb(0, 255, 255)      # Cyan (Màu chữ Info mới)
     Border      = [System.Drawing.Color]::FromArgb(60, 60, 80)
     FontLogo    = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     FontHead    = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
     FontNorm    = New-Object System.Drawing.Font("Segoe UI", 9)
-    FontMono    = New-Object System.Drawing.Font("Consolas", 10)     # Font to hơn xíu cho Info
+    FontMono    = New-Object System.Drawing.Font("Consolas", 10)
 }
 
 # --- 3. FORM CHÍNH ---
@@ -74,7 +81,6 @@ $Form.Add_MouseUp({ $Global:IsDragging = $false })
 $Sidebar = New-Object System.Windows.Forms.Panel; $Sidebar.Dock = "Left"; $Sidebar.Width = 230; $Sidebar.BackColor = $Theme.BgSidebar; $Form.Controls.Add($Sidebar)
 $ContentContainer = New-Object System.Windows.Forms.Panel; $ContentContainer.Dock = "Fill"; $ContentContainer.BackColor = $Theme.BgForm; $Form.Controls.Add($ContentContainer); $ContentContainer.BringToFront()
 $TopBar = New-Object System.Windows.Forms.Panel; $TopBar.Dock = "Top"; $TopBar.Height = 45; $TopBar.BackColor = $Theme.BgForm; $ContentContainer.Controls.Add($TopBar)
-# Drag TopBar
 $TopBar.Add_MouseDown({ $Global:IsDragging = $true; $Global:DragStart = $_.Location })
 $TopBar.Add_MouseMove({ if ($Global:IsDragging) { $Form.Location = [System.Drawing.Point]::Add($Form.Location, [System.Drawing.Size]::Subtract($_.Location, $Global:DragStart)) } })
 $TopBar.Add_MouseUp({ $Global:IsDragging = $false })
@@ -133,14 +139,14 @@ $TxtInfo.Multiline = $true
 $TxtInfo.Location = New-Object System.Drawing.Point(30, 250)
 $TxtInfo.Size = New-Object System.Drawing.Size(820, 350)
 $TxtInfo.BackColor = $Theme.BgInput
-$TxtInfo.ForeColor = $Theme.TextHighlight # Cyan cho dễ đọc
+$TxtInfo.ForeColor = $Theme.TextInfo # Cyan cho dễ đọc
 $TxtInfo.BorderStyle = "None"
 $TxtInfo.Font = $Theme.FontMono
 $TxtInfo.ReadOnly = $true
 $TxtInfo.ScrollBars = "Vertical" # Thêm thanh cuộn
 $P_Dash.Controls.Add($TxtInfo)
 
-# P2: System (Cập nhật JSON)
+# P2: System (Advanced)
 $P_Sys = Make-Panel "System"
 Add-SectionTitle $P_Sys "CÀI ĐẶT CƠ BẢN" 30
 Add-ActionBtn $P_Sys "Đổi Tên Máy Tính" "RenPC" 30 70
@@ -150,23 +156,19 @@ $LblTime = New-Object System.Windows.Forms.Label; $LblTime.Text = "Ngày & Giờ
 $DtPicker = New-Object System.Windows.Forms.DateTimePicker; $DtPicker.Format="Custom"; $DtPicker.CustomFormat="dd/MM/yyyy HH:mm:ss"; $DtPicker.Location=New-Object System.Drawing.Point(120, 117); $DtPicker.Size=New-Object System.Drawing.Size(200, 25); $P_Sys.Controls.Add($DtPicker)
 $BtnSetTime = New-Object System.Windows.Forms.Button; $BtnSetTime.Text="Lưu"; $BtnSetTime.Location=New-Object System.Drawing.Point(330, 115); $BtnSetTime.Size=New-Object System.Drawing.Size(60, 28); $BtnSetTime.FlatStyle="Flat"; $BtnSetTime.ForeColor="White"; $BtnSetTime.BackColor=$Theme.BgInput; $BtnSetTime.Add_Click({ Set-Date -Date $DtPicker.Value; Log "Đã cập nhật ngày giờ!" }); $P_Sys.Controls.Add($BtnSetTime)
 
-# -- Múi Giờ (Có UTC) --
+# -- Múi Giờ (JSON Load) --
 $LblTZ = New-Object System.Windows.Forms.Label; $LblTZ.Text = "Múi Giờ:"; $LblTZ.ForeColor="White"; $LblTZ.Location = New-Object System.Drawing.Point(430, 120); $LblTZ.AutoSize=$true; $P_Sys.Controls.Add($LblTZ)
-$CbTZ = New-Object System.Windows.Forms.ComboBox; $CbTZ.Location=New-Object System.Drawing.Point(500, 117); $CbTZ.Size=New-Object System.Drawing.Size(300, 25); $CbTZ.DropDownStyle="DropDownList"; $CbTZ.BackColor="White"; $P_Sys.Controls.Add($CbTZ)
-# Load Zones với định dạng (UTC+07:00) ...
-$Zones = Get-TimeZone -ListAvailable | Sort-Object BaseUtcOffset
-foreach ($z in $Zones) {
-    $offset = if ($z.BaseUtcOffset -ge [TimeSpan]::Zero) { "+{0:hh\:mm}" -f $z.BaseUtcOffset } else { "{0:hh\:mm}" -f $z.BaseUtcOffset }
-    $display = "(UTC$offset) $($z.Id)"
-    $CbTZ.Items.Add($display) | Out-Null
+$CbTZ = New-Object System.Windows.Forms.ComboBox; $CbTZ.Location=New-Object System.Drawing.Point(500, 117); $CbTZ.Size=New-Object System.Drawing.Size(320, 25); $CbTZ.DropDownStyle="DropDownList"; $CbTZ.BackColor="White"; $P_Sys.Controls.Add($CbTZ)
+# Ưu tiên load từ JSON
+if ($Global:JsonData.timezones) {
+    foreach ($tz in $Global:JsonData.timezones) { $CbTZ.Items.Add("$($tz.name) [$($tz.id)]") | Out-Null }
+} else {
+    # Fallback System List
+    $Zones = Get-TimeZone -ListAvailable | Sort-Object BaseUtcOffset
+    foreach ($z in $Zones) { $off=if($z.BaseUtcOffset -ge [TimeSpan]::Zero){"+{0:hh\:mm}" -f $z.BaseUtcOffset}else{"{0:hh\:mm}" -f $z.BaseUtcOffset}; $CbTZ.Items.Add("(UTC$off) $($z.Id) [$($z.Id)]") | Out-Null }
 }
-$BtnSetTZ = New-Object System.Windows.Forms.Button; $BtnSetTZ.Text="Lưu"; $BtnSetTZ.Location=New-Object System.Drawing.Point(810, 115); $BtnSetTZ.Size=New-Object System.Drawing.Size(60, 28); $BtnSetTZ.FlatStyle="Flat"; $BtnSetTZ.ForeColor="White"; $BtnSetTZ.BackColor=$Theme.BgInput
-$BtnSetTZ.Add_Click({ 
-    if($CbTZ.SelectedItem){ 
-        $id = $CbTZ.SelectedItem.ToString().Split(")")[1].Trim() # Lấy ID sau dấu )
-        Set-TimeZone -Id $id; Log "Đã đổi múi giờ: $id" 
-    } 
-}); $P_Sys.Controls.Add($BtnSetTZ)
+$BtnSetTZ = New-Object System.Windows.Forms.Button; $BtnSetTZ.Text="Lưu"; $BtnSetTZ.Location=New-Object System.Drawing.Point(830, 115); $BtnSetTZ.Size=New-Object System.Drawing.Size(60, 28); $BtnSetTZ.FlatStyle="Flat"; $BtnSetTZ.ForeColor="White"; $BtnSetTZ.BackColor=$Theme.BgInput
+$BtnSetTZ.Add_Click({ if($CbTZ.SelectedItem){ $id=$CbTZ.SelectedItem.ToString().Split("[")[-1].Trim("]"); try{Set-TimeZone -Id $id;Log "Đã đổi múi giờ: $id"}catch{Log "Lỗi: Không tìm thấy ID múi giờ."} } }); $P_Sys.Controls.Add($BtnSetTZ)
 
 # -- 12h/24h --
 $LblFmt = New-Object System.Windows.Forms.Label; $LblFmt.Text = "Định dạng:"; $LblFmt.ForeColor="White"; $LblFmt.Location = New-Object System.Drawing.Point(30, 170); $LblFmt.AutoSize=$true; $P_Sys.Controls.Add($LblFmt)
@@ -175,22 +177,19 @@ $Rb12 = New-Object System.Windows.Forms.RadioButton; $Rb12.Text="12 Giờ"; $Rb1
 $BtnSetFmt = New-Object System.Windows.Forms.Button; $BtnSetFmt.Text="Lưu"; $BtnSetFmt.Location=New-Object System.Drawing.Point(290, 165); $BtnSetFmt.Size=New-Object System.Drawing.Size(60, 28); $BtnSetFmt.FlatStyle="Flat"; $BtnSetFmt.ForeColor="White"; $BtnSetFmt.BackColor=$Theme.BgInput
 $BtnSetFmt.Add_Click({ if($Rb24.Checked){ Set-ItemProperty -Path "HKCU:\Control Panel\International" -Name "sShortTime" -Value "HH:mm"; Log "Mode 24H (Logout để apply)" }; if($Rb12.Checked){ Set-ItemProperty -Path "HKCU:\Control Panel\International" -Name "sShortTime" -Value "h:mm tt"; Log "Mode 12H (Logout để apply)" } }); $P_Sys.Controls.Add($BtnSetFmt)
 
-# -- Region (Từ JSON) --
-$LblLang = New-Object System.Windows.Forms.Label; $LblLang.Text = "Vùng (Format):"; $LblLang.ForeColor="White"; $LblLang.Location = New-Object System.Drawing.Point(400, 170); $LblLang.AutoSize=$true; $P_Sys.Controls.Add($LblLang)
-$CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location=New-Object System.Drawing.Point(510, 167); $CbLang.Size=New-Object System.Drawing.Size(250, 25); $CbLang.DropDownStyle="DropDownList"; $CbLang.BackColor="White"; $P_Sys.Controls.Add($CbLang)
-# Load từ JSON GitHub
-if ($Global:JsonData.regions) {
-    foreach ($r in $Global:JsonData.regions) {
-        $CbLang.Items.Add("$($r.name) [$($r.code)]") | Out-Null
-    }
-}
-$BtnSetLang = New-Object System.Windows.Forms.Button; $BtnSetLang.Text="Lưu"; $BtnSetLang.Location=New-Object System.Drawing.Point(770, 165); $BtnSetLang.Size=New-Object System.Drawing.Size(60, 28); $BtnSetLang.FlatStyle="Flat"; $BtnSetLang.ForeColor="White"; $BtnSetLang.BackColor=$Theme.BgInput
-$BtnSetLang.Add_Click({ 
-    if($CbLang.SelectedItem){ 
-        $code = $CbLang.SelectedItem.ToString().Split("[")[1].Trim("]")
-        Set-Culture $code; Set-WinSystemLocale $code; Log "Đã set vùng: $code" 
-    } 
-}); $P_Sys.Controls.Add($BtnSetLang)
+# -- Region (JSON Load) --
+$LblLang = New-Object System.Windows.Forms.Label; $LblLang.Text = "Vùng:"; $LblLang.ForeColor="White"; $LblLang.Location = New-Object System.Drawing.Point(400, 170); $LblLang.AutoSize=$true; $P_Sys.Controls.Add($LblLang)
+$CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location=New-Object System.Drawing.Point(460, 167); $CbLang.Size=New-Object System.Drawing.Size(200, 25); $CbLang.DropDownStyle="DropDownList"; $CbLang.BackColor="White"; $P_Sys.Controls.Add($CbLang)
+if ($Global:JsonData.regions) { foreach ($r in $Global:JsonData.regions) { $CbLang.Items.Add("$($r.name) [$($r.code)]") | Out-Null } }
+$BtnSetLang = New-Object System.Windows.Forms.Button; $BtnSetLang.Text="Lưu"; $BtnSetLang.Location=New-Object System.Drawing.Point(670, 165); $BtnSetLang.Size=New-Object System.Drawing.Size(60, 28); $BtnSetLang.FlatStyle="Flat"; $BtnSetLang.ForeColor="White"; $BtnSetLang.BackColor=$Theme.BgInput
+$BtnSetLang.Add_Click({ if($CbLang.SelectedItem){ $code=$CbLang.SelectedItem.ToString().Split("[")[1].Trim("]"); Set-Culture $code; Set-WinSystemLocale $code; Log "Đã set vùng: $code" } }); $P_Sys.Controls.Add($BtnSetLang)
+
+# -- Keyboard (JSON Load) --
+$LblKb = New-Object System.Windows.Forms.Label; $LblKb.Text = "Bàn phím:"; $LblKb.ForeColor="White"; $LblKb.Location = New-Object System.Drawing.Point(750, 170); $LblKb.AutoSize=$true; $P_Sys.Controls.Add($LblKb)
+$CbKb = New-Object System.Windows.Forms.ComboBox; $CbKb.Location=New-Object System.Drawing.Point(820, 167); $CbKb.Size=New-Object System.Drawing.Size(200, 25); $CbKb.DropDownStyle="DropDownList"; $CbKb.BackColor="White"; $P_Sys.Controls.Add($CbKb)
+if ($Global:JsonData.keyboards) { foreach ($k in $Global:JsonData.keyboards) { $CbKb.Items.Add("$($k.name) [$($k.id)]") | Out-Null } }
+$BtnSetKb = New-Object System.Windows.Forms.Button; $BtnSetKb.Text="Thêm"; $BtnSetKb.Location=New-Object System.Drawing.Point(1030, 165); $BtnSetKb.Size=New-Object System.Drawing.Size(60, 28); $BtnSetKb.FlatStyle="Flat"; $BtnSetKb.ForeColor="White"; $BtnSetKb.BackColor=$Theme.BgInput
+$BtnSetKb.Add_Click({ if($CbKb.SelectedItem){ $id=$CbKb.SelectedItem.ToString().Split("[")[-1].Trim("]"); Log "Tính năng thêm KB ($id) bị hạn chế trong PS. Hãy dùng Settings." } }); $P_Sys.Controls.Add($BtnSetKb)
 
 Add-SectionTitle $P_Sys "BẢO MẬT (ADMIN)" 230
 Add-ActionBtn $P_Sys "Tắt Thông Báo" "OffNotify" 30 270
@@ -256,7 +255,7 @@ function Run-Command ($Cmd, $Desc) {
         "RenPC" { $n=Show-InputBox "Đổi Tên" "Tên máy mới:"; if($n){try{Rename-Computer $n -ErrorAction Stop;Log "Đã đổi thành $n. Restart máy!"}catch{Log "Lỗi Admin/Tên sai."}} }
         "CleanDeep" { Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue; Log "Đã dọn dẹp." }
         "RunSFC" { Start-Process "sfc" "/scannow" -Verb RunAs; Log "Đang chạy SFC..." }
-        "DumpWifi" { $f="$env:USERPROFILE\Desktop\Wifi.txt"; "--- WIFI ---"|Out-File $f; (netsh wlan show profiles)|Select-String "\:(.+)$"|%{$n=$_.Matches.Groups[1].Value.Trim();$p=(netsh wlan show profile name="$n" key=clear);"$n : $p"|Out-File $f -Append}; Log "Đã xuất ra Desktop." }
+        "DumpWifi" { $f="$env:USERPROFILE\Desktop\Wifi.txt"; "--- WIFI ---"|Out-File $f -Encoding UTF8; (netsh wlan show profiles)|Select-String "\:(.+)$"|%{$n=$_.Matches.Groups[1].Value.Trim();$p=(netsh wlan show profile name="$n" key=clear);"$n : $p"|Out-File $f -Append -Encoding UTF8}; Log "Đã xuất ra Desktop." }
         "InstChrome" { Start-Process "winget" "install Google.Chrome -e --silent"; Log "Cài Chrome..." }
         "InstUnikey" { Start-Process "winget" "install Unikey.Unikey -e --silent"; Log "Cài Unikey..." }
     }
@@ -270,7 +269,7 @@ $GaugeBox.Add_Paint({ param($s, $e)
     & $Draw 70 $Global:CpuLoad $Theme.Accent "CPU LOAD"; & $Draw 350 $Global:RamLoad $Theme.Accent2 "RAM USAGE"
 })
 
-# --- MONITOR (FIX LINE BREAKS) ---
+# --- MONITOR (FIX LINE BREAKS & COLOR) ---
 $Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval = 1500
 $Timer.Add_Tick({
     $OS = Get-CimInstance Win32_OperatingSystem
@@ -281,8 +280,16 @@ $Timer.Add_Tick({
         $GPU = (Get-CimInstance Win32_VideoController).Name
         $Bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
         $BatStatus = if($Bat){ "$($Bat.EstimatedChargeRemaining)% (Sạc: $($Bat.BatteryStatus -eq 2))" } else { "PC (Không Pin)" }
-        # SỬA LỖI XUỐNG DÒNG: Dùng `r`n cho WinForms
-        $TxtInfo.Text = "THÔNG TIN HỆ THỐNG`r`n------------------`r`nOS     : $($OS.Caption)`r`nUser   : $env:USERNAME`r`nCPU    : $((Get-CimInstance Win32_Processor).Name)`r`nGPU    : $GPU`r`nRAM    : $([Math]::Round($OS.TotalVisibleMemorySize/1MB/1024, 1)) GB`r`nPin    : $BatStatus`r`nUptime : $((Get-Date) - $OS.LastBootUpTime | Select -ExpandProperty TotalHours | ForEach {[Math]::Round($_, 1)}) Giờ"
+        # SỬA LỖI XUỐNG DÒNG VÀ HIỂN THỊ
+        $Info = "THÔNG TIN HỆ THỐNG`r`n------------------`r`n"
+        $Info += "Hệ Điều Hành : $($OS.Caption)`r`n"
+        $Info += "Người Dùng   : $env:USERNAME`r`n"
+        $Info += "CPU          : $((Get-CimInstance Win32_Processor).Name)`r`n"
+        $Info += "GPU          : $GPU`r`n"
+        $Info += "RAM          : $([Math]::Round($OS.TotalVisibleMemorySize/1MB/1024, 1)) GB`r`n"
+        $Info += "Pin          : $BatStatus`r`n"
+        $Info += "Thời Gian    : $((Get-Date) - $OS.LastBootUpTime | Select -ExpandProperty TotalHours | ForEach {[Math]::Round($_, 1)}) Giờ"
+        $TxtInfo.Text = $Info
     }
 })
 $Timer.Start()
