@@ -1,6 +1,6 @@
 <#
-    TITANIUM GOD MODE V5.0 - SINGULARITY EDITION
-    Architecture: Modern UI + GDI+ Vector Gauges + Winget Integration
+    TITANIUM GOD MODE V6.0 - OMNIPOTENCE EDITION
+    Architecture: Modern UI + GDI+ Vector Gauges + Winget + PowerGrid + NetOps
     Engine: PowerShell 5.1/7 + WinForms
     Upgraded by: Gemini
 #>
@@ -24,6 +24,7 @@ $Theme = @{
     Accent      = [System.Drawing.Color]::FromArgb(0, 210, 255)      # Neon Cyan
     Accent2     = [System.Drawing.Color]::FromArgb(180, 0, 255)      # Neon Purple
     AccentRed   = [System.Drawing.Color]::FromArgb(255, 50, 80)      # Danger Red
+    AccentGold  = [System.Drawing.Color]::FromArgb(255, 180, 0)      # Gold (New)
     TextMain    = [System.Drawing.Color]::WhiteSmoke
     TextMuted   = [System.Drawing.Color]::FromArgb(120, 120, 140)
     Border      = [System.Drawing.Color]::FromArgb(60, 60, 80)
@@ -35,13 +36,13 @@ $Theme = @{
 
 # --- 2. MAIN FORM SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM V5.0"
-$Form.Size = New-Object System.Drawing.Size(1100, 700)
+$Form.Text = "TITANIUM V6.0 OMNIPOTENCE"
+$Form.Size = New-Object System.Drawing.Size(1150, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "None"
 $Form.BackColor = $Theme.BgForm
 $Form.ForeColor = $Theme.TextMain
-$Form.DoubleBuffered = $true # Smooth rendering
+$Form.DoubleBuffered = $true 
 
 # Drag Logic
 $IsDragging = $false; $DragStart = [System.Drawing.Point]::Empty
@@ -54,7 +55,7 @@ $Form.Add_MouseUp({ $Global:IsDragging = $false })
 function Add-NavBtn ($Parent, $Text, $Icon, $Y, $PanelToOpen) {
     $Btn = New-Object System.Windows.Forms.Label
     $Btn.Text = "  $Icon   $Text"
-    $Btn.Size = New-Object System.Drawing.Size(220, 50)
+    $Btn.Size = New-Object System.Drawing.Size(220, 45)
     $Btn.Location = New-Object System.Drawing.Point(0, $Y)
     $Btn.Font = $Theme.FontHead
     $Btn.ForeColor = $Theme.TextMuted
@@ -121,7 +122,7 @@ $Form.Controls.Add($Sidebar)
 # Logo
 $PnlLogo = New-Object System.Windows.Forms.Panel; $PnlLogo.Size = New-Object System.Drawing.Size(220, 80); $PnlLogo.Dock="Top"; $PnlLogo.BackColor="Transparent"
 $LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text = "TITANIUM"; $LblLogo.Font = $Theme.FontLogo; $LblLogo.ForeColor = $Theme.Accent; $LblLogo.AutoSize=$true; $LblLogo.Location=New-Object System.Drawing.Point(20, 20)
-$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "V5.0 SINGULARITY"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.Accent2; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
+$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "V6.0 OMNIPOTENCE"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.AccentGold; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
 $PnlLogo.Controls.Add($LblLogo); $PnlLogo.Controls.Add($LblVer); $Sidebar.Controls.Add($PnlLogo)
 
 # Content Area
@@ -154,28 +155,20 @@ function Make-Panel ($Name) {
     $ContentContainer.Controls.Add($P); $P.BringToFront(); $Global:Panels += $P; return $P
 }
 
-# --- P1: DASHBOARD (WITH GDI+ GAUGES) ---
+# --- P1: DASHBOARD ---
 $P_Dash = Make-Panel "Dashboard"
-Add-SectionTitle $P_Dash "REAL-TIME MONITOR" 20
-
-# Gauge Container
-$GaugeBox = New-Object System.Windows.Forms.PictureBox
-$GaugeBox.Location = New-Object System.Drawing.Point(30, 60)
-$GaugeBox.Size = New-Object System.Drawing.Size(820, 160)
-$GaugeBox.BackColor = "Transparent"
-$P_Dash.Controls.Add($GaugeBox)
-
-$TxtInfo = New-Object System.Windows.Forms.TextBox; $TxtInfo.Multiline=$true; $TxtInfo.Location=New-Object System.Drawing.Point(30, 240); $TxtInfo.Size=New-Object System.Drawing.Size(820, 300); $TxtInfo.BackColor=$Theme.BgInput; $TxtInfo.ForeColor=$Theme.TextMain; $TxtInfo.BorderStyle="None"; $TxtInfo.Font=$Theme.FontMono; $TxtInfo.ReadOnly=$true
-$P_Dash.Controls.Add($TxtInfo)
+Add-SectionTitle $P_Dash "SYSTEM MONITOR" 20
+$GaugeBox = New-Object System.Windows.Forms.PictureBox; $GaugeBox.Location = New-Object System.Drawing.Point(30, 60); $GaugeBox.Size = New-Object System.Drawing.Size(820, 160); $GaugeBox.BackColor = "Transparent"; $P_Dash.Controls.Add($GaugeBox)
+$TxtInfo = New-Object System.Windows.Forms.TextBox; $TxtInfo.Multiline=$true; $TxtInfo.Location=New-Object System.Drawing.Point(30, 240); $TxtInfo.Size=New-Object System.Drawing.Size(820, 300); $TxtInfo.BackColor=$Theme.BgInput; $TxtInfo.ForeColor=$Theme.TextMain; $TxtInfo.BorderStyle="None"; $TxtInfo.Font=$Theme.FontMono; $TxtInfo.ReadOnly=$true; $P_Dash.Controls.Add($TxtInfo)
 
 # --- P2: OPTIMIZE ---
 $P_Opt = Make-Panel "Optimize"
-Add-SectionTitle $P_Opt "QUICK OPTIMIZATION" 20
+Add-SectionTitle $P_Opt "QUICK CLEANUP" 20
 Add-ActionBtn $P_Opt "Deep Clean (Temp & Logs)" "CleanDeep" 30 60 $false $true
 Add-ActionBtn $P_Opt "Reset Windows Update" "CleanUpd" 30 110
-Add-ActionBtn $P_Opt "Enable Ultimate Power" "UltPerf" 270 110
-Add-ActionBtn $P_Opt "Disable Telemetry" "OffTele" 30 160
-Add-ActionBtn $P_Opt "Disable Background Apps" "OffBgApps" 270 160
+Add-ActionBtn $P_Opt "Disable Telemetry" "OffTele" 270 110
+Add-ActionBtn $P_Opt "Enable Ultimate Power" "UltPerf" 30 160
+Add-ActionBtn $P_Opt "Disable Hibernation (Save GB)" "OffHiber" 270 160
 
 Add-SectionTitle $P_Opt "DEBLOATER" 220
 Add-ActionBtn $P_Opt "Remove Cortana" "DelCortana" 30 260 $true
@@ -183,56 +176,72 @@ Add-ActionBtn $P_Opt "Remove Xbox Bloat" "DelXbox" 270 260 $true
 Add-ActionBtn $P_Opt "Remove OneDrive" "DelOneDrive" 30 310 $true
 Add-ActionBtn $P_Opt "Remove Edge (Risky)" "DelEdge" 270 310 $true
 
-# --- P3: REPAIR (NEW) ---
+# --- P3: REPAIR ---
 $P_Repair = Make-Panel "Repair"
-Add-SectionTitle $P_Repair "SYSTEM REPAIR & INTEGRITY" 20
+Add-SectionTitle $P_Repair "SYSTEM INTEGRITY" 20
 Add-ActionBtn $P_Repair "SFC Scan (Fix Files)" "RunSFC" 30 60
 Add-ActionBtn $P_Repair "DISM Restore Health" "RunDISM" 270 60
 Add-ActionBtn $P_Repair "Check Disk (C:)" "RunChkDsk" 30 110
 Add-ActionBtn $P_Repair "Restart Explorer.exe" "RestartExp" 270 110
+Add-SectionTitle $P_Repair "ADVANCED FIXES" 170
+Add-ActionBtn $P_Repair "Fix Printer Spooler" "FixPrint" 30 210
+Add-ActionBtn $P_Repair "Re-Register Store Apps" "FixStore" 270 210
 
-Add-SectionTitle $P_Repair "NETWORK FIXES" 170
-Add-ActionBtn $P_Repair "Flush DNS" "FlushDns" 30 210
-Add-ActionBtn $P_Repair "Reset TCP/IP Stack" "NetReset" 270 210 $true
+# --- P4: NET OPS (NEW) ---
+$P_Net = Make-Panel "NetOps"
+Add-SectionTitle $P_Net "NETWORK OPERATIONS" 20
+Add-ActionBtn $P_Net "Check Public IP" "GetPubIP" 30 60
+Add-ActionBtn $P_Net "Ping Google (Test)" "PingTest" 270 60
+Add-ActionBtn $P_Net "Flush DNS Cache" "FlushDns" 30 110
+Add-ActionBtn $P_Net "Reset TCP/IP Stack" "NetReset" 270 110 $true
 
-# --- P4: SOFTWARE HUB (NEW) ---
+Add-SectionTitle $P_Net "HACKER TOOLS" 170
+Add-ActionBtn $P_Net "Export Wi-Fi Passwords" "DumpWifi" 30 210 $false $true
+Add-ActionBtn $P_Net "Edit Hosts File" "EditHosts" 30 260
+Add-ActionBtn $P_Net "View Network Adapters" "OpenNcpa" 270 260
+
+# --- P5: POWER GRID (NEW) ---
+$P_Power = Make-Panel "PowerGrid"
+Add-SectionTitle $P_Power "SESSION CONTROL" 20
+Add-ActionBtn $P_Power "Lock Station" "PowerLock" 30 60
+Add-ActionBtn $P_Power "Sign Out" "PowerLogoff" 270 60
+Add-ActionBtn $P_Power "Sleep Now" "PowerSleep" 30 110
+Add-ActionBtn $P_Power "Hibernate Now" "PowerHiber" 270 110
+
+Add-SectionTitle $P_Power "SCHEDULED SHUTDOWN" 170
+Add-ActionBtn $P_Power "Shutdown in 30 Mins" "Shut30" 30 210
+Add-ActionBtn $P_Power "Shutdown in 1 Hour" "Shut60" 270 210
+Add-ActionBtn $P_Power "Shutdown in 2 Hours" "Shut120" 30 260
+Add-ActionBtn $P_Power "ABORT SHUTDOWN" "ShutAbort" 270 260 $true
+
+# --- P6: SOFTWARE HUB ---
 $P_Soft = Make-Panel "Software"
-Add-SectionTitle $P_Soft "ONE-CLICK INSTALLER (Via Winget)" 20
-# Web
-Add-ActionBtn $P_Soft "Google Chrome" "InstChrome" 30 60
+Add-SectionTitle $P_Soft "BROWSERS" 20
+Add-ActionBtn $P_Soft "Chrome" "InstChrome" 30 60
 Add-ActionBtn $P_Soft "Firefox" "InstFirefox" 270 60
-Add-ActionBtn $P_Soft "Brave Browser" "InstBrave" 510 60
-# Dev/Chat
-Add-ActionBtn $P_Soft "VS Code" "InstVSCode" 30 110
-Add-ActionBtn $P_Soft "Discord" "InstDiscord" 270 110
-Add-ActionBtn $P_Soft "Notepad++" "InstNpp" 510 110
-# Tools
-Add-ActionBtn $P_Soft "7-Zip" "Inst7Zip" 30 160
-Add-ActionBtn $P_Soft "AnyDesk" "InstAnyDesk" 270 160
-Add-ActionBtn $P_Soft "VLC Player" "InstVLC" 510 160
+Add-ActionBtn $P_Soft "Brave" "InstBrave" 510 60
 
-# --- P5: TOOLS ---
-$P_Tool = Make-Panel "Tools"
-Add-SectionTitle $P_Tool "ADMIN SHORTCUTS" 20
-Add-ActionBtn $P_Tool "Control Panel" "OpenControl" 30 60
-Add-ActionBtn $P_Tool "Registry Editor" "OpenReg" 270 60
-Add-ActionBtn $P_Tool "Services Manager" "OpenSvc" 30 110
-Add-ActionBtn $P_Tool "Network Connections" "OpenNcpa" 270 110
-Add-ActionBtn $P_Tool "God Mode Folder" "GodMode" 30 160
-Add-ActionBtn $P_Tool "Task Manager" "OpenTaskMgr" 270 160
+Add-SectionTitle $P_Soft "DEV & CHAT" 110
+Add-ActionBtn $P_Soft "VS Code" "InstVSCode" 30 150
+Add-ActionBtn $P_Soft "Discord" "InstDiscord" 270 150
+Add-ActionBtn $P_Soft "Zoom" "InstZoom" 510 150
+
+Add-SectionTitle $P_Soft "OFFICE & TOOLS" 200
+Add-ActionBtn $P_Soft "LibreOffice" "InstLibre" 30 240
+Add-ActionBtn $P_Soft "7-Zip" "Inst7Zip" 270 240
+Add-ActionBtn $P_Soft "OBS Studio" "InstOBS" 510 240
 
 # --- NAV LINKING ---
-Add-NavBtn $Sidebar "Dashboard" "📊" 100 $P_Dash
-Add-NavBtn $Sidebar "Optimize" "🚀" 150 $P_Opt
-Add-NavBtn $Sidebar "Sys Repair" "❤️" 200 $P_Repair
-Add-NavBtn $Sidebar "Software" "💾" 250 $P_Soft
-Add-NavBtn $Sidebar "Tools" "🛠️" 300 $P_Tool
+Add-NavBtn $Sidebar "Dashboard" "📊" 90 $P_Dash
+Add-NavBtn $Sidebar "Optimize" "🚀" 135 $P_Opt
+Add-NavBtn $Sidebar "Net Ops" "🌐" 180 $P_Net
+Add-NavBtn $Sidebar "Power Grid" "⚡" 225 $P_Power
+Add-NavBtn $Sidebar "Sys Repair" "❤️" 270 $P_Repair
+Add-NavBtn $Sidebar "Software" "💾" 315 $P_Soft
 
 # --- 6. LOGIC ENGINE ---
 $script:ActivePanel = $null
-$Global:CpuLoad = 0
-$Global:RamLoad = 0
-$Global:RamText = ""
+$Global:CpuLoad = 0; $Global:RamLoad = 0
 
 function Switch-Panel ($Btn) {
     $Sidebar.Controls | Where-Object { $_.GetType().Name -eq "Label" -and $_.Tag -ne $null } | ForEach-Object {
@@ -243,15 +252,8 @@ function Switch-Panel ($Btn) {
     $Btn.Tag.Visible = $true; $script:ActivePanel = $Btn.Tag
 }
 
-function Log ($Msg) {
-    $LblStatus.Text = "$(Get-Date -Format 'HH:mm:ss') > $Msg"
-    $Form.Refresh()
-}
-
-function Set-Reg ($Path, $Name, $Val) {
-    if(!(Test-Path $Path)){New-Item $Path -Force | Out-Null}
-    New-ItemProperty -Path $Path -Name $Name -Value $Val -PropertyType DWord -Force | Out-Null
-}
+function Log ($Msg) { $LblStatus.Text = "$(Get-Date -Format 'HH:mm:ss') > $Msg"; $Form.Refresh() }
+function Set-Reg ($Path, $Name, $Val) { if(!(Test-Path $Path)){New-Item $Path -Force|Out-Null}; New-ItemProperty -Path $Path -Name $Name -Value $Val -PropertyType DWord -Force|Out-Null }
 
 function Run-Command ($Cmd, $Desc) {
     Log "Executing: $Desc..."
@@ -259,115 +261,103 @@ function Run-Command ($Cmd, $Desc) {
     
     switch ($Cmd) {
         # Optimize
-        "CleanDeep" { 
-            Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item "$env:windir\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-            Log "Deep Clean Complete." 
-        }
+        "CleanDeep" { Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item "$env:windir\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue; Log "Deep Clean Complete." }
         "CleanUpd"  { Stop-Service wuauserv; Remove-Item "$env:windir\SoftwareDistribution\Download\*" -Recurse -Force; Start-Service wuauserv; Log "Update Cache Cleared." }
-        "UltPerf" { powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61; Log "Ultimate Performance Plan Added." }
-        "OffBgApps" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" "GlobalUserDisabled" 1; Log "Background Apps Disabled." }
-        "OffTele" { Set-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0; Log "Telemetry Disabled." }
-        "DelCortana" { Get-AppxPackage -allusers *Cortana* | Remove-AppxPackage; Log "Cortana Removed." }
-        "DelXbox" { Get-AppxPackage *xbox* | Remove-AppxPackage; Log "Xbox Apps Removed." }
-        "DelOneDrive" { Stop-Process -Name "OneDrive" -Force; Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" "/uninstall" -Wait; Log "OneDrive Removed." }
+        "UltPerf"   { powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61; Log "Ultimate Performance Plan Added." }
+        "OffTele"   { Set-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0; Log "Telemetry Disabled." }
+        "OffHiber"  { powercfg -h off; Log "Hibernation Disabled (Space Saved)." }
+        "DelCortana"{ Get-AppxPackage -allusers *Cortana* | Remove-AppxPackage; Log "Cortana Removed." }
+        "DelXbox"   { Get-AppxPackage *xbox* | Remove-AppxPackage; Log "Xbox Apps Removed." }
+        "DelOneDrive"{ Stop-Process -Name "OneDrive" -Force; Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" "/uninstall" -Wait; Log "OneDrive Removed." }
         
         # Repair
-        "RunSFC" { Start-Process "sfc" "/scannow" -Verb RunAs; Log "SFC Launched in new window." }
-        "RunDISM" { Start-Process "dism" "/online /cleanup-image /restorehealth" -Verb RunAs; Log "DISM Launched in new window." }
+        "RunSFC"    { Start-Process "sfc" "/scannow" -Verb RunAs; Log "SFC Launched." }
+        "RunDISM"   { Start-Process "dism" "/online /cleanup-image /restorehealth" -Verb RunAs; Log "DISM Launched." }
         "RunChkDsk" { Start-Process "cmd" "/k chkdsk C:" -Verb RunAs; Log "ChkDsk Launched." }
-        "RestartExp" { Stop-Process -Name explorer -Force; Log "Explorer Restarted." }
-        "FlushDns" { ipconfig /flushdns; Log "DNS Flushed." }
-        "NetReset" { netsh int ip reset; netsh winsock reset; Log "Network Reset. Reboot required." }
+        "RestartExp"{ Stop-Process -Name explorer -Force; Log "Explorer Restarted." }
+        "FixPrint"  { Restart-Service spooler; Log "Printer Spooler Restarted." }
+        
+        # NetOps
+        "GetPubIP"  { try { $ip = Invoke-RestMethod http://ipinfo.io/ip; Log "Public IP: $ip" } catch { Log "Failed to get IP." } }
+        "PingTest"  { Start-Process "cmd" "/k ping 8.8.8.8"; Log "Pinging Google..." }
+        "FlushDns"  { ipconfig /flushdns; Log "DNS Flushed." }
+        "NetReset"  { netsh int ip reset; netsh winsock reset; Log "Network Reset. Reboot required." }
+        "DumpWifi"  { 
+            $out = "$env:USERPROFILE\Desktop\WifiKeys.txt"; "--- WI-FI KEYS ---" | Out-File $out
+            (netsh wlan show profiles) | Select-String "\:(.+)$" | %{
+                $name=$_.Matches.Groups[1].Value.Trim(); $pass=(netsh wlan show profile name="$name" key=clear); 
+                "$name : $pass" | Out-File $out -Append
+            }; Log "Saved to Desktop\WifiKeys.txt" 
+        }
+        "EditHosts" { Start-Process "notepad" "C:\Windows\System32\drivers\etc\hosts" -Verb RunAs }
+        "OpenNcpa"  { Start-Process "ncpa.cpl" }
 
-        # Software (Winget)
-        "InstChrome" { Start-Process "winget" "install Google.Chrome -e --silent"; Log "Installing Chrome..." }
+        # PowerGrid
+        "PowerLock"   { rundll32.exe user32.dll,LockWorkStation }
+        "PowerLogoff" { shutdown -l }
+        "PowerSleep"  { [System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false) }
+        "PowerHiber"  { [System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Hibernate, $false, $false) }
+        "Shut30"      { shutdown -s -t 1800; Log "Shutdown in 30 mins." }
+        "Shut60"      { shutdown -s -t 3600; Log "Shutdown in 1 hour." }
+        "Shut120"     { shutdown -s -t 7200; Log "Shutdown in 2 hours." }
+        "ShutAbort"   { shutdown -a; Log "Shutdown Aborted!" }
+
+        # Software
+        "InstChrome"  { Start-Process "winget" "install Google.Chrome -e --silent"; Log "Installing Chrome..." }
         "InstFirefox" { Start-Process "winget" "install Mozilla.Firefox -e --silent"; Log "Installing Firefox..." }
-        "InstVSCode" { Start-Process "winget" "install Microsoft.VisualStudioCode -e --silent"; Log "Installing VS Code..." }
+        "InstBrave"   { Start-Process "winget" "install Brave.Brave -e --silent"; Log "Installing Brave..." }
+        "InstVSCode"  { Start-Process "winget" "install Microsoft.VisualStudioCode -e --silent"; Log "Installing VS Code..." }
         "InstDiscord" { Start-Process "winget" "install Discord.Discord -e --silent"; Log "Installing Discord..." }
-        "Inst7Zip" { Start-Process "winget" "install 7zip.7zip -e --silent"; Log "Installing 7-Zip..." }
-        "InstVLC" { Start-Process "winget" "install VideoLAN.VLC -e --silent"; Log "Installing VLC..." }
-
-        # Shortcuts
-        "OpenControl" { Start-Process "control" }
-        "OpenReg" { Start-Process "regedit" }
-        "OpenTaskMgr" { Start-Process "taskmgr" }
-        "GodMode" { New-Item "$env:USERPROFILE\Desktop\GodMode.{ED7BA470-8E54-465E-825C-99712043E01C}" -ItemType Directory -Force; Log "GodMode Created on Desktop." }
+        "InstZoom"    { Start-Process "winget" "install Zoom.Zoom -e --silent"; Log "Installing Zoom..." }
+        "InstLibre"   { Start-Process "winget" "install LibreOffice.LibreOffice -e --silent"; Log "Installing LibreOffice..." }
+        "Inst7Zip"    { Start-Process "winget" "install 7zip.7zip -e --silent"; Log "Installing 7-Zip..." }
+        "InstOBS"     { Start-Process "winget" "install OBSProject.OBSStudio -e --silent"; Log "Installing OBS..." }
     }
     $Form.Cursor = "Default"
 }
 
-# --- 7. GDI+ RENDERING (The "Iron Man" HUD) ---
+# --- 7. GDI+ RENDERING ---
 $GaugeBox.Add_Paint({
     param($sender, $e)
-    $g = $e.Graphics
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-
-    # Helper to draw arc
+    $g = $e.Graphics; $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $DrawArc = { param($x, $val, $color, $label) 
         $rect = New-Object System.Drawing.Rectangle $x, 10, 140, 140
         $penBg = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(40,40,50)), 15
-        $penVal = New-Object System.Drawing.Pen $color, 15
-        $penVal.StartCap = "Round"; $penVal.EndCap = "Round"
-        
+        $penVal = New-Object System.Drawing.Pen $color, 15; $penVal.StartCap="Round"; $penVal.EndCap="Round"
         $angle = [Math]::Min(360, [Math]::Max(0, ($val / 100) * 360))
-        
-        $g.DrawArc($penBg, $rect, -90, 360)
-        if($val -gt 0) { $g.DrawArc($penVal, $rect, -90, $angle) }
-        
-        # Text Center
+        $g.DrawArc($penBg, $rect, -90, 360); if($val -gt 0) { $g.DrawArc($penVal, $rect, -90, $angle) }
         $fontBig = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
-        $fontSm = New-Object System.Drawing.Font("Segoe UI", 10)
-        
         $txtSize = $g.MeasureString("$([int]$val)%", $fontBig)
         $g.DrawString("$([int]$val)%", $fontBig, [System.Drawing.Brushes]::White, ($x + 70 - $txtSize.Width/2), 60)
-        
+        $fontSm = New-Object System.Drawing.Font("Segoe UI", 10)
         $lblSize = $g.MeasureString($label, $fontSm)
         $g.DrawString($label, $fontSm, [System.Drawing.Brushes]::Gray, ($x + 70 - $lblSize.Width/2), 95)
     }
-
     & $DrawArc 50 $Global:CpuLoad $Theme.Accent "CPU LOAD"
     & $DrawArc 250 $Global:RamLoad $Theme.Accent2 "RAM USAGE"
 })
 
 # --- 8. REAL-TIME MONITOR ENGINE ---
-$Timer = New-Object System.Windows.Forms.Timer
-$Timer.Interval = 1500
+$Timer = New-Object System.Windows.Forms.Timer; $Timer.Interval = 1500
 $Timer.Add_Tick({
-    # Get Stats
     $OS = Get-CimInstance Win32_OperatingSystem
     $Global:CpuLoad = (Get-CimInstance Win32_Processor).LoadPercentage
-    
-    $TotalRAM = $OS.TotalVisibleMemorySize / 1MB
-    $FreeRAM = $OS.FreePhysicalMemory / 1MB
-    $Global:RamLoad = (($TotalRAM - $FreeRAM) / $TotalRAM) * 100
-    
-    # Trigger Repaint
+    $Global:RamLoad = (($OS.TotalVisibleMemorySize - $OS.FreePhysicalMemory) / $OS.TotalVisibleMemorySize) * 100
     $GaugeBox.Invalidate()
-
-    # Update Text Info
     if ($TxtInfo.Text -eq "") {
         $GPU = (Get-CimInstance Win32_VideoController).Name
-        $Disk = (Get-CimInstance Win32_LogicalDisk | Where DeviceID -eq "C:").Size / 1GB
+        $Bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
+        $BatStatus = if($Bat){ "$($Bat.EstimatedChargeRemaining)% (Plugged: $($Bat.BatteryStatus -eq 2))" } else { "N/A (Desktop)" }
         $TxtInfo.Text = @"
-SYSTEM DIAGNOSTICS
-------------------
-OS Version : $($OS.Caption)
-Build      : $($OS.BuildNumber)
-Architecture : $($OS.OSArchitecture)
+SYSTEM DIAGNOSTICS [OMNIPOTENCE]
+--------------------------------
+OS         : $($OS.Caption) ($($OS.OSArchitecture))
 User       : $env:USERNAME
-
-HARDWARE
-------------------
-CPU        : $( (Get-CimInstance Win32_Processor).Name )
+CPU        : $((Get-CimInstance Win32_Processor).Name)
 GPU        : $GPU
-RAM Total  : $([Math]::Round($TotalRAM/1024, 1)) GB
-System Disk: $([Math]::Round($Disk, 0)) GB (C:)
-
-STATUS
-------------------
-Uptime     : $( (Get-Date) - $OS.LastBootUpTime | Select -ExpandProperty TotalHours | ForEach {[Math]::Round($_, 1)} ) Hours
-Processes  : $( (Get-Process).Count ) Active
+RAM        : $([Math]::Round($OS.TotalVisibleMemorySize/1MB/1024, 1)) GB
+Battery    : $BatStatus
+Uptime     : $((Get-Date) - $OS.LastBootUpTime | Select -ExpandProperty TotalHours | ForEach {[Math]::Round($_, 1)}) Hours
 "@
     }
 })
