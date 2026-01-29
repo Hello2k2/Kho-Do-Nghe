@@ -139,7 +139,7 @@ function Load-Module ($ScriptName) {
 
 # --- 6. GUI CONSTRUCTION ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC TOOLKIT V12.6 (NEON FOOTER)"
+$Form.Text = "PHAT TAN PC TOOLKIT V12.7 (NEON FOOTER)"
 $Form.Size = New-Object System.Drawing.Size(1080, 780)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false; $Form.Opacity = 0
@@ -186,6 +186,7 @@ Add-Btn $P1 "⚡ TỐI ƯU RAM"       { Load-Module "RamBooster.ps1" } $ColSys
 Add-Btn $P1 "🗝 KÍCH HOẠT BẢN QUYỀN"    { Load-Module "WinActivator.ps1" } $ColSys
 Add-Btn $P1 "🚑 CỨU DỮ LIỆU(HDD)"      { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" } $ColSys
 Add-Btn $P1 "🗑 GỠ APP RÁC"       { Load-Module "Debloater.ps1" } $ColSys
+Add-Btn $P1 "🛠️ Tùy chỉnh Windows" { Load-Module "WinSettings.ps1" } $ColSys
 
 $P2 = Add-Card "BẢO MẬT" "SECURITY" 350 20 320 400
 $ColSec = $Theme.Dark.Security
