@@ -1,5 +1,5 @@
 <#
-    TITANIUM GOD MODE V6.0 - OMNIPOTENCE EDITION
+    TITANIUM GOD MODE V6.1 - SCROLLABLE EDITION
     Architecture: Modern UI + GDI+ Vector Gauges + Winget + PowerGrid + NetOps
     Engine: PowerShell 5.1/7 + WinForms
     Upgraded by: Gemini
@@ -24,7 +24,7 @@ $Theme = @{
     Accent      = [System.Drawing.Color]::FromArgb(0, 210, 255)      # Neon Cyan
     Accent2     = [System.Drawing.Color]::FromArgb(180, 0, 255)      # Neon Purple
     AccentRed   = [System.Drawing.Color]::FromArgb(255, 50, 80)      # Danger Red
-    AccentGold  = [System.Drawing.Color]::FromArgb(255, 180, 0)      # Gold (New)
+    AccentGold  = [System.Drawing.Color]::FromArgb(255, 180, 0)      # Gold
     TextMain    = [System.Drawing.Color]::WhiteSmoke
     TextMuted   = [System.Drawing.Color]::FromArgb(120, 120, 140)
     Border      = [System.Drawing.Color]::FromArgb(60, 60, 80)
@@ -36,7 +36,7 @@ $Theme = @{
 
 # --- 2. MAIN FORM SETUP ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM V6.0 OMNIPOTENCE"
+$Form.Text = "TITANIUM V6.1 SCROLLABLE"
 $Form.Size = New-Object System.Drawing.Size(1150, 720)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "None"
@@ -122,7 +122,7 @@ $Form.Controls.Add($Sidebar)
 # Logo
 $PnlLogo = New-Object System.Windows.Forms.Panel; $PnlLogo.Size = New-Object System.Drawing.Size(220, 80); $PnlLogo.Dock="Top"; $PnlLogo.BackColor="Transparent"
 $LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text = "TITANIUM"; $LblLogo.Font = $Theme.FontLogo; $LblLogo.ForeColor = $Theme.Accent; $LblLogo.AutoSize=$true; $LblLogo.Location=New-Object System.Drawing.Point(20, 20)
-$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "V6.0 OMNIPOTENCE"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.AccentGold; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
+$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "V6.1 SCROLL"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.AccentGold; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
 $PnlLogo.Controls.Add($LblLogo); $PnlLogo.Controls.Add($LblVer); $Sidebar.Controls.Add($PnlLogo)
 
 # Content Area
@@ -148,11 +148,23 @@ $LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text="System init
 $StatusBar.Controls.Add($LblStatus)
 $ContentContainer.Controls.Add($StatusBar)
 
-# --- 5. PANELS & CONTENT ---
+# --- 5. PANELS & CONTENT (FIXED SCROLLING) ---
 $Global:Panels = @()
 function Make-Panel ($Name) {
-    $P = New-Object System.Windows.Forms.Panel; $P.Dock = "Fill"; $P.BackColor = $Theme.BgForm; $P.Visible = $false
-    $ContentContainer.Controls.Add($P); $P.BringToFront(); $Global:Panels += $P; return $P
+    $P = New-Object System.Windows.Forms.Panel
+    $P.Dock = "Fill"
+    $P.BackColor = $Theme.BgForm
+    $P.Visible = $false
+    
+    # --- FIX: ENABLE SCROLLING ---
+    $P.AutoScroll = $true 
+    # Add padding so content isn't stuck to bottom when scrolled
+    $P.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 50)
+    
+    $ContentContainer.Controls.Add($P)
+    $P.BringToFront()
+    $Global:Panels += $P
+    return $P
 }
 
 # --- P1: DASHBOARD ---
@@ -187,7 +199,7 @@ Add-SectionTitle $P_Repair "ADVANCED FIXES" 170
 Add-ActionBtn $P_Repair "Fix Printer Spooler" "FixPrint" 30 210
 Add-ActionBtn $P_Repair "Re-Register Store Apps" "FixStore" 270 210
 
-# --- P4: NET OPS (NEW) ---
+# --- P4: NET OPS ---
 $P_Net = Make-Panel "NetOps"
 Add-SectionTitle $P_Net "NETWORK OPERATIONS" 20
 Add-ActionBtn $P_Net "Check Public IP" "GetPubIP" 30 60
@@ -200,7 +212,7 @@ Add-ActionBtn $P_Net "Export Wi-Fi Passwords" "DumpWifi" 30 210 $false $true
 Add-ActionBtn $P_Net "Edit Hosts File" "EditHosts" 30 260
 Add-ActionBtn $P_Net "View Network Adapters" "OpenNcpa" 270 260
 
-# --- P5: POWER GRID (NEW) ---
+# --- P5: POWER GRID ---
 $P_Power = Make-Panel "PowerGrid"
 Add-SectionTitle $P_Power "SESSION CONTROL" 20
 Add-ActionBtn $P_Power "Lock Station" "PowerLock" 30 60
