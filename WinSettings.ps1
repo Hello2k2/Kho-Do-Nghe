@@ -1,7 +1,7 @@
 <#
-    TITANIUM GOD MODE V6.4 - SYSTEM CONTROL EDITION
-    Tính năng mới: Tab Hệ Thống (Đổi tên PC, UAC, SmartScreen, Ngôn ngữ...)
-    Kiến trúc: Hamburger Menu + GDI+ + InputBox
+    TITANIUM GOD MODE V6.5 - CONTROL FREAK EDITION
+    Tính năng mới: Chỉnh Múi giờ, Ngày giờ, Định dạng 12h/24h trực tiếp trong App.
+    Kiến trúc: Hamburger Menu + GDI+ + Advanced Controls
     Ngôn ngữ: Tiếng Việt 100%.
 #>
 
@@ -10,7 +10,7 @@ $ErrorActionPreference = "SilentlyContinue"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName Microsoft.VisualBasic # Để dùng InputBox
+Add-Type -AssemblyName Microsoft.VisualBasic 
 
 # Kiểm tra Admin
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
@@ -22,12 +22,11 @@ $Theme = @{
     BgForm      = [System.Drawing.Color]::FromArgb(10, 10, 15)
     BgSidebar   = [System.Drawing.Color]::FromArgb(20, 20, 28)
     BgContent   = [System.Drawing.Color]::FromArgb(28, 28, 38)
-    BgInput     = [System.Drawing.Color]::FromArgb(15, 15, 20)
+    BgInput     = [System.Drawing.Color]::FromArgb(40, 40, 50) # Sáng hơn chút để nhập liệu
     Accent      = [System.Drawing.Color]::FromArgb(0, 210, 255)
     Accent2     = [System.Drawing.Color]::FromArgb(180, 0, 255)
     AccentRed   = [System.Drawing.Color]::FromArgb(255, 50, 80)
     AccentGold  = [System.Drawing.Color]::FromArgb(255, 180, 0)
-    AccentGreen = [System.Drawing.Color]::FromArgb(0, 255, 120)
     TextMain    = [System.Drawing.Color]::WhiteSmoke
     TextMuted   = [System.Drawing.Color]::FromArgb(120, 120, 140)
     Border      = [System.Drawing.Color]::FromArgb(60, 60, 80)
@@ -39,8 +38,8 @@ $Theme = @{
 
 # --- 2. FORM CHÍNH ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM V6.4"
-$Form.Size = New-Object System.Drawing.Size(1200, 760)
+$Form.Text = "TITANIUM V6.5"
+$Form.Size = New-Object System.Drawing.Size(1200, 780)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "None"
 $Form.BackColor = $Theme.BgForm
@@ -54,7 +53,6 @@ $Form.Add_MouseMove({ if ($Global:IsDragging) { $Form.Location = [System.Drawing
 $Form.Add_MouseUp({ $Global:IsDragging = $false })
 
 # --- 3. LAYOUT ---
-
 # Sidebar
 $Sidebar = New-Object System.Windows.Forms.Panel; $Sidebar.Dock = "Left"; $Sidebar.Width = 230; $Sidebar.BackColor = $Theme.BgSidebar
 $Form.Controls.Add($Sidebar)
@@ -62,7 +60,7 @@ $Form.Controls.Add($Sidebar)
 # Logo
 $PnlLogo = New-Object System.Windows.Forms.Panel; $PnlLogo.Size = New-Object System.Drawing.Size(230, 90); $PnlLogo.Dock="Top"; $PnlLogo.BackColor="Transparent"
 $LblLogo = New-Object System.Windows.Forms.Label; $LblLogo.Text = "TITANIUM"; $LblLogo.Font = $Theme.FontLogo; $LblLogo.ForeColor = $Theme.Accent; $LblLogo.AutoSize=$true; $LblLogo.Location=New-Object System.Drawing.Point(20, 20)
-$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "SYSTEM CONTROL"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.AccentGreen; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
+$LblVer = New-Object System.Windows.Forms.Label; $LblVer.Text = "CONTROL FREAK"; $LblVer.Font = $Theme.FontMono; $LblVer.ForeColor = $Theme.AccentGold; $LblVer.AutoSize=$true; $LblVer.Location=New-Object System.Drawing.Point(22, 55)
 $PnlLogo.Controls.Add($LblLogo); $PnlLogo.Controls.Add($LblVer); $Sidebar.Controls.Add($PnlLogo)
 
 # Content
@@ -89,7 +87,7 @@ $TopBar.Controls.Add($BtnClose); $TopBar.Controls.Add($BtnMin)
 
 # Status Bar
 $StatusBar = New-Object System.Windows.Forms.Panel; $StatusBar.Dock="Bottom"; $StatusBar.Height=35; $StatusBar.BackColor=$Theme.BgSidebar
-$LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text="Chào mừng. Chọn một chức năng để bắt đầu."; $LblStatus.ForeColor=$Theme.Accent; $LblStatus.Dock="Fill"; $LblStatus.TextAlign="MiddleLeft"; $LblStatus.Padding=New-Object System.Windows.Forms.Padding(15,0,0,0); $LblStatus.Font=$Theme.FontMono
+$LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Text="Sẵn sàng."; $LblStatus.ForeColor=$Theme.Accent; $LblStatus.Dock="Fill"; $LblStatus.TextAlign="MiddleLeft"; $LblStatus.Padding=New-Object System.Windows.Forms.Padding(15,0,0,0); $LblStatus.Font=$Theme.FontMono
 $StatusBar.Controls.Add($LblStatus); $ContentContainer.Controls.Add($StatusBar)
 
 # --- 4. HÀM HỖ TRỢ ---
@@ -122,7 +120,6 @@ function Add-SectionTitle ($Parent, $Text, $Y) {
 }
 
 function Show-InputBox ($Title, $Prompt) {
-    # Tự tạo InputBox đơn giản bằng WinForms
     $f = New-Object System.Windows.Forms.Form
     $f.Width = 400; $f.Height = 180; $f.Text = $Title; $f.StartPosition = "CenterScreen"; $f.FormBorderStyle = "FixedDialog"; $f.MaximizeBox = $false
     $l = New-Object System.Windows.Forms.Label; $l.Left = 20; $l.Top = 20; $l.Text = $Prompt; $l.AutoSize = $true
@@ -140,20 +137,49 @@ Add-SectionTitle $P_Dash "GIÁM SÁT HỆ THỐNG" 30
 $GaugeBox = New-Object System.Windows.Forms.PictureBox; $GaugeBox.Location = New-Object System.Drawing.Point(30, 70); $GaugeBox.Size = New-Object System.Drawing.Size(820, 160); $GaugeBox.BackColor = "Transparent"; $P_Dash.Controls.Add($GaugeBox)
 $TxtInfo = New-Object System.Windows.Forms.TextBox; $TxtInfo.Multiline=$true; $TxtInfo.Location=New-Object System.Drawing.Point(30, 250); $TxtInfo.Size=New-Object System.Drawing.Size(820, 300); $TxtInfo.BackColor=$Theme.BgInput; $TxtInfo.ForeColor=$Theme.TextMain; $TxtInfo.BorderStyle="None"; $TxtInfo.Font=$Theme.FontMono; $TxtInfo.ReadOnly=$true; $P_Dash.Controls.Add($TxtInfo)
 
-# P2: System & Security (NEW)
+# P2: System & Security (CUSTOM TAB)
 $P_Sys = Make-Panel "System"
-Add-SectionTitle $P_Sys "CẤU HÌNH WINDOWS" 30
+Add-SectionTitle $P_Sys "CÀI ĐẶT CƠ BẢN" 30
 Add-ActionBtn $P_Sys "Đổi Tên Máy Tính" "RenPC" 30 70
-Add-ActionBtn $P_Sys "Cài Đặt Ngôn Ngữ" "SetLang" 280 70
-Add-ActionBtn $P_Sys "Cài Đặt Múi Giờ" "SetTime" 530 70
 
-Add-SectionTitle $P_Sys "BẢO MẬT & THÔNG BÁO (ADMIN)" 130
-Add-ActionBtn $P_Sys "Tắt Thông Báo Win" "OffNotify" 30 170
-Add-ActionBtn $P_Sys "Bật Lại Thông Báo" "OnNotify" 280 170
-Add-ActionBtn $P_Sys "Tắt UAC (Đỡ phiền)" "OffUAC" 30 220 $true
-Add-ActionBtn $P_Sys "Bật Lại UAC" "OnUAC" 280 220
-Add-ActionBtn $P_Sys "Tắt SmartScreen" "OffSmart" 30 270 $true
-Add-ActionBtn $P_Sys "Bật SmartScreen" "OnSmart" 280 270
+# --- Khu vực Ngày & Giờ (Custom Controls) ---
+$LblTime = New-Object System.Windows.Forms.Label; $LblTime.Text = "Ngày & Giờ:"; $LblTime.ForeColor="White"; $LblTime.Location = New-Object System.Drawing.Point(30, 120); $LblTime.AutoSize=$true; $P_Sys.Controls.Add($LblTime)
+$DtPicker = New-Object System.Windows.Forms.DateTimePicker; $DtPicker.Format="Custom"; $DtPicker.CustomFormat="dd/MM/yyyy HH:mm:ss"; $DtPicker.Location=New-Object System.Drawing.Point(120, 117); $DtPicker.Size=New-Object System.Drawing.Size(200, 25); $P_Sys.Controls.Add($DtPicker)
+$BtnSetTime = New-Object System.Windows.Forms.Button; $BtnSetTime.Text="Lưu Giờ"; $BtnSetTime.Location=New-Object System.Drawing.Point(330, 115); $BtnSetTime.Size=New-Object System.Drawing.Size(80, 28); $BtnSetTime.FlatStyle="Flat"; $BtnSetTime.ForeColor="White"; $BtnSetTime.BackColor=$Theme.BgInput
+$BtnSetTime.Add_Click({ Set-Date -Date $DtPicker.Value; Log "Đã cập nhật ngày giờ!" }); $P_Sys.Controls.Add($BtnSetTime)
+
+# --- Khu vực Múi Giờ (ComboBox) ---
+$LblTZ = New-Object System.Windows.Forms.Label; $LblTZ.Text = "Múi Giờ:"; $LblTZ.ForeColor="White"; $LblTZ.Location = New-Object System.Drawing.Point(430, 120); $LblTZ.AutoSize=$true; $P_Sys.Controls.Add($LblTZ)
+$CbTZ = New-Object System.Windows.Forms.ComboBox; $CbTZ.Location=New-Object System.Drawing.Point(500, 117); $CbTZ.Size=New-Object System.Drawing.Size(250, 25); $CbTZ.DropDownStyle="DropDownList"; $CbTZ.BackColor="White"; $P_Sys.Controls.Add($CbTZ)
+# Load TimeZones
+$Zones = Get-TimeZone -ListAvailable | Sort-Object Id; foreach ($z in $Zones) { $CbTZ.Items.Add($z.Id) }
+$BtnSetTZ = New-Object System.Windows.Forms.Button; $BtnSetTZ.Text="Lưu Múi"; $BtnSetTZ.Location=New-Object System.Drawing.Point(760, 115); $BtnSetTZ.Size=New-Object System.Drawing.Size(80, 28); $BtnSetTZ.FlatStyle="Flat"; $BtnSetTZ.ForeColor="White"; $BtnSetTZ.BackColor=$Theme.BgInput
+$BtnSetTZ.Add_Click({ if($CbTZ.SelectedItem){ Set-TimeZone -Id $CbTZ.SelectedItem; Log "Đã đổi múi giờ thành: $($CbTZ.SelectedItem)" } }); $P_Sys.Controls.Add($BtnSetTZ)
+
+# --- Khu vực Định dạng 12h/24h ---
+$LblFmt = New-Object System.Windows.Forms.Label; $LblFmt.Text = "Định dạng:"; $LblFmt.ForeColor="White"; $LblFmt.Location = New-Object System.Drawing.Point(30, 170); $LblFmt.AutoSize=$true; $P_Sys.Controls.Add($LblFmt)
+$Rb24 = New-Object System.Windows.Forms.RadioButton; $Rb24.Text="24 Giờ (14:30)"; $Rb24.ForeColor="White"; $Rb24.Location=New-Object System.Drawing.Point(120, 168); $Rb24.Width=120; $P_Sys.Controls.Add($Rb24)
+$Rb12 = New-Object System.Windows.Forms.RadioButton; $Rb12.Text="12 Giờ (2:30 PM)"; $Rb12.ForeColor="White"; $Rb12.Location=New-Object System.Drawing.Point(240, 168); $Rb12.Width=130; $P_Sys.Controls.Add($Rb12)
+$BtnSetFmt = New-Object System.Windows.Forms.Button; $BtnSetFmt.Text="Đổi"; $BtnSetFmt.Location=New-Object System.Drawing.Point(380, 165); $BtnSetFmt.Size=New-Object System.Drawing.Size(60, 28); $BtnSetFmt.FlatStyle="Flat"; $BtnSetFmt.ForeColor="White"; $BtnSetFmt.BackColor=$Theme.BgInput
+$BtnSetFmt.Add_Click({ 
+    if($Rb24.Checked){ Set-ItemProperty -Path "HKCU:\Control Panel\International" -Name "sShortTime" -Value "HH:mm"; Log "Đã chuyển sang 24H (Cần Logout)" }
+    if($Rb12.Checked){ Set-ItemProperty -Path "HKCU:\Control Panel\International" -Name "sShortTime" -Value "h:mm tt"; Log "Đã chuyển sang 12H (Cần Logout)" }
+}); $P_Sys.Controls.Add($BtnSetFmt)
+
+# --- Khu vực Vùng/Ngôn ngữ (Format) ---
+$LblLang = New-Object System.Windows.Forms.Label; $LblLang.Text = "Vùng (Format):"; $LblLang.ForeColor="White"; $LblLang.Location = New-Object System.Drawing.Point(460, 170); $LblLang.AutoSize=$true; $P_Sys.Controls.Add($LblLang)
+$CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location=New-Object System.Drawing.Point(570, 167); $CbLang.Size=New-Object System.Drawing.Size(180, 25); $CbLang.DropDownStyle="DropDownList"; $CbLang.BackColor="White"; $P_Sys.Controls.Add($CbLang)
+$CbLang.Items.Add("vi-VN"); $CbLang.Items.Add("en-US"); $CbLang.Items.Add("ja-JP"); $CbLang.Items.Add("ko-KR"); $CbLang.Items.Add("zh-CN")
+$BtnSetLang = New-Object System.Windows.Forms.Button; $BtnSetLang.Text="Lưu"; $BtnSetLang.Location=New-Object System.Drawing.Point(760, 165); $BtnSetLang.Size=New-Object System.Drawing.Size(60, 28); $BtnSetLang.FlatStyle="Flat"; $BtnSetLang.ForeColor="White"; $BtnSetLang.BackColor=$Theme.BgInput
+$BtnSetLang.Add_Click({ if($CbLang.SelectedItem){ Set-Culture $CbLang.SelectedItem; Set-WinSystemLocale $CbLang.SelectedItem; Log "Đã đổi vùng thành: $($CbLang.SelectedItem)" } }); $P_Sys.Controls.Add($BtnSetLang)
+
+Add-SectionTitle $P_Sys "BẢO MẬT & THÔNG BÁO (ADMIN)" 230
+Add-ActionBtn $P_Sys "Tắt Thông Báo Win" "OffNotify" 30 270
+Add-ActionBtn $P_Sys "Bật Lại Thông Báo" "OnNotify" 280 270
+Add-ActionBtn $P_Sys "Tắt UAC (Đỡ phiền)" "OffUAC" 30 320 $true
+Add-ActionBtn $P_Sys "Bật Lại UAC" "OnUAC" 280 320
+Add-ActionBtn $P_Sys "Tắt SmartScreen" "OffSmart" 30 370 $true
+Add-ActionBtn $P_Sys "Bật SmartScreen" "OnSmart" 280 370
 
 # P3: Optimize
 $P_Opt = Make-Panel "Optimize"
@@ -226,7 +252,6 @@ function Run-Command ($Cmd, $Desc) {
     Log "Đang chạy: $Desc..."
     $Form.Cursor = "WaitCursor"
     switch ($Cmd) {
-        # --- SYSTEM (MỚI) ---
         "RenPC" { 
             $new = Show-InputBox "Đổi Tên Máy" "Nhập tên mới cho máy tính (Không dấu, không khoảng cách):"
             if ($new) { 
@@ -234,8 +259,6 @@ function Run-Command ($Cmd, $Desc) {
                 catch { Log "Lỗi: Tên không hợp lệ hoặc cần quyền Admin." }
             } else { Log "Đã hủy đổi tên." }
         }
-        "SetLang"   { Start-Process "ms-settings:regionlanguage"; Log "Đã mở cài đặt Ngôn ngữ." }
-        "SetTime"   { Start-Process "ms-settings:dateandtime"; Log "Đã mở cài đặt Giờ & Múi giờ." }
         "OffNotify" { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications" "ToastEnabled" 0; Log "Đã tắt toàn bộ thông báo Windows." }
         "OnNotify"  { Set-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications" "ToastEnabled" 1; Log "Đã bật lại thông báo." }
         "OffUAC"    { Set-Reg "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "EnableLUA" 0; Log "Đã tắt UAC (Cần khởi động lại)." }
@@ -243,7 +266,6 @@ function Run-Command ($Cmd, $Desc) {
         "OffSmart"  { Set-Reg "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" "SmartScreenEnabled" "Off"; Log "Đã tắt SmartScreen (Cần khởi động lại)." }
         "OnSmart"   { Set-Reg "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" "SmartScreenEnabled" "Warn"; Log "Đã bật SmartScreen." }
 
-        # --- OPTIMIZE ---
         "CleanDeep" { Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue; Log "Đã dọn dẹp xong." }
         "CleanUpd"  { Stop-Service wuauserv; Remove-Item "$env:windir\SoftwareDistribution\Download\*" -Recurse -Force; Start-Service wuauserv; Log "Đã xóa Cache Update." }
         "UltPerf"   { powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61; Log "Đã thêm Ultimate Performance." }
@@ -253,13 +275,11 @@ function Run-Command ($Cmd, $Desc) {
         "DelXbox"   { Get-AppxPackage *xbox* | Remove-AppxPackage; Log "Đã xóa Xbox." }
         "DelOneDrive"{ Stop-Process -Name "OneDrive" -Force; Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" "/uninstall" -Wait; Log "Đã xóa OneDrive." }
         
-        # --- REPAIR ---
         "RunSFC"    { Start-Process "sfc" "/scannow" -Verb RunAs; Log "Đang chạy SFC..." }
         "RunDISM"   { Start-Process "dism" "/online /cleanup-image /restorehealth" -Verb RunAs; Log "Đang chạy DISM..." }
         "RunChkDsk" { Start-Process "cmd" "/k chkdsk C:" -Verb RunAs; Log "Đang chạy ChkDsk..." }
         "RestartExp"{ Stop-Process -Name explorer -Force; Log "Explorer đã khởi động lại." }
         
-        # --- NET ---
         "GetPubIP"  { try { $ip = Invoke-RestMethod http://ipinfo.io/ip; Log "IP: $ip" } catch { Log "Lỗi lấy IP." } }
         "PingTest"  { Start-Process "cmd" "/k ping 8.8.8.8"; Log "Pinging..." }
         "FlushDns"  { ipconfig /flushdns; Log "DNS Flushed." }
@@ -273,7 +293,6 @@ function Run-Command ($Cmd, $Desc) {
         }
         "EditHosts" { Start-Process "notepad" "C:\Windows\System32\drivers\etc\hosts" -Verb RunAs }
 
-        # --- SOFT ---
         "InstChrome"  { Start-Process "winget" "install Google.Chrome -e --silent"; Log "Cài Chrome..." }
         "InstFirefox" { Start-Process "winget" "install Mozilla.Firefox -e --silent"; Log "Cài Firefox..." }
         "InstVSCode"  { Start-Process "winget" "install Microsoft.VisualStudioCode -e --silent"; Log "Cài VS Code..." }
