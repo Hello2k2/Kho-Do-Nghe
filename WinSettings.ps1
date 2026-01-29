@@ -1,10 +1,7 @@
 <#
-    TITANIUM GOD MODE V7.0 - ULTIMATE RGB EDITION
-    Tính năng: 
-    - Giao diện Card (Thẻ) hiện đại với hiệu ứng Hover RGB.
-    - Chế độ Light/Dark Mode chuyển đổi tức thì.
-    - Quản lý User (Pass, Admin Group) & Workgroup chuyên sâu.
-    - Load Config từ GitHub.
+    TITANIUM GOD MODE V7.0 - ULTIMATE RGB EDITION (FIXED)
+    Sửa lỗi: Cú pháp biến trong chuỗi (Variable reference fix).
+    Tính năng: Giao diện Card, RGB, Dark Mode, Quản lý User/System.
 #>
 
 # --- 0. KHỞI TẠO ---
@@ -50,7 +47,7 @@ function Color-FromHex ($Hex) { return [System.Drawing.ColorTranslator]::FromHtm
 
 # --- 3. FORM CHÍNH ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "TITANIUM V7.0"
+$Form.Text = "TITANIUM V7.0 FIXED"
 $Form.Size = New-Object System.Drawing.Size(1280, 800)
 $Form.StartPosition = "CenterScreen"
 $Form.FormBorderStyle = "None"
@@ -291,7 +288,9 @@ function Run-Command ($Cmd, $Desc) {
 
         # USER
         "SetPass" { 
-            $u=$CbUsers.SelectedItem; $p=Show-Input "Mật khẩu" "Nhập mật khẩu mới cho $u:"
+            $u=$CbUsers.SelectedItem
+            # FIX: Dùng ${u} để tránh lỗi phân tích cú pháp
+            $p=Show-Input "Mật khẩu" "Nhập mật khẩu mới cho ${u}:"
             if($u -and $p){ Set-LocalUser -Name $u -Password ($p | ConvertTo-SecureString -AsPlainText -Force); $Global:LblStatus.Text="Đã đổi pass cho $u." }
         }
         "ClearPass" { $u=$CbUsers.SelectedItem; if($u){ Set-LocalUser -Name $u -Password ([string]::Empty | ConvertTo-SecureString -AsPlainText -Force); $Global:LblStatus.Text="Đã xóa pass $u." } }
