@@ -1,1 +1,56 @@
-
+{
+  "regions": [
+    { "code": "vi-VN", "name": "Vietnam (Tiếng Việt)" },
+    { "code": "en-US", "name": "United States (English)" },
+    { "code": "en-GB", "name": "United Kingdom (English)" },
+    { "code": "ja-JP", "name": "Japan (日本語 - Tiếng Nhật)" },
+    { "code": "ko-KR", "name": "Korea (한국어 - Tiếng Hàn)" },
+    { "code": "zh-CN", "name": "China (中文 - Tiếng Trung Giản thể)" },
+    { "code": "zh-TW", "name": "Taiwan (中文 - Tiếng Trung Phồn thể)" },
+    { "code": "ru-RU", "name": "Russia (Русский - Tiếng Nga)" },
+    { "code": "fr-FR", "name": "France (Français - Tiếng Pháp)" },
+    { "code": "de-DE", "name": "Germany (Deutsch - Tiếng Đức)" },
+    { "code": "es-ES", "name": "Spain (Español - Tiếng Tây Ban Nha)" },
+    { "code": "it-IT", "name": "Italy (Italiano - Tiếng Ý)" },
+    { "code": "pt-BR", "name": "Brazil (Português - Tiếng Bồ Đào Nha)" },
+    { "code": "th-TH", "name": "Thailand (ไทย - Tiếng Thái)" },
+    { "code": "id-ID", "name": "Indonesia (Bahasa Indonesia)" },
+    { "code": "tr-TR", "name": "Turkey (Türkçe - Tiếng Thổ Nhĩ Kỳ)" },
+    { "code": "ar-SA", "name": "Saudi Arabia (العربية - Tiếng Ả Rập)" }
+  ],
+  "keyboards": [
+    { "id": "0409:00000409", "name": "US (QWERTY)" },
+    { "id": "042a:0000042a", "name": "Vietnamese (Microsoft IME)" },
+    { "id": "0411:00000411", "name": "Japanese (IME)" },
+    { "id": "0412:00000412", "name": "Korean (IME)" },
+    { "id": "0804:00000804", "name": "Chinese (Simplified - Pinyin)" },
+    { "id": "0404:00000404", "name": "Chinese (Traditional - Bopomofo)" },
+    { "id": "0809:00000809", "name": "United Kingdom (Extended)" },
+    { "id": "040c:0000040c", "name": "French (AZERTY)" },
+    { "id": "0407:00000407", "name": "German (QWERTZ)" },
+    { "id": "0419:00000419", "name": "Russian (Cyrillic)" },
+    { "id": "041e:0000041e", "name": "Thai (Kedmanee)" }
+  ],
+  "timezones": [
+    { "id": "Dateline Standard Time", "name": "(UTC-12:00) International Date Line West" },
+    { "id": "Hawaiian Standard Time", "name": "(UTC-10:00) Hawaii" },
+    { "id": "Pacific Standard Time", "name": "(UTC-08:00) Pacific Time (US & Canada)" },
+    { "id": "Mountain Standard Time", "name": "(UTC-07:00) Mountain Time (US & Canada)" },
+    { "id": "Central Standard Time", "name": "(UTC-06:00) Central Time (US & Canada)" },
+    { "id": "Eastern Standard Time", "name": "(UTC-05:00) Eastern Time (US & Canada)" },
+    { "id": "E. South America Standard Time", "name": "(UTC-03:00) Brasilia" },
+    { "id": "GMT Standard Time", "name": "(UTC+00:00) London, Dublin, Lisbon" },
+    { "id": "W. Europe Standard Time", "name": "(UTC+01:00) Amsterdam, Berlin, Rome, Paris" },
+    { "id": "E. Europe Standard Time", "name": "(UTC+02:00) Helsinki, Kyiv, Riga, Sofia" },
+    { "id": "Russian Standard Time", "name": "(UTC+03:00) Moscow, St. Petersburg" },
+    { "id": "Arab Standard Time", "name": "(UTC+03:00) Kuwait, Riyadh" },
+    { "id": "Arabian Standard Time", "name": "(UTC+04:00) Abu Dhabi, Muscat" },
+    { "id": "India Standard Time", "name": "(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi" },
+    { "id": "SE Asia Standard Time", "name": "(UTC+07:00) Bangkok, Hanoi, Jakarta" },
+    { "id": "China Standard Time", "name": "(UTC+08:00) Beijing, Hong Kong, Singapore" },
+    { "id": "Tokyo Standard Time", "name": "(UTC+09:00) Osaka, Sapporo, Tokyo" },
+    { "id": "Korea Standard Time", "name": "(UTC+09:00) Seoul" },
+    { "id": "AUS Eastern Standard Time", "name": "(UTC+10:00) Canberra, Melbourne, Sydney" },
+    { "id": "New Zealand Standard Time", "name": "(UTC+12:00) Auckland, Wellington" }
+  ]
+}
