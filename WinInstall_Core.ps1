@@ -123,47 +123,48 @@ function Start-Headless-DISM {
     $SourceDrive = $null
     $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3"
     foreach ($D in $Drives) { if ($D.DeviceID -ne $InstallDrive -and $D.FreeSpace -gt 8GB) { $SourceDrive = $D.DeviceID; break } }
-    if (!$SourceDrive) { [System.Windows.Forms.MessageBox]::Show("Cần 1 ổ phụ (D:, E:...) > 8GB!", "Lỗi"); return }
+    if (!$SourceDrive) { [System.Windows.Forms.MessageBox]::Show("Cần 1 ổ phụ > 8GB!", "Lỗi"); return }
 
-    # Check RAM
+    # Check RAM & Mode
     $RamMB = (Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1MB
-    $BootMode = if ($RamMB -gt 2048) { "RAMDISK (Fast)" } else { "LOCATE (Low RAM)" }
+    $BootMode = if ($RamMB -gt 4096) { "RAMDISK" } else { "LOCATE" } # Tăng ngưỡng lên 4GB cho an toàn
 
-    if ([System.Windows.Forms.MessageBox]::Show("CHẾ ĐỘ: $BootMode`nSource: $SourceDrive -> Target: $InstallDrive`nTiếp tục?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
+    if ([System.Windows.Forms.MessageBox]::Show("CHẾ ĐỘ: $BootMode (Fix I/O)`nSource: $SourceDrive -> Target: $InstallDrive`nTiếp tục?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO (V18.0 HYBRID BOOT) ---"
+    Log "--- KHOI TAO (V18.1 I/O FIX) ---"
 
-    # 2. TẠO MARKER FILE (DẤU HIỆU NHẬN BIẾT)
-    $RandomID = Get-Random -Min 1000 -Max 9999
+    # 2. TẠO MARKER FILE (CÓ NỘI DUNG THỰC)
+    $RandomID = Get-Random -Min 100000 -Max 999999
     $MarkerFile = "PhatTan_Marker_$RandomID.txt"
-    Log "Marker ID: $MarkerFile"
-
-    # 3. CHUẨN BỊ SOURCE
     $WinSource = "$SourceDrive\WinSource_PhatTan"
+    
+    # Clean & Create Dir
     if (Test-Path $WinSource) { Remove-Item $WinSource -Recurse -Force }
     New-Item -ItemType Directory -Path "$WinSource\sources" -Force | Out-Null
     New-Item -ItemType Directory -Path "$WinSource\boot" -Force | Out-Null
 
-    # Tạo Marker File ngay cạnh boot.sdi để BCD tìm
-    New-Item "$WinSource\boot\$MarkerFile" -ItemType File -Force | Out-Null
+    # Ghi nội dung vào Marker (Tránh lỗi file 0KB gây 0xc00000e9)
+    $MarkerContent = "PHAT TAN INSTALLER - ID: $RandomID - TIMESTAMP: $(Get-Date)"
+    [IO.File]::WriteAllText("$WinSource\boot\$MarkerFile", $MarkerContent, [System.Text.Encoding]::ASCII)
+    Log "Marker Created: $MarkerFile (Size: $( (Get-Item "$WinSource\boot\$MarkerFile").Length ) bytes)"
 
-    # Copy Files
+    # 3. CHÉP FILE (COPY KỸ)
     Log "Copying Source Files..."
     Copy-Item "$Global:IsoMounted\sources\boot.wim" "$WinSource\sources\boot.wim" -Force
     Copy-Item "$Global:IsoMounted\boot\boot.sdi" "$WinSource\boot\boot.sdi" -Force
     Copy-Item "$Global:IsoMounted\setup.exe" "$WinSource\setup.exe" -Force
+    
     $InstWim = "$Global:IsoMounted\sources\install.wim"
     if (!(Test-Path $InstWim)) { $InstWim = "$Global:IsoMounted\sources\install.esd" }
     Copy-Item $InstWim "$WinSource\sources\install.wim" -Force
 
-    # Gán nhãn đích
     cmd /c "label $InstallDrive WIN_TARGET"
 
-    # 4. TẠO SCRIPT & XML (Như V17)
+    # 4. TẠO SCRIPT & XML
     $CmdContent = @"
 @echo off
-title PHAT TAN V18 ($BootMode)
+title PHAT TAN V18.1
 for %%d in (C D E F G H I J K L M N) do ( vol %%d: | find "WIN_TARGET" >nul && set TARGET=%%d: )
 if "%TARGET%"=="" exit
 format %TARGET% /fs:ntfs /q /y /v:Windows
@@ -176,36 +177,27 @@ wpeutil reboot
     $XmlSmart = "<?xml version=`"1.0`" encoding=`"utf-8`"?><unattend xmlns=`"urn:schemas-microsoft-com:unattend`"><settings pass=`"windowsPE`"><component name=`"Microsoft-Windows-Setup`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`"><RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>cmd /c for %%i in (C D E F G H I J K L M N) do if exist %%i:\WinSource_PhatTan\AutoInstall.cmd %%i:\WinSource_PhatTan\AutoInstall.cmd</Path></RunSynchronousCommand></RunSynchronous></component></settings></unattend>"
     [IO.File]::WriteAllText("$WinSource\autounattend.xml", $XmlSmart, [System.Text.Encoding]::UTF8)
 
-    # 5. CẤU HÌNH BCD THÔNG MINH (SMART LOCATE)
-    Log "Configuring Boot ($BootMode)..."
+    # 5. CẤU HÌNH BCD (LOCATE MODE VỚI FILE THỰC)
+    Log "Configuring BCD..."
     try {
-        # 5.1 Tìm Device chứa Marker File
-        # Cú pháp locate cực mạnh: locate=\Path\To\Marker
+        # Chuỗi locate trỏ vào file Marker có nội dung
         $LocateStr = "locate=\WinSource_PhatTan\boot\$MarkerFile"
 
-        # 5.2 Tạo Ramdisk Options
+        # 5.1 Tạo Ramdisk Options
         & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Ramdisk" /f | Out-Null
-        
-        # MẤU CHỐT: Dùng locate để tự tìm ổ chứa file Marker
         & bcdedit /set "{ramdiskoptions}" ramdisksdidevice $LocateStr
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource_PhatTan\boot\boot.sdi"
 
-        # 5.3 Tạo Entry Boot
-        $BcdOutput = & bcdedit /create /d "PHAT TAN SETUP (V18)" /application osloader
+        # 5.2 Tạo Entry Boot
+        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER (V18.1)" /application osloader
         $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($Guid) {
-            # RAMDISK MODE (>2GB RAM): Load toàn bộ vào RAM
-            if ($RamMB -gt 2048) {
-                # Cú pháp: ramdisk=[locate]\Path\Wim,{options}
-                # locate ở đây = ổ tìm thấy Marker File
-                $DeviceStr = "ramdisk=[$LocateStr]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}"
-            } 
-            # LOCATE MODE (<2GB RAM): Boot trực tiếp từ ổ cứng (Không nạp RAM)
-            else {
-                $DeviceStr = "file=[$LocateStr]\WinSource_PhatTan\sources\boot.wim"
-            }
-
+            # Luôn dùng chế độ RAMDISK nếu RAM > 4GB (An toàn nhất)
+            # Cú pháp chuẩn: [locate]\Path\Wim,{options}
+            
+            $DeviceStr = "ramdisk=[$LocateStr]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}"
+            
             & bcdedit /set $Guid device $DeviceStr
             & bcdedit /set $Guid osdevice $DeviceStr
             & bcdedit /set $Guid path \windows\system32\boot\winload.exe
@@ -216,7 +208,7 @@ wpeutil reboot
             & bcdedit /bootsequence $Guid
             & bcdedit /timeout 5
             
-            Log "-> BOOT OK! Mode: $BootMode"
+            Log "-> BOOT OK! Entry: $Guid"
         }
     } catch {
         Log "BCD ERROR: $_"
@@ -224,7 +216,7 @@ wpeutil reboot
     }
 
     $Form.Cursor = "Default"
-    if ([System.Windows.Forms.MessageBox]::Show("Đã xong! Restart ngay?", "Success", "YesNo") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Đã Fix lỗi I/O! Restart ngay?", "Success", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
 }
