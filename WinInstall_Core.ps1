@@ -116,6 +116,11 @@ $miBoot.Add_Click({
 $GridPart.ContextMenuStrip = $Cms
 
 function Start-Headless-DISM {
+    # 0. CHECK QUYỀN ADMIN
+    if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        [System.Windows.Forms.MessageBox]::Show("Vui lòng chạy Tool bằng quyền Administrator!", "Lỗi Quyền"); return
+    }
+
     if (!$Global:IsoMounted) { [System.Windows.Forms.MessageBox]::Show("Chưa Mount ISO!"); return }
     
     # 1. CHỌN Ổ ĐĨA
@@ -127,27 +132,33 @@ function Start-Headless-DISM {
 
     # Check RAM & Mode
     $RamMB = (Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1MB
-    $BootMode = if ($RamMB -gt 4096) { "RAMDISK" } else { "LOCATE" } # Tăng ngưỡng lên 4GB cho an toàn
+    $BootMode = if ($RamMB -gt 4096) { "RAMDISK" } else { "LOCATE" }
 
     if ([System.Windows.Forms.MessageBox]::Show("CHẾ ĐỘ: $BootMode (Fix I/O)`nSource: $SourceDrive -> Target: $InstallDrive`nTiếp tục?", "Phat Tan PC", "YesNo", "Warning") -ne "Yes") { return }
 
     $Form.Cursor = "WaitCursor"
-    Log "--- KHOI TAO (V18.1 I/O FIX) ---"
+    Log "--- KHOI TAO (V18.2 DEBUG MODE) ---"
 
-    # 2. TẠO MARKER FILE (CÓ NỘI DUNG THỰC)
+    # 2. TẠO FOLDER & FILE MARKER (DÙNG CMD CHO CHẮC)
+    $WinSource = "$SourceDrive\WinSource_PhatTan"
     $RandomID = Get-Random -Min 100000 -Max 999999
     $MarkerFile = "PhatTan_Marker_$RandomID.txt"
-    $WinSource = "$SourceDrive\WinSource_PhatTan"
-    
-    # Clean & Create Dir
-    if (Test-Path $WinSource) { Remove-Item $WinSource -Recurse -Force }
-    New-Item -ItemType Directory -Path "$WinSource\sources" -Force | Out-Null
-    New-Item -ItemType Directory -Path "$WinSource\boot" -Force | Out-Null
+    $MarkerPath = "$WinSource\boot\$MarkerFile"
 
-    # Ghi nội dung vào Marker (Tránh lỗi file 0KB gây 0xc00000e9)
-    $MarkerContent = "PHAT TAN INSTALLER - ID: $RandomID - TIMESTAMP: $(Get-Date)"
-    [IO.File]::WriteAllText("$WinSource\boot\$MarkerFile", $MarkerContent, [System.Text.Encoding]::ASCII)
-    Log "Marker Created: $MarkerFile (Size: $( (Get-Item "$WinSource\boot\$MarkerFile").Length ) bytes)"
+    Log "Creating Directories..."
+    try {
+        if (Test-Path $WinSource) { Remove-Item $WinSource -Recurse -Force }
+        New-Item -ItemType Directory -Path "$WinSource\sources" -Force | Out-Null
+        New-Item -ItemType Directory -Path "$WinSource\boot" -Force | Out-Null
+        Log " -> Folder OK: $WinSource"
+    } catch { Log "ERR: Không tạo được thư mục! (Check Antivirus/Permissions)"; return }
+
+    Log "Creating Marker File..."
+    try {
+        # Ghi nội dung thực vào file bằng .NET (mạnh hơn lệnh echo)
+        [IO.File]::WriteAllText($MarkerPath, "MARKER ID: $RandomID", [System.Text.Encoding]::ASCII)
+        if (Test-Path $MarkerPath) { Log " -> Marker OK: $MarkerFile" } else { throw "File not created" }
+    } catch { Log "ERR: Không tạo được file Marker!"; return }
 
     # 3. CHÉP FILE (COPY KỸ)
     Log "Copying Source Files..."
@@ -164,7 +175,7 @@ function Start-Headless-DISM {
     # 4. TẠO SCRIPT & XML
     $CmdContent = @"
 @echo off
-title PHAT TAN V18.1
+title PHAT TAN V18.2
 for %%d in (C D E F G H I J K L M N) do ( vol %%d: | find "WIN_TARGET" >nul && set TARGET=%%d: )
 if "%TARGET%"=="" exit
 format %TARGET% /fs:ntfs /q /y /v:Windows
@@ -180,8 +191,10 @@ wpeutil reboot
     # 5. CẤU HÌNH BCD (LOCATE MODE VỚI FILE THỰC)
     Log "Configuring BCD..."
     try {
-        # Chuỗi locate trỏ vào file Marker có nội dung
         $LocateStr = "locate=\WinSource_PhatTan\boot\$MarkerFile"
+
+        # Dọn dẹp cũ trước khi tạo mới
+        & bcdedit /delete "{ramdiskoptions}" /f 2>$null
 
         # 5.1 Tạo Ramdisk Options
         & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Ramdisk" /f | Out-Null
@@ -189,13 +202,11 @@ wpeutil reboot
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource_PhatTan\boot\boot.sdi"
 
         # 5.2 Tạo Entry Boot
-        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER (V18.1)" /application osloader
+        $BcdOutput = & bcdedit /create /d "PHAT TAN INSTALLER (V18.2)" /application osloader
         $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($Guid) {
-            # Luôn dùng chế độ RAMDISK nếu RAM > 4GB (An toàn nhất)
-            # Cú pháp chuẩn: [locate]\Path\Wim,{options}
-            
+            # Luôn dùng chế độ RAMDISK nếu RAM > 4GB
             $DeviceStr = "ramdisk=[$LocateStr]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}"
             
             & bcdedit /set $Guid device $DeviceStr
@@ -209,6 +220,9 @@ wpeutil reboot
             & bcdedit /timeout 5
             
             Log "-> BOOT OK! Entry: $Guid"
+            Log "-> Device: $DeviceStr"
+        } else {
+            throw "Không lấy được GUID mới từ BCD!"
         }
     } catch {
         Log "BCD ERROR: $_"
@@ -219,6 +233,7 @@ wpeutil reboot
     if ([System.Windows.Forms.MessageBox]::Show("Đã Fix lỗi I/O! Restart ngay?", "Success", "YesNo") -eq "Yes") {
         Restart-Computer -Force
     }
+}
 }
 # --- EVENTS ---
 $BtnISO.Add_Click({ 
