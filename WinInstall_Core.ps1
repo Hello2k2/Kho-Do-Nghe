@@ -26,7 +26,7 @@ $Theme = @{ Bg=[System.Drawing.Color]::FromArgb(20,20,25); Panel=[System.Drawing
 
 # --- GUI ---
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "CORE INSTALLER V18.3 (SAFE SOURCE BOOT)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
+$Form.Text = "CORE INSTALLER V18.3.0 (SAFE SOURCE BOOT)"; $Form.Size = "1000, 750"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $Theme.Bg; $Form.ForeColor = $Theme.Text; $Form.FormBorderStyle = "FixedSingle"
 
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V18.0"; $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold); $LblTitle.ForeColor = $Theme.Cyan; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 15"; $Form.Controls.Add($LblTitle)
 
@@ -175,7 +175,7 @@ function Start-Headless-DISM {
     # 4. TẠO SCRIPT & XML
     $CmdContent = @"
 @echo off
-title PHAT TAN V18.2
+title PHAT TAN V18.3
 for %%d in (C D E F G H I J K L M N) do ( vol %%d: | find "WIN_TARGET" >nul && set TARGET=%%d: )
 if "%TARGET%"=="" exit
 format %TARGET% /fs:ntfs /q /y /v:Windows
@@ -189,16 +189,15 @@ wpeutil reboot
     [IO.File]::WriteAllText("$WinSource\autounattend.xml", $XmlSmart, [System.Text.Encoding]::UTF8)
 
     # 5. CẤU HÌNH BCD (LOCATE MODE VỚI FILE THỰC)
-    Log "Configuring BCD..."
+Log "Configuring BCD..."
     try {
-        $LocateStr = "locate=\WinSource_PhatTan\boot\$MarkerFile"
-
-        # Dọn dẹp cũ trước khi tạo mới
+        # Xóa option cũ nếu có
         & bcdedit /delete "{ramdiskoptions}" /f 2>$null
 
-        # 5.1 Tạo Ramdisk Options
+        # 5.1 Tạo Ramdisk Options (Dùng thẳng $SourceDrive thay vì locate)
+        # Ví dụ: ramdisksdidevice partition=D:
         & bcdedit /create "{ramdiskoptions}" /d "Phat Tan Ramdisk" /f | Out-Null
-        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice $LocateStr
+        & bcdedit /set "{ramdiskoptions}" ramdisksdidevice "partition=$SourceDrive"
         & bcdedit /set "{ramdiskoptions}" ramdisksdipath "\WinSource_PhatTan\boot\boot.sdi"
 
         # 5.2 Tạo Entry Boot
@@ -206,8 +205,9 @@ wpeutil reboot
         $Guid = ([regex]'{[a-z0-9-]{36}}').Match($BcdOutput).Value
 
         if ($Guid) {
-            # Luôn dùng chế độ RAMDISK nếu RAM > 4GB
-            $DeviceStr = "ramdisk=[$LocateStr]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}"
+            # FIX: Device string dùng trực tiếp [$SourceDrive]
+            # Kết quả sẽ dạng: ramdisk=[D:]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}
+            $DeviceStr = "ramdisk=[$SourceDrive]\WinSource_PhatTan\sources\boot.wim,{ramdiskoptions}"
             
             & bcdedit /set $Guid device $DeviceStr
             & bcdedit /set $Guid osdevice $DeviceStr
@@ -215,9 +215,11 @@ wpeutil reboot
             & bcdedit /set $Guid systemroot "\windows"
             & bcdedit /set $Guid winpe yes
             & bcdedit /set $Guid detecthal yes
+            
+            # QUAN TRỌNG: Chỉ dùng displayorder để hiện menu. 
+            # Bỏ bootsequence để tránh việc lỗi là nó skip luôn menu.
             & bcdedit /displayorder $Guid /addfirst
-            & bcdedit /bootsequence $Guid
-            & bcdedit /timeout 5
+            & bcdedit /timeout 10
             
             Log "-> BOOT OK! Entry: $Guid"
             Log "-> Device: $DeviceStr"
