@@ -47,7 +47,7 @@ $Form.FormBorderStyle = "FixedSingle"
 $Form.MaximizeBox = $false
 
 $LblTitle = New-Object System.Windows.Forms.Label
-$LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V18.3.1"
+$LblTitle.Text = "🚀 WINDOWS ULTIMATE INSTALLER V18.3.2"
 $LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
 $LblTitle.ForeColor = $Theme.Cyan
 $LblTitle.AutoSize = $true
@@ -506,7 +506,7 @@ $BtnMount.Add_Click({
             # fallback scan CDROM drives
             $Drives = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=5"
             foreach ($Drv in $Drives) {
-                if (Test-Path "$($Drv.DeviceID)\sources\install.wim" -or (Test-Path "$($Drv.DeviceID)\sources\install.esd")) {
+                if ((Test-Path "$($Drv.DeviceID)\sources\install.wim") -or (Test-Path "$($Drv.DeviceID)\sources\install.esd")) {
                     $D = $Drv.DeviceID.Replace(":","")
                     break
                 }
