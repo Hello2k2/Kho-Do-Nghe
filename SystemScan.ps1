@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # --- CẤU HÌNH API ---
-$VT_API_KEY = "DA_KEY_CUA_BAN_VAO_DAY" # Thay bằng API Key thật của bạn
+$VT_API_KEY = "3f448ffa66e984ab5e74c9b38f292abf6b1b726bf87e57d6af838366e17618bb" # Thay bằng API Key thật của bạn
 
 # --- GUI SETUP ---
 $SForm = New-Object System.Windows.Forms.Form
