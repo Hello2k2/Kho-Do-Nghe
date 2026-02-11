@@ -1,1 +1,34 @@
-
+{
+  "Windows 11": [
+    { "Name": "Pro", "Key": "W269N-WFGWX-YVC9B-4J6C9-T83GX" },
+    { "Name": "Pro Education", "Key": "6TPGR-8GGHB-YWBH9-BRWW2-WWTR7" },
+    { "Name": "Pro Workstations", "Key": "NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J" },
+    { "Name": "Enterprise", "Key": "NPPR9-FWDCX-D2C8J-H872K-2YT43" },
+    { "Name": "Education", "Key": "NW6C2-QMPVW-D7KKK-3GKT6-VCFB2" },
+    { "Name": "Home", "Key": "TX9XD-98N7V-6WMQ6-BX7FG-H8Q99" },
+    { "Name": "Home Single Language", "Key": "7HNRX-D7KGG-3K4RQ-4WPJ4-YTDFH" }
+  ],
+  "Windows 10": [
+    { "Name": "Pro", "Key": "W269N-WFGWX-YVC9B-4J6C9-T83GX" },
+    { "Name": "Pro Education", "Key": "6TPGR-8GGHB-YWBH9-BRWW2-WWTR7" },
+    { "Name": "Pro Workstations", "Key": "NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J" },
+    { "Name": "Enterprise", "Key": "NPPR9-FWDCX-D2C8J-H872K-2YT43" },
+    { "Name": "Education", "Key": "NW6C2-QMPVW-D7KKK-3GKT6-VCFB2" },
+    { "Name": "Home", "Key": "TX9XD-98N7V-6WMQ6-BX7FG-H8Q99" },
+    { "Name": "Home Single Language", "Key": "7HNRX-D7KGG-3K4RQ-4WPJ4-YTDFH" }
+  ],
+  "Windows LTSC": [
+    { "Name": "Enterprise LTSC 2021", "Key": "M7XTQ-FN8P6-TTKYV-9D4CC-J462D" },
+    { "Name": "Enterprise LTSC 2019", "Key": "M7XTQ-FN8P6-TTKYV-9D4CC-J462D" },
+    { "Name": "Enterprise LTSB 2016", "Key": "DCPHK-NFMTC-H88HX-PFHPY-QJ4BJ" },
+    { "Name": "Enterprise LTSB 2015", "Key": "WNMTR-4C88C-JK8YV-HQ7T2-76DF9" }
+  ],
+  "Windows 8.1": [
+    { "Name": "Pro", "Key": "GCRJD-8NW9H-F2CDX-CCM8D-9D6T9" },
+    { "Name": "Enterprise", "Key": "MHF9N-93478-36Q3K-34666-XQC6W" }
+  ],
+  "Windows 7": [
+    { "Name": "Professional", "Key": "FJ82H-XT6CR-J8D7P-XQJJ2-GPDD4" },
+    { "Name": "Enterprise", "Key": "33PXH-7Y6KF-2VJC9-XBBR8-HVTHH" }
+  ]
+}
