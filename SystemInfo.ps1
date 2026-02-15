@@ -1,4 +1,4 @@
-﻿<#
+<#
     PHAT TAN PC - V22.0 TITAN COMPACT GOD (LAYOUT FIXED)
     Update:
     - LAYOUT: Thiết kế lại dạng Grid 2x2. Disk và Net nằm ngang nhau để giảm chiều cao Form.
