@@ -81,47 +81,52 @@ Mọi bước thực hiện đều tích hợp try/catch, kiểm tra sự tồn 
 
 ---
 
-## Thông tin tác giả
 
-* Người phát triển: Phát Tấn PC
-* Trường học: Cao đẳng Công nghệ Năng lượng Khánh Hòa
-* Số điện thoại liên hệ: 0823883028
-* Triết lý phát triển: Tối ưu hóa hiệu suất, Ổn định tuyệt đối và Tương thích đa nền tảng.
-Các công cụ can thiệp sâu vào hệ thống để xử lý sự cố.
+  
+## Các công cụ can thiệp sâu vào hệ thống để xử lý sự cố.
+
  * Bitlocker Killer: Tự động quét trạng thái mã hóa. Hỗ trợ tắt/mở khóa Bitlocker hoặc Suspend bảo vệ để cài Win/Ghost máy an toàn mà không mất dữ liệu.
  * EFS Decryptor: Tắt tính năng mã hóa file hệ thống (Encrypting File System) - cực kỳ quan trọng khi làm việc trên môi trường WinPE/Windows Lite.
  * Defender Switch: Bật/Tắt Windows Defender và Windows Update chỉ với 1 cú click (Hiệu quả vĩnh viễn).
 
-3. 📦 Silent App Store (Kho phần mềm tự động)
+## 3. 📦 Silent App Store (Kho phần mềm tự động)
+
 Cài đặt phần mềm chưa bao giờ nhanh đến thế.
  * One-Click Install: Menu tích hợp sẵn các phần mềm thiết yếu: Chrome, WinRAR, Unikey, UltraViewer, Office, Zalo...
  * Silent Mode: Tự động cài đặt ngầm (Silent Install), tự động kích hoạt, không hiện popup quảng cáo, không cần bấm "Next" liên tục.
  * Portable Support: Hỗ trợ chạy các tool Portable ngay trên RAM mà không cần xả nén ra ổ cứng.
 
-4. 💿 Deployment Studio (Hỗ trợ cài Win)
+## 4. 💿 Deployment Studio (Hỗ trợ cài Win)
+
  * ISO Downloader: Get link tải file ISO Windows gốc (Clean) trực tiếp từ server Microsoft (tốc độ cao).
  * Boot Master: Hỗ trợ nạp Boot (BCD), sửa lỗi mất boot cho cả 2 chuẩn UEFI (GPT) và Legacy (MBR).
  * USB Maker: Tạo USB Boot cứu hộ đa năng hỗ trợ cả 2 chuẩn boot.
-🛡️ Kiến trúc Failover (Cơ chế chống Crash)
+
+## 🛡️ Kiến trúc Failover (Cơ chế chống Crash)
 Đây là "trái tim" làm nên sự khác biệt của PhattanPC Toolkit.
 Chúng tôi không giả định môi trường của bạn là hoàn hảo. Script được viết với tư duy "Defensive Programming" (Lập trình phòng thủ):
+
 | Ưu tiên | Phương thức | Mô tả kỹ thuật |
 |---|---|---|
 | 🥇 Cấp 1 | CIM (Common Information Model) | Sử dụng Get-CimInstance. Đây là chuẩn hiện đại, nhanh và nhẹ nhất. |
 | 🥈 Cấp 2 | WMI (Windows Management Instrumentation) | Nếu CIM lỗi (thường gặp trên Win 7 hoặc Win Lite), tự động chuyển sang Get-WmiObject. |
 | 🥉 Cấp 3 | Native CLI Parsing | Nếu cả WMI bị hỏng (Class not found), Script sẽ gọi trực tiếp diskpart, bcdedit, wmic và phân tích chuỗi văn bản (Text Parsing) để lấy dữ liệu. |
+
 > ✅ Kết quả: Script KHÔNG BAO GIỜ CRASH dù chạy trên bản Windows bị cắt giảm module nặng nề nhất hay môi trường WinPE thiếu thư viện.
 
 > 
-📋 Yêu cầu hệ thống & Tương thích
+## 📋 Yêu cầu hệ thống & Tương thích
+
  * OS: Windows 7 / 8.1 / 10 / 11 / Server.
  * Môi trường: Windows Full, Windows Lite, WinPE (Anhdv, DLC, NHV...).
  * PowerShell: Phiên bản 2.0 trở lên.
  * Kết nối mạng: Cần Internet cho lần chạy đầu tiên để tải module lõi.
 
-👨‍💻 Thông tin tác giả
+## 👨‍💻 Thông tin tác giả
+
  * Developer: PhattanPC
  * Triết lý: "Tối ưu - Ổn định - Đa nền tảng"
- * Support: https://www.facebook.com/share/189TQ4r4g9/
+* Số điện thoại liên hệ: 0823883028
+* Support: https://www.facebook.com/share/189TQ4r4g9/
 Developed with ❤️ and a lot of coffee.
 
