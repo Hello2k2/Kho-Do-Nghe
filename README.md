@@ -128,5 +128,6 @@ Chúng tôi không giả định môi trường của bạn là hoàn hảo. Scr
  * Triết lý: "Tối ưu - Ổn định - Đa nền tảng"
 * Số điện thoại liên hệ: 0823883028
 * Support: https://www.facebook.com/share/189TQ4r4g9/
-Developed with ❤️ and a lot of coffee.
+
+* Developed with ❤️ and a lot of coffee.
 
