@@ -122,6 +122,6 @@ Chúng tôi không giả định môi trường của bạn là hoàn hảo. Scr
 👨‍💻 Thông tin tác giả
  * Developer: PhattanPC
  * Triết lý: "Tối ưu - Ổn định - Đa nền tảng"
- * Support: [Link Facebook/Zalo của bạn]
+ * Support: https://www.facebook.com/share/189TQ4r4g9/
 Developed with ❤️ and a lot of coffee.
 
