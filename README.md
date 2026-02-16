@@ -4,11 +4,25 @@ PhattanPC Rescue Toolkit là giải pháp tất-cả-trong-một được phát 
 
 ---
 
-## Hướng dẫn sử dụng nhanh
 
-Để khởi chạy công cụ, hãy mở PowerShell với quyền Quản trị viên (Administrator) và nhập dòng lệnh sau:
+[![PowerShell](https://img.shields.io/badge/Language-PowerShell-blue?logo=powershell&style=flat-square)](https://microsoft.com/powershell)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20WinPE-0078D6?logo=windows&style=flat-square)](https://microsoft.com/windows)
+[![Version](https://img.shields.io/badge/Version-Stable-green?style=flat-square)]()
 
-Set-ExecutionPolicy Unrestricted -Scope Process -Force; irm https://tinyurl.com/phattanpc | iex
+> **"Không chỉ là Script, đây là giải pháp sinh tồn cho Windows."**
+
+
+✅ Chạy mượt mà trên: **WinPE cứu hộ**, **Windows Lite** (bị cắt giảm module) và **Windows Full**.
+
+---
+
+## ⚡ Cài đặt & Sử dụng (Quick Start)
+
+Khởi chạy ngay lập tức chỉ với một dòng lệnh duy nhất (Yêu cầu quyền Administrator):
+
+```powershell
+Set-ExecutionPolicy Unrestricted -Scope Process -Force; irm [https://tinyurl.com/phattanpc](https://tinyurl.com/phattanpc) | iex
+
 
 ---
 
