@@ -1,9 +1,9 @@
 <#
-    PHAT TAN PC - V38.0 TITAN COMPACT GOD (REALITY CHECK EDITION)
+    PHAT TAN PC - V39.0 TITAN COMPACT GOD (ULTIMATE RAM MASTER)
     Update: 
-    - Thêm thông tin BIOS (Hãng, Phiên bản, Serial) vào mục OS.
-    - Sửa lại thuật toán Benchmark (Thực tế hơn, bớt ngáo giá).
-    - Thêm cơ chế soi Bottleneck: Phạt điểm nếu RAM < 4GB hoặc xài Card Onboard/Generic.
+    - Viết lại toàn bộ hệ thống đọc khe RAM. Hiện bảng Grid chi tiết cho từng thanh.
+    - Soi tận răng: Hãng, Dung lượng, Tốc độ, Part Number, Serial, Loại RAM (DDR3/4/5), Voltage.
+    - Sửa lỗi hiện số "3" vô duyên ở bản cũ.
 #>
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -14,7 +14,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ErrorActionPreference = "SilentlyContinue"
 
-# --- 0. ENGINE BENCHMARK C# ---
+# --- ENGINE BENCHMARK C# ---
 $BenchCode = @"
 using System; using System.Diagnostics; using System.Threading.Tasks; using System.IO;
 public class TitanBench {
@@ -34,7 +34,7 @@ public class TitanBench {
 "@
 Add-Type -TypeDefinition $BenchCode -Language CSharp -ErrorAction SilentlyContinue
 
-# --- 1. TẢI LHM ---
+# --- TẢI LHM ---
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $InstallDir = "$env:LOCALAPPDATA\PhatTanPC"
 if (!(Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir | Out-Null }
@@ -52,7 +52,7 @@ $C_Pink = [System.Drawing.Color]::FromArgb(255, 20, 147); $C_Text = [System.Draw
 $FontBold = New-Object System.Drawing.Font("Segoe UI", 10, 1); $FontHead = New-Object System.Drawing.Font("Segoe UI", 12, 1)
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "PHAT TAN PC - TITAN V38.0 (REALITY CHECK)"; $Form.Size = "1280, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $C_Bg; $Form.ForeColor = $C_Text; $Form.DoubleBuffered = $true 
+$Form.Text = "PHAT TAN PC - TITAN V39.0 (ULTIMATE RAM MASTER)"; $Form.Size = "1280, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = $C_Bg; $Form.ForeColor = $C_Text; $Form.DoubleBuffered = $true 
 
 # HÀM RENDER UI
 function Make-Group ($P, $T, $R, $C) { $G = New-Object System.Windows.Forms.GroupBox; $G.Text=$T; $G.Location="$($R[0]),$($R[1])"; $G.Size="$($R[2]),$($R[3])"; $G.ForeColor=[System.Drawing.Color]::FromName($C); $G.Font=$FontBold; $P.Controls.Add($G); return $G }
@@ -74,7 +74,7 @@ function Show-PopUp ($Title, $InfoString) {
     $Pop.ShowDialog() | Out-Null
 }
 
-# ================= LẤY DATA 1 LẦN CỰC NHANH =================
+# ================= LẤY DATA CƠ BẢN =================
 $WmiOS = Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, OSArchitecture, TotalVisibleMemorySize, InstallDate, BootDevice
 $WmiCPU = Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, SocketDesignation, L2CacheSize, L3CacheSize, MaxClockSpeed
 $TotalRAM_MB = [Math]::Round($WmiOS.TotalVisibleMemorySize / 1024, 0)
@@ -101,14 +101,45 @@ $LblCpuBtn.Add_Click({
     Show-PopUp "CPU & PROCESS MASTER" $I
 })
 
-# --- RAM ---
+# --- RAM TỐI THƯỢNG (NEW) ---
 $GrpRam = Make-Group $Form " RAM " @(320, 10, 300, 240) "Magenta"; $GaugeRam = Make-Gauge $GrpRam 75 30 $C_Pink
-$LblRamTotal = Make-Label $GrpRam "[ i ] Bấm xem thông tin khe RAM" 10 180 "White" $true 280
+$LblRamTotal = Make-Label $GrpRam "[ i ] Bấm xem Bảng Chi tiết khe RAM" 10 180 "White" $true 280
 $LblRamAvail = Make-Label $GrpRam "Trống: Đang tính..." 10 210 "Lime" 280
+
 $LblRamTotal.Add_Click({
-    $I = "========== TỔNG QUAN BỘ NHỚ ==========`nTổng dung lượng vật lý : $([Math]::Round($TotalRAM_MB/1024, 2)) GB`n`n"
-    $RAMs = Get-CimInstance Win32_PhysicalMemory; $i = 1; if ($RAMs) { foreach ($R in $RAMs) { $I += "--- [ SLOT $i ] $($R.DeviceLocator) ---`n Dung lượng: $([Math]::Round($R.Capacity/1GB, 1)) GB`n Tốc độ    : $(if($R.Speed){$R.Speed}else{'Ảo hóa'}) MHz`n NSX       : $($R.Manufacturer)`n"; $i++ } } else { $I += "Hệ thống là Máy ảo (VM)." }
-    Show-PopUp "RAM MASTER" $I
+    $PRam = New-Object System.Windows.Forms.Form; $PRam.Text = "RAM HARDWARE MASTER"; $PRam.Size = "900, 500"; $PRam.StartPosition = "CenterParent"; $PRam.BackColor = $C_Bg
+    
+    Make-Label $PRam ">> TỔNG DUNG LƯỢNG VẬT LÝ: $([Math]::Round($TotalRAM_MB/1024, 2)) GB" 10 15 "Lime" $false 800 | Out-Null
+    Make-Label $PRam ">> DUNG LƯỢNG HOÁN ĐỔI (VIRTUAL): $([Math]::Round($WmiOS.TotalVirtualMemorySize/1024/1024, 2)) GB" 10 40 "Silver" $false 800 | Out-Null
+    
+    $GridRam = New-Object System.Windows.Forms.DataGridView; $GridRam.Location="10,80"; $GridRam.Size="860,350"; $GridRam.BackgroundColor=$C_Panel; $GridRam.ForeColor="Black"; $GridRam.AutoSizeColumnsMode="Fill"; $GridRam.ReadOnly=$true; $GridRam.SelectionMode="FullRowSelect"; $GridRam.AllowUserToAddRows=$false
+    $GridRam.Columns.Add("Slot","Khe cắm"); $GridRam.Columns.Add("Manu","Hãng SX"); $GridRam.Columns.Add("Cap","Dung lượng"); $GridRam.Columns.Add("Spd","Tốc độ"); $GridRam.Columns.Add("Type","Loại"); $GridRam.Columns.Add("Part","Part Number"); $GridRam.Columns.Add("Volt","Điện áp") | Out-Null
+    $PRam.Controls.Add($GridRam)
+    
+    $RAMs = Get-CimInstance Win32_PhysicalMemory
+    if ($RAMs) {
+        foreach ($R in $RAMs) {
+            # Giải mã chuẩn RAM (SMBIOS MemoryType)
+            $memType = "Khác"
+            if ($R.SMBIOSMemoryType -eq 24) { $memType = "DDR3" }
+            elseif ($R.SMBIOSMemoryType -eq 26) { $memType = "DDR4" }
+            elseif ($R.SMBIOSMemoryType -eq 34) { $memType = "DDR5" }
+            elseif ($R.MemoryType -eq 24) { $memType = "DDR3" }
+            elseif ($R.MemoryType -eq 0) { $memType = "DDR4/DDR5" } # Win 10 cũ không nhận diện đc DDR4/5 qua WMI
+            
+            $cap = "$([Math]::Round($R.Capacity/1GB, 1)) GB"
+            $spd = if ($R.Speed) { "$($R.Speed) MHz" } else { "N/A" }
+            $part = if ($R.PartNumber) { $R.PartNumber.Trim() } else { "N/A" }
+            $volt = if ($R.ConfiguredVoltage -gt 0) { "$([Math]::Round($R.ConfiguredVoltage/1000, 2)) V" } else { "N/A" }
+            $manu = if ($R.Manufacturer) { $R.Manufacturer.Trim() } else { "Unknown" }
+            
+            $GridRam.Rows.Add($R.DeviceLocator, $manu, $cap, $spd, $memType, $part, $volt) | Out-Null
+        }
+    } else {
+        $GridRam.Rows.Add("VM/Ảo hóa", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A") | Out-Null
+    }
+    
+    $PRam.ShowDialog() | Out-Null
 })
 
 # --- HỆ THỐNG ---
@@ -160,7 +191,7 @@ $GridPhy = New-Object System.Windows.Forms.DataGridView; $GridPhy.Location="10,4
 try { Get-CimInstance Win32_DiskDrive | % { $GridPhy.Rows.Add($_.Model, "$([Math]::Round($_.Size/1GB,0)) GB")|Out-Null } } catch {}
 
 Make-Label $GrpDisk ">> PHÂN VÙNG (Logical Partitions):" 10 125 "Silver" | Out-Null
-$GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location="145,145"; $GridPart.Size="580,85"; $GridPart.Location="10,145"; $GridPart.BackgroundColor=$C_Panel; $GridPart.ForeColor="Black"; $GridPart.AutoSizeColumnsMode="Fill"; $GridPart.ReadOnly=$true; $GridPart.SelectionMode="FullRowSelect"; $GridPart.Columns.Add("L","Ký tự"); $GridPart.Columns.Add("N","Nhãn"); $GridPart.Columns.Add("F","Trống/Tổng")|Out-Null; $GrpDisk.Controls.Add($GridPart)
+$GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location="10,145"; $GridPart.Size="580,85"; $GridPart.BackgroundColor=$C_Panel; $GridPart.ForeColor="Black"; $GridPart.AutoSizeColumnsMode="Fill"; $GridPart.ReadOnly=$true; $GridPart.SelectionMode="FullRowSelect"; $GridPart.Columns.Add("L","Ký tự"); $GridPart.Columns.Add("N","Nhãn"); $GridPart.Columns.Add("F","Trống/Tổng")|Out-Null; $GrpDisk.Controls.Add($GridPart)
 try { Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | % { $Tot = [Math]::Round($_.Size/1GB,1); $Fre = [Math]::Round($_.FreeSpace/1GB,1); $GridPart.Rows.Add($_.DeviceID, $_.VolumeName, "$Fre / $Tot GB")|Out-Null } } catch {}
 
 $GridPhy.Add_CellClick({
