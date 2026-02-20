@@ -1,11 +1,11 @@
 <#
-  WININSTALL CORE V23.7 (TRINITY UUID & AUTOMATION ENGINE)
+  WININSTALL CORE V23.8 (ULTIMATE 3-MODE ENGINE)
   Author: Phat Tan PC
 
-  UPDATE V23.7:
-  1. Thêm Tùy biến OOBE: Tự tạo Local Admin, bỏ qua đăng nhập Microsoft Account, setup sẵn Keyboard/Region.
-  2. Thêm Anti-Win 11: Tự động ghi BypassNRO và LabConfig (TPM 2.0, CPU, SecureBoot) vào Registry Offline.
-  3. Nút "Run Setup.exe" cũng được tiêm sẵn thuốc giải Win 11 vào RAM WinPE trước khi chạy.
+  UPDATE V23.8:
+  1. Giao diện chia 3 Mode rõ ràng: Smart Deploy, Manual, và WinToHDD.
+  2. Mode WinToHDD: Tự động tải, tự động tiêm thuốc Anti-Win11 vào RAM WinPE trước khi gọi WinToHDD.
+  3. Cơ chế tạo bộ khung OOBE Bypass ($OEM$) để WinToHDD cũng có thể ăn được thuốc bỏ qua MS Account.
 #>
 
 # --- 1. FORCE ADMIN ---
@@ -21,6 +21,7 @@ $Global:SelBootUUID = $null
 $Global:AutoTargetUUID = $null
 $Global:IsoMounted  = $null
 $Global:IsWinPE     = (Test-Path "X:\Windows\System32")
+$Global:OemDir      = "$env:TEMP\WinToHDD_OEM_Bypass"
 
 # --- HELPER FUNCTIONS ---
 function Log-Write { 
@@ -35,12 +36,12 @@ function Log-Write {
 Add-Type -AssemblyName System.Windows.Forms
 
 $Form = New-Object System.Windows.Forms.Form
-$Form.Text = "WININSTALL CORE V23.7 (AUTO-BYPASS ENGINE)"
+$Form.Text = "WININSTALL CORE V23.8 (3-MODE BYPASS ENGINE)"
 $Form.BackColor = "30, 30, 30"; $Form.ForeColor = "White"
-$Form.Size = "1100, 720"; $Form.StartPosition = "CenterScreen"; $Form.AutoScroll = $true
+$Form.Size = "1100, 750"; $Form.StartPosition = "CenterScreen"; $Form.AutoScroll = $true
 
 $LblTitle = New-Object System.Windows.Forms.Label
-$LblTitle.Text = "🚀 WININSTALL V23.7 (ANTI-WIN11 & OOBE BYPASS)"
+$LblTitle.Text = "🚀 WININSTALL V23.8 (ULTIMATE 3 MODES)"
 $LblTitle.Font = New-Object System.Drawing.Font("Consolas", 18, [System.Drawing.FontStyle]::Bold)
 $LblTitle.ForeColor = "Cyan"; $LblTitle.AutoSize = $true; $LblTitle.Location = "20, 10"
 $Form.Controls.Add($LblTitle)
@@ -54,36 +55,41 @@ $TxtISO = New-Object System.Windows.Forms.TextBox; $TxtISO.Location="120,18"; $T
 $BtnMount = New-Object System.Windows.Forms.Button; $BtnMount.Text="MOUNT"; $BtnMount.Location="630,15"; $BtnMount.Size="80,30"; $BtnMount.FlatStyle="Flat"; $BtnMount.BackColor="DarkGreen"; $PnlSource.Controls.Add($BtnMount)
 $CbIndex = New-Object System.Windows.Forms.ComboBox; $CbIndex.Location="720,18"; $CbIndex.Size="300,30"; $CbIndex.DropDownStyle="DropDownList"; $CbIndex.BackColor="30, 30, 30"; $CbIndex.ForeColor="White"; $PnlSource.Controls.Add($CbIndex)
 
-# 2. DISK MAP & OPTIONS
-$PnlLeft = New-Object System.Windows.Forms.Panel; $PnlLeft.Location="20,120"; $PnlLeft.Size="600,420"; $PnlLeft.BackColor="45, 45, 48"; $PnlLeft.BorderStyle="FixedSingle"; $Form.Controls.Add($PnlLeft)
-$GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location="10,10"; $GridPart.Size="580,250"; $GridPart.BackgroundColor="30, 30, 30"; $GridPart.ForeColor="Black"; $GridPart.RowHeadersVisible=$false; $GridPart.SelectionMode="FullRowSelect"; $GridPart.ReadOnly=$true; $GridPart.AutoSizeColumnsMode="Fill"
+# 2. DISK MAP & VIP OPTIONS
+$PnlLeft = New-Object System.Windows.Forms.Panel; $PnlLeft.Location="20,120"; $PnlLeft.Size="600,450"; $PnlLeft.BackColor="45, 45, 48"; $PnlLeft.BorderStyle="FixedSingle"; $Form.Controls.Add($PnlLeft)
+$GridPart = New-Object System.Windows.Forms.DataGridView; $GridPart.Location="10,10"; $GridPart.Size="580,260"; $GridPart.BackgroundColor="30, 30, 30"; $GridPart.ForeColor="Black"; $GridPart.RowHeadersVisible=$false; $GridPart.SelectionMode="FullRowSelect"; $GridPart.ReadOnly=$true; $GridPart.AutoSizeColumnsMode="Fill"
 [void]$GridPart.Columns.Add("Disk","Disk"); [void]$GridPart.Columns.Add("Ltr","Let"); [void]$GridPart.Columns.Add("Label","Label"); [void]$GridPart.Columns.Add("Size","Size (GB)"); [void]$GridPart.Columns.Add("FS","FS"); [void]$GridPart.Columns.Add("Role","Vai Trò")
 [void]$GridPart.Columns.Add("UUID","UUID"); $GridPart.Columns["UUID"].Visible = $false
 $PnlLeft.Controls.Add($GridPart)
 
-$BtnScan = New-Object System.Windows.Forms.Button; $BtnScan.Text="RE-SCAN DRIVES (TRINITY MODE)"; $BtnScan.Location="10,270"; $BtnScan.Size="580,30"; $BtnScan.FlatStyle="Flat"; $BtnScan.BackColor="DodgerBlue"; $PnlLeft.Controls.Add($BtnScan)
+$BtnScan = New-Object System.Windows.Forms.Button; $BtnScan.Text="RE-SCAN DRIVES (TRINITY MODE)"; $BtnScan.Location="10,280"; $BtnScan.Size="580,30"; $BtnScan.FlatStyle="Flat"; $BtnScan.BackColor="DodgerBlue"; $PnlLeft.Controls.Add($BtnScan)
 
-# BẢNG TÙY CHỌN (NÂNG CẤP V23.7)
-$GrpOpt = New-Object System.Windows.Forms.GroupBox; $GrpOpt.Text=" VIP OPTIONS (TỰ ĐỘNG HÓA) "; $GrpOpt.Location="10,310"; $GrpOpt.Size="580,100"; $GrpOpt.ForeColor="Lime"; $PnlLeft.Controls.Add($GrpOpt)
+$GrpOpt = New-Object System.Windows.Forms.GroupBox; $GrpOpt.Text=" VIP OPTIONS (Áp dụng cho cả 3 Mode) "; $GrpOpt.Location="10,320"; $GrpOpt.Size="580,110"; $GrpOpt.ForeColor="Lime"; $PnlLeft.Controls.Add($GrpOpt)
 $ChkGameMode = New-Object System.Windows.Forms.CheckBox; $ChkGameMode.Text="Tắt Game DVR (Chống Drop FPS)"; $ChkGameMode.Location="20,25"; $ChkGameMode.AutoSize=$true; $ChkGameMode.Checked=$true; $ChkGameMode.ForeColor="White"; $GrpOpt.Controls.Add($ChkGameMode)
-$ChkOobe = New-Object System.Windows.Forms.CheckBox; $ChkOobe.Text="Bypass OOBE (Tự tạo Local Admin, Bỏ qua Setup Bàn phím/Ngôn ngữ)"; $ChkOobe.Location="20,48"; $ChkOobe.AutoSize=$true; $ChkOobe.Checked=$true; $ChkOobe.ForeColor="Yellow"; $GrpOpt.Controls.Add($ChkOobe)
-$ChkWin11 = New-Object System.Windows.Forms.CheckBox; $ChkWin11.Text="Anti-Win 11 (Bypass TPM 2.0, SecureBoot, RAM, Bỏ qua Bắt buộc Wifi)"; $ChkWin11.Location="20,71"; $ChkWin11.AutoSize=$true; $ChkWin11.Checked=$true; $ChkWin11.ForeColor="Cyan"; $GrpOpt.Controls.Add($ChkWin11)
+$ChkOobe = New-Object System.Windows.Forms.CheckBox; $ChkOobe.Text="Bypass OOBE (Tự tạo Local Admin, Bỏ qua Setup Bàn phím/Ngôn ngữ/Mạng)"; $ChkOobe.Location="20,50"; $ChkOobe.AutoSize=$true; $ChkOobe.Checked=$true; $ChkOobe.ForeColor="Yellow"; $GrpOpt.Controls.Add($ChkOobe)
+$ChkWin11 = New-Object System.Windows.Forms.CheckBox; $ChkWin11.Text="Anti-Win 11 (Bypass TPM 2.0, SecureBoot, RAM)"; $ChkWin11.Location="20,75"; $ChkWin11.AutoSize=$true; $ChkWin11.Checked=$true; $ChkWin11.ForeColor="Cyan"; $GrpOpt.Controls.Add($ChkWin11)
 
-# 3. ACTIONS
-$PnlAct = New-Object System.Windows.Forms.Panel; $PnlAct.Location="640,120"; $PnlAct.Size="420,420"; $PnlAct.BackColor="45, 45, 48"; $PnlAct.BorderStyle="FixedSingle"; $Form.Controls.Add($PnlAct)
-$GrpAuto = New-Object System.Windows.Forms.GroupBox; $GrpAuto.Text=" MODE 1: SMART DEPLOY (CÀI THẲNG) "; $GrpAuto.Location="10,10"; $GrpAuto.Size="400,110"; $GrpAuto.ForeColor="Orange"; $PnlAct.Controls.Add($GrpAuto)
-$BtnAutoRun = New-Object System.Windows.Forms.Button; $BtnAutoRun.Text="🚀 CÀI ĐẶT TRỰC TIẾP (LIVE GUI)"; $BtnAutoRun.Location="10,30"; $BtnAutoRun.Size="380,60"; $BtnAutoRun.FlatStyle="Flat"; $BtnAutoRun.BackColor="Orange"; $BtnAutoRun.ForeColor="Black"; $BtnAutoRun.Font = New-Object System.Drawing.Font("Segoe UI", 11, 1); $GrpAuto.Controls.Add($BtnAutoRun)
+# 3. ACTIONS (3 MODES)
+$PnlAct = New-Object System.Windows.Forms.Panel; $PnlAct.Location="640,120"; $PnlAct.Size="420,450"; $PnlAct.BackColor="45, 45, 48"; $PnlAct.BorderStyle="FixedSingle"; $Form.Controls.Add($PnlAct)
 
-$GrpMan = New-Object System.Windows.Forms.GroupBox; $GrpMan.Text=" MODE 2: MANUAL "; $GrpMan.Location="10,130"; $GrpMan.Size="400,180"; $GrpMan.ForeColor="Cyan"; $PnlAct.Controls.Add($GrpMan)
+# MODE 1
+$GrpAuto = New-Object System.Windows.Forms.GroupBox; $GrpAuto.Text=" MODE 1: SMART DEPLOY (CÀI THẲNG) "; $GrpAuto.Location="10,10"; $GrpAuto.Size="400,100"; $GrpAuto.ForeColor="Orange"; $PnlAct.Controls.Add($GrpAuto)
+$BtnAutoRun = New-Object System.Windows.Forms.Button; $BtnAutoRun.Text="🚀 CÀI ĐẶT TRỰC TIẾP (LIVE GUI)"; $BtnAutoRun.Location="10,25"; $BtnAutoRun.Size="380,60"; $BtnAutoRun.FlatStyle="Flat"; $BtnAutoRun.BackColor="Orange"; $BtnAutoRun.ForeColor="Black"; $BtnAutoRun.Font = New-Object System.Drawing.Font("Segoe UI", 11, 1); $GrpAuto.Controls.Add($BtnAutoRun)
+
+# MODE 2
+$GrpMan = New-Object System.Windows.Forms.GroupBox; $GrpMan.Text=" MODE 2: MANUAL "; $GrpMan.Location="10,120"; $GrpMan.Size="400,160"; $GrpMan.ForeColor="Cyan"; $PnlAct.Controls.Add($GrpMan)
 $LblSelWin = New-Object System.Windows.Forms.Label; $LblSelWin.Text="Target: [None]"; $LblSelWin.Location="10,25"; $LblSelWin.AutoSize=$true; $LblSelWin.ForeColor="Yellow"; $GrpMan.Controls.Add($LblSelWin)
 $LblSelBoot = New-Object System.Windows.Forms.Label; $LblSelBoot.Text="Boot: [None]"; $LblSelBoot.Location="10,50"; $LblSelBoot.AutoSize=$true; $LblSelBoot.ForeColor="Magenta"; $GrpMan.Controls.Add($LblSelBoot)
 $ChkFmt = New-Object System.Windows.Forms.CheckBox; $ChkFmt.Text="Format Target"; $ChkFmt.Location="200,25"; $ChkFmt.AutoSize=$true; $ChkFmt.Checked=$true; $ChkFmt.ForeColor="White"; $GrpMan.Controls.Add($ChkFmt)
-$BtnManRun = New-Object System.Windows.Forms.Button; $BtnManRun.Text="🔥 CHẠY MANUAL"; $BtnManRun.Location="10,80"; $BtnManRun.Size="380,60"; $BtnManRun.FlatStyle="Flat"; $BtnManRun.BackColor="DarkRed"; $BtnManRun.ForeColor="White"; $GrpMan.Controls.Add($BtnManRun)
+$BtnManRun = New-Object System.Windows.Forms.Button; $BtnManRun.Text="🔥 CHẠY MANUAL DEPLOY"; $BtnManRun.Location="10,80"; $BtnManRun.Size="380,60"; $BtnManRun.FlatStyle="Flat"; $BtnManRun.BackColor="DarkRed"; $BtnManRun.ForeColor="White"; $GrpMan.Controls.Add($BtnManRun)
 
-$BtnWinToHDD = New-Object System.Windows.Forms.Button; $BtnWinToHDD.Text="Download WinToHDD"; $BtnWinToHDD.Location="10,360"; $BtnWinToHDD.Size="190,40"; $BtnWinToHDD.FlatStyle="Flat"; $BtnWinToHDD.BackColor="DimGray"; $PnlAct.Controls.Add($BtnWinToHDD)
-$BtnSetup = New-Object System.Windows.Forms.Button; $BtnSetup.Text="Run Setup.exe (Patched)"; $BtnSetup.Location="210,360"; $BtnSetup.Size="190,40"; $BtnSetup.FlatStyle="Flat"; $BtnSetup.BackColor="DimGray"; $BtnSetup.ForeColor="Cyan"; $PnlAct.Controls.Add($BtnSetup)
+# MODE 3 (WINTOHDD)
+$GrpHDD = New-Object System.Windows.Forms.GroupBox; $GrpHDD.Text=" MODE 3: WINTOHDD (Bypass Included) "; $GrpHDD.Location="10,290"; $GrpHDD.Size="400,140"; $GrpHDD.ForeColor="HotPink"; $PnlAct.Controls.Add($GrpHDD)
+$LblHddInfo = New-Object System.Windows.Forms.Label; $LblHddInfo.Text="Dùng tool hãng thứ 3. Sẽ tự động tải và kích hoạt`nkịch bản Bypass trước khi mở phần mềm."; $LblHddInfo.Location="10,25"; $LblHddInfo.AutoSize=$true; $LblHddInfo.ForeColor="Silver"; $GrpHDD.Controls.Add($LblHddInfo)
+$BtnWinToHDD = New-Object System.Windows.Forms.Button; $BtnWinToHDD.Text="🛸 KHỞI ĐỘNG WINTOHDD"; $BtnWinToHDD.Location="10,65"; $BtnWinToHDD.Size="180,60"; $BtnWinToHDD.FlatStyle="Flat"; $BtnWinToHDD.BackColor="Purple"; $BtnWinToHDD.ForeColor="White"; $BtnWinToHDD.Font = New-Object System.Drawing.Font("Segoe UI", 10, 1); $GrpHDD.Controls.Add($BtnWinToHDD)
+$BtnSetup = New-Object System.Windows.Forms.Button; $BtnSetup.Text="Run Setup.exe"; $BtnSetup.Location="210,65"; $BtnSetup.Size="180,60"; $BtnSetup.FlatStyle="Flat"; $BtnSetup.BackColor="DimGray"; $GrpHDD.Controls.Add($BtnSetup)
 
-$Global:TxtLog = New-Object System.Windows.Forms.TextBox; $Global:TxtLog.Location="20,550"; $Global:TxtLog.Size="1040,100"; $Global:TxtLog.Multiline=$true; $Global:TxtLog.BackColor="Black"; $Global:TxtLog.ForeColor="Lime"; $Global:TxtLog.ReadOnly=$true; $Global:TxtLog.ScrollBars="Vertical"; $Global:TxtLog.Font = New-Object System.Drawing.Font("Consolas", 9); $Form.Controls.Add($Global:TxtLog)
+$Global:TxtLog = New-Object System.Windows.Forms.TextBox; $Global:TxtLog.Location="20,580"; $Global:TxtLog.Size="1040,110"; $Global:TxtLog.Multiline=$true; $Global:TxtLog.BackColor="Black"; $Global:TxtLog.ForeColor="Lime"; $Global:TxtLog.ReadOnly=$true; $Global:TxtLog.ScrollBars="Vertical"; $Global:TxtLog.Font = New-Object System.Drawing.Font("Consolas", 9); $Form.Controls.Add($Global:TxtLog)
 
 $Global:DeploySeconds = 0
 $Global:TimerDeploy = New-Object System.Windows.Forms.Timer; $Global:TimerDeploy.Interval = 1000
@@ -179,15 +185,15 @@ $BtnAutoRun.Add_Click({
     $SourcePath = $Global:SelSource
     $ImageIdx = $CbIndex.SelectedIndex + 1
 
-    $OsUUID = (Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'").VolumeSerialNumber
-    $TargetSerial = (Get-WmiObject Win32_Volume -Filter "DeviceID='$($Global:AutoTargetUUID -replace '\\','\\')'").SerialNumber
+    $OsUUID = try { (Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'").VolumeSerialNumber } catch { $null }
+    $TargetSerial = try { (Get-WmiObject Win32_Volume -Filter "DeviceID='$($Global:AutoTargetUUID -replace '\\','\\')'").SerialNumber } catch { $null }
     if (-not $Global:IsWinPE -and $OsUUID -and ($OsUUID -eq $TargetSerial)) {
         [System.Windows.Forms.MessageBox]::Show("LỖI CHÍ MẠNG: Đang chạy tool trên Windows sống. Không được Format tự sát!", "BẢO VỆ TỰ SÁT", 0, 16); return
     }
 
     if ([System.Windows.Forms.MessageBox]::Show("Dữ liệu trên phân vùng đích sẽ bị FORMAT SẠCH SẼ! Khởi chạy tiến trình?", "XÁC NHẬN FORMAT", 4, 48) -ne "Yes") { return }
 
-    $BtnAutoRun.Enabled = $false; $BtnManRun.Enabled = $false
+    $BtnAutoRun.Enabled = $false; $BtnManRun.Enabled = $false; $BtnWinToHDD.Enabled = $false
     $Global:DeploySeconds = 0; $Global:TimerDeploy.Start()
     
     $Global:SyncUI = [hashtable]::Synchronized(@{ LogBox = $Global:TxtLog; Btn = $BtnAutoRun; Timer = $Global:TimerDeploy; TargetUUID = $Global:AutoTargetUUID })
@@ -264,14 +270,10 @@ $BtnAutoRun.Add_Click({
             cmd /c "reg load HKLM\OFFLINESYS $TargetDrive\Windows\System32\config\SYSTEM >nul 2>&1"
             
             if ($ChkGameMode) {
-                Write-GuiLog "-> Tắt Xbox Game DVR..."
                 cmd /c "reg add `"HKLM\OFFLINESOFT\Microsoft\PolicyManager\default\ApplicationManagement\AllowGameDVR`" /v value /t REG_DWORD /d 0 /f >nul 2>&1"
             }
             if ($ChkWin11) {
-                Write-GuiLog "-> Cấy Bypass Win 11 (BypassNRO - Bỏ qua Wifi/MS Account)..."
                 cmd /c "reg add `"HKLM\OFFLINESOFT\Microsoft\Windows\CurrentVersion\OOBE`" /v BypassNRO /t REG_DWORD /d 1 /f >nul 2>&1"
-                
-                Write-GuiLog "-> Cấy LabConfig Bypass TPM/SecureBoot vào Hệ điều hành..."
                 cmd /c "reg add `"HKLM\OFFLINESYS\Setup\LabConfig`" /v BypassTPMCheck /t REG_DWORD /d 1 /f >nul 2>&1"
                 cmd /c "reg add `"HKLM\OFFLINESYS\Setup\LabConfig`" /v BypassSecureBootCheck /t REG_DWORD /d 1 /f >nul 2>&1"
                 cmd /c "reg add `"HKLM\OFFLINESYS\Setup\LabConfig`" /v BypassRAMCheck /t REG_DWORD /d 1 /f >nul 2>&1"
@@ -282,45 +284,13 @@ $BtnAutoRun.Add_Click({
             cmd /c "reg unload HKLM\OFFLINESYS >nul 2>&1"
         }
 
-        # 4. UNATTEND OOBE (Tự động Setup phím/vùng/Admin)
+        # 4. UNATTEND OOBE
         if ($ChkOobe) {
-            Write-GuiLog "=> [4/6] Tạo Unattend bỏ qua cài đặt Bàn phím/Ngôn ngữ và tạo Admin..."
+            Write-GuiLog "=> [4/6] Tạo Unattend bỏ qua cài đặt OOBE..."
             $Panther = "$TargetDrive\Windows\Panther"; if (!(Test-Path $Panther)) { New-Item -ItemType Directory -Path $Panther -Force | Out-Null }
-            $XmlOobe = @"
-<?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend">
-    <settings pass="oobeSystem">
-        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <InputLocale>0409:00000409</InputLocale>
-            <SystemLocale>en-US</SystemLocale>
-            <UILanguage>en-US</UILanguage>
-            <UserLocale>en-US</UserLocale>
-        </component>
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <OOBE>
-                <HideEULAPage>true</HideEULAPage>
-                <HideLocalAccountScreen>true</HideLocalAccountScreen>
-                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
-                <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
-                <ProtectYourPC>3</ProtectYourPC>
-            </OOBE>
-            <UserAccounts>
-                <LocalAccounts>
-                    <LocalAccount wcm:action="add">
-                        <Name>Admin</Name>
-                        <DisplayName>Admin</DisplayName>
-                        <Group>Administrators</Group>
-                        <Password><Value></Value><PlainText>true</PlainText></Password>
-                    </LocalAccount>
-                </LocalAccounts>
-            </UserAccounts>
-        </component>
-    </settings>
-</unattend>
-"@
+            $XmlOobe = "<?xml version='1.0' encoding='utf-8'?><unattend xmlns='urn:schemas-microsoft-com:unattend'><settings pass='oobeSystem'><component name='Microsoft-Windows-International-Core' processorArchitecture='amd64' publicKeyToken='31bf3856ad364e35' language='neutral' versionScope='nonSxS'><InputLocale>0409:00000409</InputLocale><SystemLocale>en-US</SystemLocale><UILanguage>en-US</UILanguage><UserLocale>en-US</UserLocale></component><component name='Microsoft-Windows-Shell-Setup' processorArchitecture='amd64' publicKeyToken='31bf3856ad364e35' language='neutral' versionScope='nonSxS'><OOBE><HideEULAPage>true</HideEULAPage><HideLocalAccountScreen>true</HideLocalAccountScreen><HideOEMRegistrationScreen>true</HideOEMRegistrationScreen><HideOnlineAccountScreens>true</HideOnlineAccountScreens><HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE><ProtectYourPC>3</ProtectYourPC></OOBE><UserAccounts><LocalAccounts><LocalAccount wcm:action='add'><Name>Admin</Name><DisplayName>Admin</DisplayName><Group>Administrators</Group><Password><Value></Value><PlainText>true</PlainText></Password></LocalAccount></LocalAccounts></UserAccounts></component></settings></unattend>"
             [IO.File]::WriteAllText("$Panther\unattend.xml", $XmlOobe, [System.Text.Encoding]::UTF8)
-        } else { Write-GuiLog "=> [4/6] Bỏ qua Unattend (Cài Win mặc định)." }
+        }
 
         # 5. BOOT HUNTER
         Write-GuiLog "=> [5/6] Săn Boot và ghi BCD..."
@@ -329,11 +299,8 @@ $BtnAutoRun.Add_Click({
             $BootDrive = Mount-UUID-Native $BootUUID
             Write-GuiLog "-> Ánh xạ Boot Partition ra ổ ảo: $BootDrive"
             $BcdOut = cmd /c "bcdboot $TargetDrive\Windows /s $BootDrive /f ALL 2>&1"
-            Write-GuiLog "-> $BcdOut"
         } else {
-            Write-GuiLog "-> CẢNH BÁO: Phân vùng Boot không tồn tại! Ghi BCD tạm lên Target."
             $BcdOut = cmd /c "bcdboot $TargetDrive\Windows /f ALL 2>&1"
-            Write-GuiLog "-> $BcdOut"
         }
 
         Write-GuiLog "======================================================"
@@ -349,7 +316,7 @@ $BtnAutoRun.Add_Click({
     $Pipeline.InvokeAsync()
 })
 
-# --- MANUAL MODE ---
+# --- MODE 2: MANUAL ---
 $BtnManRun.Add_Click({
     if (!$Global:SelSource -or !$Global:SelWinUUID -or !$Global:SelBootUUID) { [System.Windows.Forms.MessageBox]::Show("Phải chọn đủ File ISO, Ổ Cài Win và Ổ Boot!", "Error"); return }
     if ([System.Windows.Forms.MessageBox]::Show("Chắc chắn ghi đè Manual?", "Confirm", "YesNo") -eq "Yes") {
@@ -374,22 +341,71 @@ $BtnManRun.Add_Click({
     }
 })
 
-$BtnWinToHDD.Add_Click({ try { (New-Object System.Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe", "$env:TEMP\WinToHDD.exe"); Start-Process "$env:TEMP\WinToHDD.exe" } catch { Log-Write "Download Fail" } })
-
-# ==============================================================
-# NÚT SETUP.EXE ĐƯỢC "TIÊM THUỐC" ANTI WIN 11 NGAY TRONG RAM WinPE
-# ==============================================================
-$BtnSetup.Add_Click({ 
-    if($Global:IsoMounted){
-        Log-Write "Tiêm thuốc giải LabConfig (Anti-Win11) vào WinPE Registry..."
+# ==========================================
+#   MODE 3: WINTOHDD (WITH BYPASS INJECTION)
+# ==========================================
+function Inject-AntiWin11-WinPE {
+    if ($ChkWin11.Checked) {
+        Log-Write "=> Tiêm thuốc giải LabConfig (Anti-Win11) vào WinPE Registry..."
         cmd /c 'reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassTPMCheck /t REG_DWORD /d 1 /f >nul 2>&1'
         cmd /c 'reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassSecureBootCheck /t REG_DWORD /d 1 /f >nul 2>&1'
         cmd /c 'reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassRAMCheck /t REG_DWORD /d 1 /f >nul 2>&1'
         cmd /c 'reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassCPUCheck /t REG_DWORD /d 1 /f >nul 2>&1'
         cmd /c 'reg add "HKLM\SYSTEM\Setup\LabConfig" /v BypassStorageCheck /t REG_DWORD /d 1 /f >nul 2>&1'
-        Log-Write "Chạy Setup.exe bản quyền Microsoft (Đã vá lỗi phần cứng)..."
+    }
+}
+
+function Build-Oem-Bypass-Folder {
+    if ($ChkOobe.Checked -or $ChkWin11.Checked) {
+        Log-Write "=> Khởi tạo thư mục `$OEM$` Bypass cho WinToHDD..."
+        $Panther = "$Global:OemDir\`$`$\Panther"; $Scripts = "$Global:OemDir\`$`$\Setup\Scripts"
+        if (!(Test-Path $Panther)) { New-Item -ItemType Directory -Path $Panther -Force | Out-Null }
+        if (!(Test-Path $Scripts)) { New-Item -ItemType Directory -Path $Scripts -Force | Out-Null }
+        
+        if ($ChkOobe.Checked) {
+            Log-Write "-> Đổ file unattend.xml vào `$OEM$`..."
+            $XmlOobe = "<?xml version='1.0' encoding='utf-8'?><unattend xmlns='urn:schemas-microsoft-com:unattend'><settings pass='oobeSystem'><component name='Microsoft-Windows-International-Core' processorArchitecture='amd64' publicKeyToken='31bf3856ad364e35' language='neutral' versionScope='nonSxS'><InputLocale>0409:00000409</InputLocale><SystemLocale>en-US</SystemLocale><UILanguage>en-US</UILanguage><UserLocale>en-US</UserLocale></component><component name='Microsoft-Windows-Shell-Setup' processorArchitecture='amd64' publicKeyToken='31bf3856ad364e35' language='neutral' versionScope='nonSxS'><OOBE><HideEULAPage>true</HideEULAPage><HideLocalAccountScreen>true</HideLocalAccountScreen><HideOEMRegistrationScreen>true</HideOEMRegistrationScreen><HideOnlineAccountScreens>true</HideOnlineAccountScreens><HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE><ProtectYourPC>3</ProtectYourPC></OOBE><UserAccounts><LocalAccounts><LocalAccount wcm:action='add'><Name>Admin</Name><DisplayName>Admin</DisplayName><Group>Administrators</Group><Password><Value></Value><PlainText>true</PlainText></Password></LocalAccount></LocalAccounts></UserAccounts></component></settings></unattend>"
+            [IO.File]::WriteAllText("$Panther\unattend.xml", $XmlOobe, [System.Text.Encoding]::UTF8)
+        }
+
+        if ($ChkWin11.Checked) {
+            Log-Write "-> Đổ file BypassNRO (Reg) vào `$OEM$`..."
+            $SetupComplete = "@echo off`r`nreg add `"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE`" /v BypassNRO /t REG_DWORD /d 1 /f"
+            [IO.File]::WriteAllText("$Scripts\SetupComplete.cmd", $SetupComplete, [System.Text.Encoding]::ASCII)
+        }
+        return $true
+    }
+    return $false
+}
+
+$BtnWinToHDD.Add_Click({ 
+    $Form.Cursor = "WaitCursor"
+    Log-Write "--- KHỞI ĐỘNG CHẾ ĐỘ WINTOHDD ---"
+    Inject-AntiWin11-WinPE
+    
+    $HasOem = Build-Oem-Bypass-Folder
+    if ($HasOem) {
+        [System.Windows.Forms.MessageBox]::Show("Đã tạo bộ Bypass OOBE tại: $Global:OemDir`n`nLƯU Ý: Khi mở WinToHDD, nhớ trỏ mục [Thư mục cài đặt bổ sung / Additional Patch] về đường dẫn này để kích hoạt Bypass OOBE!", "Mẹo Cài WinToHDD VIP", 0, 64)
+    }
+
+    try { 
+        Log-Write "Đang tải WinToHDD..."
+        (New-Object System.Net.WebClient).DownloadFile("https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/WinToHDD.exe", "$env:TEMP\WinToHDD.exe")
+        Log-Write "Mở WinToHDD..."
+        Start-Process "$env:TEMP\WinToHDD.exe" 
+    } catch { Log-Write "Lỗi tải WinToHDD!" }
+    $Form.Cursor = "Default"
+})
+
+$BtnSetup.Add_Click({ 
+    if($Global:IsoMounted){
+        Log-Write "--- KHỞI ĐỘNG CHẾ ĐỘ SETUP.EXE ---"
+        Inject-AntiWin11-WinPE
+        Log-Write "Chạy Setup.exe bản quyền Microsoft..."
         Start-Process "$($Global:IsoMounted)\setup.exe"
-    } 
+    } else {
+        [System.Windows.Forms.MessageBox]::Show("Vui lòng Mount File ISO trước khi chạy Setup.exe!", "Lỗi")
+    }
 })
 
 Load-Grid
