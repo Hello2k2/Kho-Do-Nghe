@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 17.0 Ultimate Business (Titan Pay Gateway & Smart Nerf)
+    Version: 17.1 Ultimate Business (WinPE Network Fix)
     Author:  Phat Tan PC
 #>
 
@@ -18,7 +18,15 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 
 Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName Microsoft.VisualBasic
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ErrorActionPreference = "SilentlyContinue"
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+
+# ==============================================================================
+# BẢN VÁ LỖI MẠNG CHO WINPE (BYPASS SSL/TLS CERTIFICATE)
+# ==============================================================================
+[System.Net.ServicePointManager]::Expect100Continue = $true
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
+# Dòng này ép PowerShell bỏ qua mọi cảnh báo chứng chỉ (Bất tử kết nối)
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+$ErrorActionPreference = "Continue" # Bật lại lỗi nhẹ để debug nếu cần
 
 # --- 3. HARDWARE ID CORE ---
 function Get-HWID {
@@ -53,10 +61,8 @@ function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
     $Q = New-Object System.Windows.Forms.Form
     $Q.Size = "750, 480"; $Q.StartPosition = "CenterScreen"; $Q.Text = "TITAN SECURE PAY - $TitleMsg"; $Q.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 250); $Q.FormBorderStyle = "FixedToolWindow"
     
-    # Header
     $LblTop = New-Object System.Windows.Forms.Label; $LblTop.Text = "CỔNG THANH TOÁN TỰ ĐỘNG"; $LblTop.Dock = "Top"; $LblTop.TextAlign = "MiddleCenter"; $LblTop.Font = "Segoe UI, 16, Bold"; $LblTop.ForeColor = [System.Drawing.Color]::White; $LblTop.BackColor = [System.Drawing.Color]::FromArgb(0, 102, 204); $LblTop.Height = 60; $Q.Controls.Add($LblTop)
 
-    # Khung QR (Trái)
     $PnlQR = New-Object System.Windows.Forms.Panel; $PnlQR.Location = "20, 80"; $PnlQR.Size = "320, 320"; $PnlQR.BackColor = [System.Drawing.Color]::White; $PnlQR.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlQR)
     $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Location = "10,10"; $Pic.Size = "300, 300"; $Pic.SizeMode = "Zoom"
     try { $Pic.Load($QrUrl) } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi mạng!") }
@@ -64,7 +70,6 @@ function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
 
     $LblSubQR = New-Object System.Windows.Forms.Label; $LblSubQR.Text = "Sử dụng App Ngân hàng để quét mã"; $LblSubQR.Location = "20, 410"; $LblSubQR.Size="320,20"; $LblSubQR.TextAlign = "MiddleCenter"; $LblSubQR.Font = "Segoe UI, 9, Italic"; $LblSubQR.ForeColor="Gray"; $Q.Controls.Add($LblSubQR)
 
-    # Khung Info (Phải)
     $PnlInfo = New-Object System.Windows.Forms.Panel; $PnlInfo.Location = "360, 80"; $PnlInfo.Size = "350, 320"; $PnlInfo.BackColor = [System.Drawing.Color]::White; $PnlInfo.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlInfo)
     
     $BankName = New-Object System.Windows.Forms.Label; $BankName.Text = "NGÂN HÀNG VIETCOMBANK"; $BankName.Location = "20,20"; $BankName.AutoSize=$true; $BankName.Font = "Segoe UI, 13, Bold"; $BankName.ForeColor=[System.Drawing.Color]::Green; $PnlInfo.Controls.Add($BankName)
@@ -91,19 +96,26 @@ function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
 
 # --- 5. ENTERPRISE API CONNECTOR ---
 function Call-API ($Action, $Payload) {
-    try { $Payload.Add("action", $Action); $Body = $Payload | ConvertTo-Json; return Invoke-RestMethod -Uri $Global:ApiServer -Method Post -Body $Body -ContentType "application/json" -TimeoutSec 15 } catch { return @{ status="error"; message="Mất kết nối Máy chủ!" } }
+    try { 
+        $Payload.Add("action", $Action); $Body = $Payload | ConvertTo-Json; 
+        return Invoke-RestMethod -Uri $Global:ApiServer -Method Post -Body $Body -ContentType "application/json" -TimeoutSec 15 
+    } catch { 
+        # Đã bật lỗi gốc để xem chi tiết nếu dính lỗi ở WinPE
+        Write-Log "Lỗi gọi API: $_" "ERROR"
+        return @{ status="error"; message="Mất kết nối Máy chủ! Vui lòng kiểm tra lại mạng hoặc thử tắt tường lửa WinPE." } 
+    }
 }
 function Save-Session ($E, $T, $H) { $R = "$E|PT|$T|PC|$H"; $B = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R)); [string]::join('', ($B.ToCharArray()[($B.Length - 1)..0])) | Out-File $Global:SessionFile -Force }
 function Load-Session {
     if (Test-Path $Global:SessionFile) {
-        try { $O = Get-Content $Global:SessionFile -Raw; $R = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]::join('', ($O.ToCharArray()[($O.Length - 1)..0])))); $P = $R -split "\|"; if ($P[4] -eq $Global:MyHWID) { $Global:IsAuthenticated = $true; $Global:LicenseType = $P[2]; $Global:UserEmail = $P[0]; return $true } else { Remove-Item $Global:SessionFile -Force; [System.Windows.Forms.MessageBox]::Show("PHÁT HIỆN GIAN LẬN THIẾT BỊ!`nVui lòng đăng nhập lại!", "Bảo Vệ", 0, 16); return $false } } catch { return $false }
+        try { $O = Get-Content $Global:SessionFile -Raw; $R = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]::join('', ($O.ToCharArray()[($O.Length - 1)..0])))); $P = $R -split "\|"; if ($P[4] -eq $Global:MyHWID) { $Global:IsAuthenticated = $true; $Global:LicenseType = $P[2]; $Global:UserEmail = $P[0]; return $true } else { Remove-Item $Global:SessionFile -Force; return $false } } catch { return $false }
     } return $false
 }
 $HasOfflineSession = Load-Session
 
 # --- 6. AUTH GATEWAY UI ---
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V17.0 | HWID: $($Global:MyHWID)"; $Auth.Size = "460, 580"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V17.1 | HWID: $($Global:MyHWID)"; $Auth.Size = "460, 580"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = "Segoe UI, 18, Bold"; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "95, 15"; $Auth.Controls.Add($LTitle)
 
     # LOGIN PANEL
@@ -185,12 +197,12 @@ if ($Global:LicenseType -eq "FREE_30M") {
     $Script:DoomTimer = New-Object System.Windows.Forms.Timer; $Script:DoomTimer.Interval = 1000
     $Script:DoomTimer.Add_Tick({
         $Global:TimeLeft--; if ($Global:TimeLeft -le 0) { $Script:DoomTimer.Stop(); [System.Windows.Forms.MessageBox]::Show("HẾT THỜI GIAN DÙNG THỬ! Vui lòng mua Key.", "HẾT HẠN", 0, 16); Remove-Item $Global:SessionFile -Force; [Environment]::Exit(0) }
-        $m = [math]::Floor($Global:TimeLeft / 60); $s = $Global:TimeLeft % 60; $Form.Text = "PHAT TAN PC TOOLKIT V17.0 | TRẢI NGHIỆM FREE - HẾT HẠN SAU: $m phút $s giây"
+        $m = [math]::Floor($Global:TimeLeft / 60); $s = $Global:TimeLeft % 60; $Form.Text = "PHAT TAN PC TOOLKIT V17.1 | TRẢI NGHIỆM FREE - HẾT HẠN SAU: $m phút $s giây"
     }); $Script:DoomTimer.Start()
 }
 
 function Invoke-SmartDownload ($Url, $OutFile) {
-    if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { $p = Start-Process "curl" "-L -o `"$OutFile`" `"$Url`" -s --retry 3" -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode -eq 0 -and (Test-Path $OutFile)) { return $true } }
+    if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { $p = Start-Process "curl" "-L -o `"$OutFile`" `"$Url`" -s --retry 3 -k" -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode -eq 0 -and (Test-Path $OutFile)) { return $true } }
     try { Add-Type -AssemblyName System.Net.Http; $c = New-Object System.Net.Http.HttpClient; $r = $c.GetAsync($Url).GetAwaiter().GetResult(); if ($r.IsSuccessStatusCode) { $s = $r.Content.ReadAsStreamAsync().GetAwaiter().GetResult(); $fs = [System.IO.File]::Create($OutFile); $s.CopyTo($fs); $fs.Close(); $s.Close(); $c.Dispose(); return $true } } catch {}
     try { $w = New-Object System.Net.WebClient; $w.DownloadFile($Url, $OutFile); return $true } catch { return $false }
 }
@@ -204,7 +216,7 @@ function Apply-Theme { $T=if($Global:IsDarkMode){$Theme.Dark}else{$Theme.Light};
 function Add-HoverEffect ($Btn) { $Btn.Add_MouseEnter({ if($this.Enabled){$this.BackColor=[System.Windows.Forms.ControlPaint]::Light($this.Tag, 0.6)} }); $Btn.Add_MouseLeave({ if($this.Enabled){$this.BackColor=$this.Tag} }) }
 
 $Form = New-Object System.Windows.Forms.Form; 
-$Form.Text = if($Global:LicenseType -eq "VIP" -or $Global:LicenseType -eq "MULTI") { "PHAT TAN PC V17.0 | GÓI: $($Global:LicenseType) | User: $($Global:UserEmail)" } elseif ($Global:LicenseType -eq "TRIAL") { "PHAT TAN PC V17.0 | GÓI TRIAL 7 NGÀY (FULL TÍNH NĂNG)" } else { "PHAT TAN PC V17.0 | GÓI FREE CƠ BẢN" }
+$Form.Text = if($Global:LicenseType -eq "VIP" -or $Global:LicenseType -eq "MULTI") { "PHAT TAN PC V17.1 | GÓI: $($Global:LicenseType) | User: $($Global:UserEmail)" } elseif ($Global:LicenseType -eq "TRIAL") { "PHAT TAN PC V17.1 | GÓI TRIAL 7 NGÀY (FULL TÍNH NĂNG)" } else { "PHAT TAN PC V17.1 | GÓI FREE CƠ BẢN" }
 $Form.Size = New-Object System.Drawing.Size(1080, 780); $Form.StartPosition = "CenterScreen"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
 $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1080, 80"; $PnlHeader.Location="0,0"; $Form.Controls.Add($PnlHeader)
