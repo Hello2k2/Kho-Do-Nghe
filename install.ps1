@@ -20,10 +20,26 @@ function Get-HWID {
     $MD = [System.Security.Cryptography.MD5]::Create(); return ([System.BitConverter]::ToString($MD.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("$C-$B"))) -replace "-", "").Substring(0, 16)
 }
 $Global:MyHWID = Get-HWID; $Global:PCName = $env:COMPUTERNAME
-$EncAPI = "php.ipa/api/nv.di.nattahp.ipa//:sptth"; $Global:ApiServer = [string]::join('', ($EncAPI.ToCharArray()[($EncAPI.Length - 1)..0]))
-$BaseUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/"
-$EncRaw = "/loot/nv.di.nattahp.tpircs//:sptth"; $RawUrl = [string]::join('', ($EncRaw.ToCharArray()[($EncRaw.Length - 1)..0]))
-$JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.json"
+
+# --- 4. CONFIG & OBFUSCATED ENDPOINTS (ALL BASE64) ---
+
+# 1. API Server (https://api.phattan.id.vn/api.php)
+$encApi = "aHR0cHM6Ly9hcGkucGhhdHRhbi5pZC52bi9hcGkucGhw"
+$Global:ApiServer = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encApi))
+
+# 2. Base URL (https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/)
+$encBaseUrl = "aHR0cHM6Ly9naXRodWIuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjAv"
+$BaseUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encBaseUrl))
+
+# 3. Raw URL (https://script.phattan.id.vn/tool/)
+$encRawUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sLw=="
+$RawUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encRawUrl))
+
+# 4. JSON URL App Store (https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/apps.json)
+$encJsonUrl = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL21haW4vYXBwcy5qc29u"
+$JsonUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encJsonUrl))
+
+
 
 $TempDir = "$env:TEMP\PhatTan_Tool"; $LogFile = "$TempDir\PhatTan_Toolkit.log"; if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
 function Write-Log ($Msg, $Type="INFO") { $Time = (Get-Date).ToString("HH:mm:ss dd/MM/yyyy"); "[$Time] [$Type] $Msg" | Out-File -FilePath $LogFile -Append -Encoding UTF8 }
@@ -174,20 +190,77 @@ function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item
 
 # ==============================================================================
 # BỘ CÔNG CỤ TẢI XUỐNG VÀ CHẠY ẢO TRÊN RAM (FILELESS EXECUTION)
+# NÂNG CẤP: ĐA LUỒNG BẤT ĐỒNG BỘ & TRIPLE-TIER FALLBACK (HTTPCLIENT -> WEBCLIENT -> COM)
 # ==============================================================================
 function Load-Module ($N) { 
-    try { 
-        $W = New-Object System.Net.WebClient; $W.Headers.Add("User-Agent", "Titan/19"); $W.Encoding = [System.Text.Encoding]::UTF8
-        # Tải Code dạng Text thuần từ máy chủ
-        $RawCode = $W.DownloadString("$RawUrl$N`?t=$(Get-Date -UFormat %s)")
+    $TargetUrl = "$RawUrl$N`?t=$(Get-Date -UFormat %s)"
+    Write-Log "Kích hoạt luồng Fileless cho module: $N" "INFO"
+
+    # Tạo Runspace (Đa luồng thực sự) để GUI không bị đơ khi mạng lag
+    $Runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+    $Runspace.Open()
+    $Runspace.SessionStateProxy.SetVariable("TargetUrl", $TargetUrl)
+    $Runspace.SessionStateProxy.SetVariable("ModuleName", $N)
+
+    $Pipeline = $Runspace.CreatePipeline()
+    $Pipeline.Commands.AddScript({
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
         
-        # Ép kiểu và tự động Nén Base64 ngay trên RAM
-        $Bytes = [System.Text.Encoding]::Unicode.GetBytes($RawCode)
-        $EncodedCode = [Convert]::ToBase64String($Bytes)
-        
-        # Bắn lệnh vào một Process PowerShell chạy ẩn, tuyệt đối không lưu ra ổ cứng
-        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedCode" 
-    } catch { [System.Windows.Forms.MessageBox]::Show("Tải module $N thất bại!", "Lỗi") } 
+        $RawCode = $null
+
+        # --- LỚP DỰ PHÒNG 1: HTTP CLIENT (NHANH NHẤT, ĐA LUỒNG) ---
+        try {
+            Add-Type -AssemblyName System.Net.Http
+            $Handler = New-Object System.Net.Http.HttpClientHandler
+            $Handler.ServerCertificateCustomValidationCallback = { $true }
+            $Client = New-Object System.Net.Http.HttpClient($Handler)
+            $Client.DefaultRequestHeaders.Add("User-Agent", "Titan/20-Http")
+            $Task = $Client.GetStringAsync($TargetUrl)
+            $RawCode = $Task.GetAwaiter().GetResult()
+            $Client.Dispose()
+        } catch { $RawCode = $null }
+
+        # --- LỚP DỰ PHÒNG 2: WEB CLIENT (TRUYỀN THỐNG) ---
+        if ([string]::IsNullOrWhiteSpace($RawCode)) {
+            try {
+                $W = New-Object System.Net.WebClient
+                $W.Headers.Add("User-Agent", "Titan/20-Web")
+                $W.Encoding = [System.Text.Encoding]::UTF8
+                $RawCode = $W.DownloadString($TargetUrl)
+                $W.Dispose()
+            } catch { $RawCode = $null }
+        }
+
+        # --- LỚP DỰ PHÒNG 3: COM OBJECT WINHTTP (BẠO LỰC CẤP THẤP, XUYÊN FIREWALL) ---
+        if ([string]::IsNullOrWhiteSpace($RawCode)) {
+            try {
+                $COM = New-Object -ComObject WinHttp.WinHttpRequest.5.1
+                $COM.Open("GET", $TargetUrl, $false)
+                $COM.SetRequestHeader("User-Agent", "Titan/20-COM")
+                $COM.Option(4) = 13056 # Ignore SSL Errors (Unknown CA, Wrong Usage)
+                $COM.Send()
+                $RawCode = $COM.ResponseText
+            } catch { $RawCode = $null }
+        }
+
+        # --- KIỂM TRA MÃ NGUỒN VÀ TIÊM VÀO RAM ---
+        if (![string]::IsNullOrWhiteSpace($RawCode) -and $RawCode -notmatch "404 Not Found" -and $RawCode -notmatch "403 Forbidden") {
+            # Dùng Stub Injector (Lệnh mồi) để bypass giới hạn 32k ký tự của Command Line
+            $Stub = "[System.Net.ServicePointManager]::SecurityProtocol = 3072; [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { `$true }; `$R = `"$([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($RawCode)))`"; [scriptblock]::Create([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$R))).Invoke()"
+            
+            $Bytes = [System.Text.Encoding]::Unicode.GetBytes($Stub)
+            $EncodedStub = [Convert]::ToBase64String($Bytes)
+            
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedStub" 
+        } else {
+            # Bắn thông báo lỗi lên GUI bằng WinForms
+            Add-Type -AssemblyName System.Windows.Forms
+            [System.Windows.Forms.MessageBox]::Show("Toàn bộ 3 phương thức tải đều thất bại cho: $ModuleName.`nKiểm tra lại kết nối Internet hoặc Tường lửa WinPE.", "LỖI KẾT NỐI NGHIÊM TRỌNG", 0, 16)
+        }
+    }) | Out-Null
+    
+    $Pipeline.InvokeAsync() # Chạy không đợi (Async)
 }
 
 $Global:IsDarkMode = $true 
