@@ -192,75 +192,83 @@ function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item
 # BỘ CÔNG CỤ TẢI XUỐNG VÀ CHẠY ẢO TRÊN RAM (FILELESS EXECUTION)
 # NÂNG CẤP: ĐA LUỒNG BẤT ĐỒNG BỘ & TRIPLE-TIER FALLBACK (HTTPCLIENT -> WEBCLIENT -> COM)
 # ==============================================================================
+
 function Load-Module ($N) { 
-    $TargetUrl = "$RawUrl$N`?t=$(Get-Date -UFormat %s)"
-    Write-Log "Kích hoạt luồng Fileless cho module: $N" "INFO"
-
-    # Tạo Runspace (Đa luồng thực sự) để GUI không bị đơ khi mạng lag
-    $Runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
-    $Runspace.Open()
-    $Runspace.SessionStateProxy.SetVariable("TargetUrl", $TargetUrl)
-    $Runspace.SessionStateProxy.SetVariable("ModuleName", $N)
-
-    $Pipeline = $Runspace.CreatePipeline()
-    $Pipeline.Commands.AddScript({
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-        
-        $RawCode = $null
-
-        # --- LỚP DỰ PHÒNG 1: HTTP CLIENT (NHANH NHẤT, ĐA LUỒNG) ---
-        try {
-            Add-Type -AssemblyName System.Net.Http
-            $Handler = New-Object System.Net.Http.HttpClientHandler
-            $Handler.ServerCertificateCustomValidationCallback = { $true }
-            $Client = New-Object System.Net.Http.HttpClient($Handler)
-            $Client.DefaultRequestHeaders.Add("User-Agent", "Titan/20-Http")
-            $Task = $Client.GetStringAsync($TargetUrl)
-            $RawCode = $Task.GetAwaiter().GetResult()
-            $Client.Dispose()
-        } catch { $RawCode = $null }
-
-        # --- LỚP DỰ PHÒNG 2: WEB CLIENT (TRUYỀN THỐNG) ---
-        if ([string]::IsNullOrWhiteSpace($RawCode)) {
-            try {
-                $W = New-Object System.Net.WebClient
-                $W.Headers.Add("User-Agent", "Titan/20-Web")
-                $W.Encoding = [System.Text.Encoding]::UTF8
-                $RawCode = $W.DownloadString($TargetUrl)
-                $W.Dispose()
-            } catch { $RawCode = $null }
-        }
-
-        # --- LỚP DỰ PHÒNG 3: COM OBJECT WINHTTP (BẠO LỰC CẤP THẤP, XUYÊN FIREWALL) ---
-        if ([string]::IsNullOrWhiteSpace($RawCode)) {
-            try {
-                $COM = New-Object -ComObject WinHttp.WinHttpRequest.5.1
-                $COM.Open("GET", $TargetUrl, $false)
-                $COM.SetRequestHeader("User-Agent", "Titan/20-COM")
-                $COM.Option(4) = 13056 # Ignore SSL Errors (Unknown CA, Wrong Usage)
-                $COM.Send()
-                $RawCode = $COM.ResponseText
-            } catch { $RawCode = $null }
-        }
-
-        # --- KIỂM TRA MÃ NGUỒN VÀ TIÊM VÀO RAM ---
-        if (![string]::IsNullOrWhiteSpace($RawCode) -and $RawCode -notmatch "404 Not Found" -and $RawCode -notmatch "403 Forbidden") {
-            # Dùng Stub Injector (Lệnh mồi) để bypass giới hạn 32k ký tự của Command Line
-            $Stub = "[System.Net.ServicePointManager]::SecurityProtocol = 3072; [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { `$true }; `$R = `"$([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($RawCode)))`"; [scriptblock]::Create([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$R))).Invoke()"
-            
-            $Bytes = [System.Text.Encoding]::Unicode.GetBytes($Stub)
-            $EncodedStub = [Convert]::ToBase64String($Bytes)
-            
-            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedStub" 
-        } else {
-            # Bắn thông báo lỗi lên GUI bằng WinForms
-            Add-Type -AssemblyName System.Windows.Forms
-            [System.Windows.Forms.MessageBox]::Show("Toàn bộ 3 phương thức tải đều thất bại cho: $ModuleName.`nKiểm tra lại kết nối Internet hoặc Tường lửa WinPE.", "LỖI KẾT NỐI NGHIÊM TRỌNG", 0, 16)
-        }
-    }) | Out-Null
+    # Vô hiệu hóa nút nửa giây để chống khách spam click liên tục
+    if ($this -ne $null) { $this.Enabled = $false }
     
-    $Pipeline.InvokeAsync() # Chạy không đợi (Async)
+    try { 
+        # 1. Tạo URL động chống Cache từ Host
+        $TargetUrl = "$RawUrl$N`?t=$(Get-Date -UFormat %s)"
+        Write-Log "Đang kích hoạt Fileless Triple-Tier cho module: $N" "INFO"
+        
+        # 2. Xây dựng Lệnh Mồi 3 Lớp (Triple-Tier Stub)
+        # Bắt buộc dùng dấu tick (`) trước các biến cục bộ để nó hiểu đây là biến của tiến trình mới
+        $StubCmd = "
+            [System.Net.ServicePointManager]::Expect100Continue = `$true;
+            [System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; # Tls12 | Tls13
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { `$true };
+            `$code = `$null;
+
+            # LỚP 1: HttpClient (Xịn nhất, nhanh nhất)
+            try {
+                Add-Type -AssemblyName System.Net.Http;
+                `$handler = New-Object System.Net.Http.HttpClientHandler;
+                `$handler.ServerCertificateCustomValidationCallback = { `$true };
+                `$client = New-Object System.Net.Http.HttpClient(`$handler);
+                `$client.DefaultRequestHeaders.Add('User-Agent', 'Titan/19.3-Http');
+                `$code = `$client.GetStringAsync('$TargetUrl').GetAwaiter().GetResult();
+                `$client.Dispose();
+            } catch {}
+
+            # LỚP 2: WebClient (Dự phòng cho Win cũ)
+            if ([string]::IsNullOrWhiteSpace(`$code)) {
+                try {
+                    `$w = New-Object System.Net.WebClient;
+                    `$w.Headers.Add('User-Agent', 'Titan/19.3-Web');
+                    `$w.Encoding = [System.Text.Encoding]::UTF8;
+                    `$code = `$w.DownloadString('$TargetUrl');
+                    `$w.Dispose();
+                } catch {}
+            }
+
+            # LỚP 3: COM Object WinHttp (Bạo lực, xuyên thủng mọi Firewall)
+            if ([string]::IsNullOrWhiteSpace(`$code)) {
+                try {
+                    `$com = New-Object -ComObject WinHttp.WinHttpRequest.5.1;
+                    `$com.Open('GET', '$TargetUrl', `$false);
+                    `$com.SetRequestHeader('User-Agent', 'Titan/19.3-COM');
+                    `$com.Option(4) = 13056; # Ignore SSL
+                    `$com.Send();
+                    `$code = `$com.ResponseText;
+                } catch {}
+            }
+
+            # KIỂM TRA VÀ CHẠY
+            if (![string]::IsNullOrWhiteSpace(`$code) -and `$code -notmatch '404 Not Found' -and `$code -notmatch '403 Forbidden') {
+                [scriptblock]::Create(`$code).Invoke();
+            } else {
+                Add-Type -AssemblyName System.Windows.Forms;
+                [System.Windows.Forms.MessageBox]::Show(`"Tải file $N thất bại qua cả 3 phương thức!`nKiểm tra lại mạng hoặc Tường lửa WinPE.`", `"LỖI KẾT NỐI TUYỆT ĐỐI`", 0, 16);
+            }
+        "
+        
+        # 3. Mã hóa Lệnh mồi thành Base64
+        $EncodedStub = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
+        
+        # 4. Phóng Process PowerShell ẢN, nạp Base64 vào chạy
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedStub" 
+        
+    } catch { 
+        Write-Log "Lỗi cục bộ khởi tạo luồng $N: $($_.Exception.Message)" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("Lỗi khởi tạo module $N!`n$($_.Exception.Message)", "LỖI", 0, 16) 
+    }
+    
+    # Mở khóa nút lại
+    if ($this -ne $null) { 
+        Start-Sleep -Milliseconds 500
+        $this.Enabled = $true 
+    }
 }
 
 $Global:IsDarkMode = $true 
