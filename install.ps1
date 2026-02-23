@@ -189,8 +189,7 @@ function Invoke-SmartDownload ($Url, $OutFile) {
 function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }; if ($L -notmatch "^http") { $L = "$BaseUrl$L" }; $D = "$TempDir\$N"; if (Invoke-SmartDownload $L $D) { if ($T -eq "Msi") { Start-Process "msiexec.exe" "/i `"$D`" /quiet /norestart" -Wait } else { Start-Process $D -Wait } } }
 
 # ==============================================================================
-# BỘ CÔNG CỤ TẢI XUỐNG VÀ CHẠY ẢO TRÊN RAM (FILELESS EXECUTION)
-# NÂNG CẤP: ĐA LUỒNG BẤT ĐỒNG BỘ & TRIPLE-TIER FALLBACK (HTTPCLIENT -> WEBCLIENT -> COM)
+# BỘ CÔNG CỤ TẢI XUỐNG VÀ CHẠY ẢO TRÊN RAM (FILELESS EXECUTION V19.3 - FIXED PARSER)
 # ==============================================================================
 
 function Load-Module ($N) { 
@@ -200,13 +199,12 @@ function Load-Module ($N) {
     try { 
         # 1. Tạo URL động chống Cache từ Host
         $TargetUrl = "$RawUrl$N`?t=$(Get-Date -UFormat %s)"
-        Write-Log "Đang kích hoạt Fileless Triple-Tier cho module: $N" "INFO"
+        Write-Log "Đang kích hoạt Fileless Triple-Tier cho module: $($N)" "INFO"
         
         # 2. Xây dựng Lệnh Mồi 3 Lớp (Triple-Tier Stub)
-        # Bắt buộc dùng dấu tick (`) trước các biến cục bộ để nó hiểu đây là biến của tiến trình mới
         $StubCmd = "
             [System.Net.ServicePointManager]::Expect100Continue = `$true;
-            [System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; # Tls12 | Tls13
+            [System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288;
             [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { `$true };
             `$code = `$null;
 
@@ -249,7 +247,7 @@ function Load-Module ($N) {
                 [scriptblock]::Create(`$code).Invoke();
             } else {
                 Add-Type -AssemblyName System.Windows.Forms;
-                [System.Windows.Forms.MessageBox]::Show(`"Tải file $N thất bại qua cả 3 phương thức!`nKiểm tra lại mạng hoặc Tường lửa WinPE.`", `"LỖI KẾT NỐI TUYỆT ĐỐI`", 0, 16);
+                [System.Windows.Forms.MessageBox]::Show(`"Tải file $($N) thất bại qua cả 3 phương thức!`nKiểm tra lại mạng hoặc Tường lửa WinPE.`", `"LỖI KẾT NỐI TUYỆT ĐỐI`", 0, 16);
             }
         "
         
@@ -260,8 +258,9 @@ function Load-Module ($N) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedStub" 
         
     } catch { 
-        Write-Log "Lỗi cục bộ khởi tạo luồng $N: $($_.Exception.Message)" "ERROR"
-        [System.Windows.Forms.MessageBox]::Show("Lỗi khởi tạo module $N!`n$($_.Exception.Message)", "LỖI", 0, 16) 
+        # Đã fix lỗi ParserError bằng cách bọc $($N)
+        Write-Log "Lỗi cục bộ khởi tạo luồng $($N): $($_.Exception.Message)" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("Lỗi khởi tạo module $($N)!`n$($_.Exception.Message)", "LỖI", 0, 16) 
     }
     
     # Mở khóa nút lại
