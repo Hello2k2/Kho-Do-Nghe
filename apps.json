@@ -1,5 +1,73 @@
 [
   {
+    "tab": "Internet & Office",
+    "name": "Zalo PC (App Chat VN)",
+    "link": "https://res-zalo.zadn.vn/pc/ZaloSetup.exe",
+    "filename": "ZaloSetup.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "UltraViewer (Remote PC VN)",
+    "link": "https://dl2.ultraviewer.net/UltraViewer_Setup_6.6_vi.exe",
+    "filename": "UltraViewer.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "Trình duyệt Cốc Cốc",
+    "link": "https://coccoc.com/api/download/install-en-US.exe",
+    "filename": "CocCoc_Setup.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Internet & Office",
+    "name": "Foxit PDF Reader (Đọc PDF)",
+    "link": "https://cdn01.foxitsoftware.com/product/reader/desktop/win/12.1.2/FoxitPDFReader1212_L10N_Setup_Prom.exe",
+    "filename": "FoxitReader.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Test Phần Cứng",
+    "name": "CrystalDiskInfo (Check SSD/HDD)",
+    "link": "https://github.com/hiyohiyo/CrystalDiskInfo/releases/download/9.2.2/CrystalDiskInfo9_2_2A.exe",
+    "filename": "CDI.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Test Phần Cứng",
+    "name": "CPU-Z (Xem Cấu Hình)",
+    "link": "https://download.cpuid.com/cpu-z/cpu-z_2.09-en.exe",
+    "filename": "CPU-Z.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Tien Ich (Utilities)",
+    "name": "Notepad++ (Code/Text Editor)",
+    "link": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.6.2/npp.8.6.2.Installer.x64.exe",
+    "filename": "NotepadPP.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Tien Ich (Utilities)",
+    "name": "VLC Media Player (Xem Phim/Nhạc)",
+    "link": "https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.exe",
+    "filename": "VLC.exe",
+    "type": "Exe"
+  },
+  {
+    "tab": "Windows Repair",
+    "name": "Tắt vĩnh viễn Windows Update",
+    "type": "Script",
+    "irm": "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU' -Name 'NoAutoUpdate' -Value 1 -Type DWord -Force; Stop-Service wuauserv -Force; Set-Service wuauserv -StartupType Disabled"
+  },
+  {
+    "tab": "Windows Repair",
+    "name": "Xóa rác hệ thống (Temp/Prefetch)",
+    "type": "Script",
+    "irm": "Remove-Item -Path \"$env:TEMP\\*\" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path \"$env:WINDIR\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path \"$env:WINDIR\\Prefetch\\*\" -Recurse -Force -ErrorAction SilentlyContinue; Write-Host 'Đã dọn dẹp sạch sẽ rác hệ thống!' -ForegroundColor Green; Start-Sleep -s 2"
+  },
+  {
     "tab": "Hệ Thống & Driver",
     "name": "JUKI Tool (Auto Soft + Optimize)",
     "link": "JUKI.exe",
