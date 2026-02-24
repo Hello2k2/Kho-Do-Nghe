@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.1 MASTERPIECE (Fixed Hover, Doom Timer, SaaS Store inside App)
+    Version: 20.1 MASTERPIECE (Fixed Hover, Doom Timer, SaaS Store inside App, Custom OTP Form)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -28,6 +28,60 @@ function Write-Log ($Msg, $Type="INFO") { $Time = (Get-Date).ToString("HH:mm:ss 
 $Global:SessionFile = "$env:LOCALAPPDATA\PhatTan_Titan.dat"
 $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
+
+# --- CUSTOM OTP INPUT FORM (CÓ NÚT MỞ LINK WEB) ---
+function Show-OtpInput ($Title, $Msg, $Link) {
+    $OForm = New-Object System.Windows.Forms.Form
+    $OForm.Text = $Title
+    $OForm.Size = "400, 240"
+    $OForm.StartPosition = "CenterParent"
+    $OForm.FormBorderStyle = "FixedToolWindow"
+    $OForm.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 25)
+    $OForm.ForeColor = "White"
+
+    $LblMsg = New-Object System.Windows.Forms.Label
+    $LblMsg.Text = $Msg
+    $LblMsg.Location = "20, 15"
+    $LblMsg.Size = "340, 45"
+    $LblMsg.Font = "Segoe UI, 10"
+    $OForm.Controls.Add($LblMsg)
+
+    $TxtOtp = New-Object System.Windows.Forms.TextBox
+    $TxtOtp.Location = "20, 65"
+    $TxtOtp.Size = "340, 30"
+    $TxtOtp.Font = "Segoe UI, 14, Bold"
+    $TxtOtp.TextAlign = "Center"
+    $OForm.Controls.Add($TxtOtp)
+
+    $LnkWeb = New-Object System.Windows.Forms.LinkLabel
+    $LnkWeb.Text = "⚠️ Không nhận được mã? Bấm vào đây để lấy trực tiếp!"
+    $LnkWeb.Location = "20, 110"
+    $LnkWeb.Size = "340, 20"
+    $LnkWeb.Font = "Segoe UI, 9, Italic"
+    $LnkWeb.LinkColor = "DeepSkyBlue"
+    $LnkWeb.ActiveLinkColor = "Red"
+    $LnkWeb.Cursor = "Hand"
+    $LnkWeb.Add_Click({ if($Link){ Start-Process $Link } })
+    if ([string]::IsNullOrEmpty($Link)) { $LnkWeb.Visible = $false }
+    $OForm.Controls.Add($LnkWeb)
+
+    $BtnOk = New-Object System.Windows.Forms.Button
+    $BtnOk.Text = "XÁC NHẬN"
+    $BtnOk.Location = "20, 145"
+    $BtnOk.Size = "340, 40"
+    $BtnOk.BackColor = "ForestGreen"
+    $BtnOk.ForeColor = "White"
+    $BtnOk.Font = "Segoe UI, 11, Bold"
+    $BtnOk.FlatStyle = "Flat"
+    $BtnOk.DialogResult = "OK"
+    $OForm.Controls.Add($BtnOk)
+
+    $OForm.AcceptButton = $BtnOk
+    $OForm.ShowDialog() | Out-Null
+
+    if ($OForm.DialogResult -eq "OK") { return $TxtOtp.Text.Trim() }
+    return $null
+}
 
 # --- TITAN PAY GATEWAY ---
 function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
@@ -80,6 +134,7 @@ function Call-API ($Action, $Payload) {
         return @{ status="error"; message="Mất kết nối Máy chủ!" } 
     } 
 }
+
 function Save-Session ($E, $T, $H, $LP, $SP) { $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"; $B = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R)); [string]::join('', ($B.ToCharArray()[($B.Length - 1)..0])) | Out-File $Global:SessionFile -Force }
 function Load-Session {
     if (Test-Path $Global:SessionFile) {
@@ -95,22 +150,41 @@ function Show-AuthGateway {
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
     $L1=New-Object System.Windows.Forms.Label;$L1.Text="Email đăng nhập:";$L1.Location="20,10";$L1.AutoSize=$true;$PnlLogin.Controls.Add($L1); $TUser=New-Object System.Windows.Forms.TextBox;$TUser.Location="20,30";$TUser.Size="420,30";$TUser.Font="Segoe UI, 12";$PnlLogin.Controls.Add($TUser)
     $L2=New-Object System.Windows.Forms.Label;$L2.Text="Mật khẩu:";$L2.Location="20,70";$L2.AutoSize=$true;$PnlLogin.Controls.Add($L2); $TPass=New-Object System.Windows.Forms.TextBox;$TPass.Location="20,90";$TPass.Size="420,30";$TPass.Font="Segoe UI, 12";$TPass.PasswordChar="*";$PnlLogin.Controls.Add($TPass)
+    
     $BLog = New-Object System.Windows.Forms.Button; $BLog.Text="ĐĂNG NHẬP SERVER"; $BLog.Location="20,135"; $BLog.Size="420,45"; $BLog.BackColor="DodgerBlue"; $BLog.ForeColor="White"; $BLog.Font="Segoe UI, 11, Bold"; $BLog.FlatStyle="Flat"; $PnlLogin.Controls.Add($BLog)
+    
     $BLog.Add_Click({
         if ($TUser.Text -and $TPass.Text) {
-            $Auth.Cursor = "WaitCursor"; $BLog.Text = "ĐANG CHECK DATABASE..."; $R = Call-API "login" @{ email=$TUser.Text; password=$TPass.Text; hwid=$Global:MyHWID; machine_name=$Global:PCName }
-            if ($R.status -eq "error" -or $R.status -eq "banned" -or $R.status -eq "fail") { [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi") }
+            $Auth.Cursor = "WaitCursor"; $BLog.Text = "ĐANG CHECK DATABASE..."; 
+            $R = Call-API "login" @{ email=$TUser.Text; password=$TPass.Text; hwid=$Global:MyHWID; machine_name=$Global:PCName }
+            
+            if ($R.status -eq "error" -or $R.status -eq "banned" -or $R.status -eq "fail") { 
+                [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16) 
+            }
             else {
                 $WaitOTP = $false; $OTPType = ""
-                if ($R.status -eq "require_device_otp") { $WaitOTP = $true; $OTPType = "device" } elseif ($R.status -eq "require_2fa") { $WaitOTP = $true; $OTPType = "2fa" }
+                if ($R.status -eq "require_device_otp") { $WaitOTP = $true; $OTPType = "device" } 
+                elseif ($R.status -eq "require_2fa") { $WaitOTP = $true; $OTPType = "2fa" }
+                
                 if ($WaitOTP) {
-                    $OTP = [Microsoft.VisualBasic.Interaction]::InputBox("Mã xác minh (Device/2FA) đã gửi về Email:", "XÁC MINH")
+                    # GOI CUSTOM FORM ĐỂ NHẬP OTP KÈM LINK
+                    $OTP = Show-OtpInput "XÁC MINH BẢO MẬT" "Mã xác minh (Device/2FA) đã được gửi đến Email của bạn:" $R.otp_link
                     if ($OTP) { 
                         $R2 = Call-API "verify_otp" @{ email=$TUser.Text; otp=$OTP; hwid=$Global:MyHWID; machine_name=$Global:PCName; type=$OTPType }
-                        if ($R2.status -eq "require_2fa") { $OTP2 = [Microsoft.VisualBasic.Interaction]::InputBox($R2.message, "XÁC MINH 2FA"); $R2 = Call-API "verify_otp" @{ email=$TUser.Text; otp=$OTP2; hwid=$Global:MyHWID; type="2fa" } }
-                        if ($R2.status -eq "success") { $R = $R2 } else { [System.Windows.Forms.MessageBox]::Show($R2.message); $R = $null }
-                    } else { $R = $null }
+                        
+                        if ($R2.status -eq "require_2fa") { 
+                            # NẾU YÊU CẦU TIẾP 2FA, HIỆN FORM 2FA
+                            $OTP2 = Show-OtpInput "XÁC MINH BẢO MẬT 2 LỚP" $R2.message $R2.otp_link
+                            $R2 = Call-API "verify_otp" @{ email=$TUser.Text; otp=$OTP2; hwid=$Global:MyHWID; type="2fa" } 
+                        }
+                        
+                        if ($R2.status -eq "success") { $R = $R2 } 
+                        else { [System.Windows.Forms.MessageBox]::Show($R2.message, "LỖI", 0, 16); $R = $null }
+                    } else { 
+                        $R = $null 
+                    }
                 }
+                
                 if ($R -and $R.status -eq "success") {
                     $Global:IsAuthenticated=$true; $Global:LicenseType=$R.package; $Global:UserEmail=$TUser.Text; $Global:LocalPass="root"; $Global:ServerPass=$R.aes_key; $env:TITAN_AUTH_TOKEN=[System.Guid]::NewGuid().ToString()
                     Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass; $Auth.Close()
@@ -191,17 +265,16 @@ $Theme = @{ Dark=@{ Back=[System.Drawing.Color]::FromArgb(25,25,30); Card=[Syste
 $Paint_Glow = { param($s, $e); $C = $s.Tag; if(!$C){$C=[System.Drawing.Color]::Gray}; $P = New-Object System.Drawing.Pen($C, 5); $R = $s.ClientRectangle; $R.X+=2; $R.Y+=2; $R.Width-=4; $R.Height-=4; $e.Graphics.DrawRectangle($P, $R); $P.Dispose() }
 function Apply-Theme { $T=if($Global:IsDarkMode){$Theme.Dark}else{$Theme.Light}; $Form.BackColor=$T.Back; $Form.ForeColor=$T.Text; $PnlHeader.BackColor=if($Global:IsDarkMode){[System.Drawing.Color]::FromArgb(35,35,40)}else{[System.Drawing.Color]::FromArgb(230,230,230)}; $BtnTheme.Text=if($Global:IsDarkMode){"☀ LIGHT"}else{"🌙 DARK"}; $BtnTheme.BackColor=if($Global:IsDarkMode){[System.Drawing.Color]::White}else{[System.Drawing.Color]::Black}; $BtnTheme.ForeColor=if($Global:IsDarkMode){[System.Drawing.Color]::Black}else{[System.Drawing.Color]::White}; foreach($P in $TabControl.TabPages){$P.BackColor=$T.Back; $P.ForeColor=$T.Text; foreach($C in $P.Controls){if($C -is [System.Windows.Forms.Panel] -and $C.Name -like "Card*"){$C.BackColor=$T.Card; $G=$T.System; if($C.Name -match "SECURITY"){$G=$T.Security}; if($C.Name -match "INSTALL"){$G=$T.Install}; $C.Tag=$G; $C.Invalidate(); foreach($Child in $C.Controls){if($Child -is [System.Windows.Forms.Label]){$Child.ForeColor=$G}; if($Child -is [System.Windows.Forms.FlowLayoutPanel]){foreach($Btn in $Child.Controls){if($Btn.Text -notmatch "CẦN KEY"){$Btn.BackColor=$G; $Btn.ForeColor="White"; $Btn.Tag=$G}}}}}}}}
 
-# --- HÀM TẠO NÚT CÓ TÍNH NĂNG HOVER NERF (ĐÃ SỬA LỖI CHỮ THẬT) ---
+# --- HÀM TẠO NÚT CÓ TÍNH NĂNG HOVER NERF ---
 function Add-Btn ($P, $T, $Cmd, $IsVipOnly = $false) { 
     $B = New-Object System.Windows.Forms.Button; $B.Text=$T; $B.Size="140,45"; $B.FlatStyle="Flat"; $B.Font="Segoe UI, 9, Bold"; $B.Margin="5,5,5,5"; $B.Cursor="Hand"; $B.FlatAppearance.BorderSize=0
-    # Lưu lại chữ gốc để lúc rút chuột ra nó hoàn lại
     $B.Tag = $T
     if ($IsVipOnly -and $Global:LicenseType -in @("FREE", "FREE_30M")) {
         $B.ForeColor = "Silver"
         $B.Add_MouseEnter({ $this.Text = "⛔ CẦN KEY VIP"; $this.BackColor = "Crimson"; $this.ForeColor = "White" })
         $B.Add_MouseLeave({ $this.Text = $this.Tag; $this.BackColor = [System.Drawing.Color]::FromArgb(80,80,80); $this.ForeColor = "Silver" })
         $B.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này yêu cầu Gói VIP. Vui lòng bấm 'CỬA HÀNG VIP' góc dưới phải để nâng cấp!", "BỊ KHÓA", 0, 16) })
-        $B.BackColor = [System.Drawing.Color]::FromArgb(80,80,80) # Màu xám tro báo hiệu chưa mở khóa
+        $B.BackColor = [System.Drawing.Color]::FromArgb(80,80,80)
     } else {
         $B.Add_Click($Cmd)
         $B.Add_MouseEnter({ if($this.Enabled){$this.BackColor=[System.Windows.Forms.ControlPaint]::Light($this.BackColor, 0.6)} })
@@ -228,7 +301,7 @@ $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1080, 80"; 
 $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 24, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
 $LblSub = New-Object System.Windows.Forms.Label; $LblSub.Text="Enterprise Cloud Architecture - Current Plan: $($Global:LicenseType)"; $LblSub.ForeColor="Lime"; $LblSub.AutoSize=$true; $LblSub.Font="Segoe UI, 10, Italic"; $LblSub.Location="25,60"; $PnlHeader.Controls.Add($LblSub)
 
-# --- NÚT TRANG CÁ NHÂN (PROFILE) CÓ AVATAR TỰ ĐỘNG CẮT TRÒN ---
+# --- NÚT TRANG CÁ NHÂN (PROFILE) ---
 $BtnProfile = New-Object System.Windows.Forms.Button; $BtnProfile.Location="730, 25"; $BtnProfile.Size="160, 35"; $BtnProfile.FlatStyle="Flat"; $BtnProfile.Font="Segoe UI, 9, Bold"; $BtnProfile.Cursor="Hand"; $BtnProfile.Text="👤 TRANG CÁ NHÂN"; $BtnProfile.BackColor="DimGray"; $BtnProfile.ForeColor="White"
 $BtnProfile.Add_Click({
     $ProfForm = New-Object System.Windows.Forms.Form
@@ -285,12 +358,10 @@ $P1 = Add-Card "HỆ THỐNG" "SYSTEM" 15 20 320 400
 Add-Btn $P1 "ℹ KIỂM TRA CẤU HÌNH"      { Load-Module "SystemInfo.ps1" } | Out-Null
 Add-Btn $P1 "♻ DỌN RÁC MÁY TÍNH"       { Load-Module "SystemCleaner.ps1" } | Out-Null
 Add-Btn $P1 "💾 QUẢN LÝ Ổ ĐĨA"    { Load-Module "DiskManager.ps1" } | Out-Null
-Add-Btn $P1 "🔍 QUÉT LỖI WINDOWS"     { Load-Module "SystemScan.ps1" } | Out-Null
+Add-Btn $P1 "🔍 QUÉT LỖI WINDOWS"      { Load-Module "SystemScan.ps1" } | Out-Null
 Add-Btn $P1 "⚡ TỐI ƯU RAM"       { Load-Module "RamBooster.ps1" } | Out-Null
 Add-Btn $P1 "🗝 KÍCH HOẠT BẢN QUYỀN"    { Load-Module "WinActivator.ps1" } | Out-Null
-Add-Btn $P1 "🚑 CỨU DỮ LIỆU(HDD)" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" } $true | Out-Null # Cờ $true = Cần VIP
-Add-Btn $P1 "🗑 GỠ APP RÁC"       { Load-Module "Debloater.ps1" } | Out-Null
-Add-Btn $P1 "🛠️ Tùy chỉnh Windows" { Load-Module "WinSettings.ps1" } | Out-Null
+Add-Btn $P1 "🚑 CỨU DỮ LIỆU(HDD)" { Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" } $true | Out-Null 
 Add-Btn $P1 "🔧 SỬA LỖI HỆ THỐNG" { Load-Module "SystemRepair.ps1" } | Out-Null
 Add-Btn $P1 "🔎 QUÉT TẬP TIN"     { Load-Module "scanfile.ps1" } | Out-Null
 
@@ -298,21 +369,21 @@ $P2 = Add-Card "BẢO MẬT" "SECURITY" 350 20 320 400
 Add-Btn $P2 "🌐 ĐỔI DNS SIÊU TỐC"    { Load-Module "NetworkMaster.ps1" } | Out-Null
 Add-Btn $P2 "↻ QUẢN LÝ UPDATE"    { Load-Module "WinUpdatePro.ps1" } | Out-Null
 Add-Btn $P2 "🛡 DEFENDER ON/OFF"  { Load-Module "DefenderMgr.ps1" } | Out-Null
-Add-Btn $P2 "🛡 VÔ HIỆU HÓA EFSs"  { Load-Module "AntiEFS_GUI.ps1" } $true | Out-Null # Cần VIP
-Add-Btn $P2 "🔒 KHÓA BITLOCKER"  { Load-Module "BitLockerMgr.ps1" } $true | Out-Null # Cần VIP
+Add-Btn $P2 "🛡 VÔ HIỆU HÓA EFSs"  { Load-Module "AntiEFS_GUI.ps1" } $true | Out-Null 
+Add-Btn $P2 "🔒 KHÓA BITLOCKER"  { Load-Module "BitLockerMgr.ps1" } $true | Out-Null 
 Add-Btn $P2 "⛔ CHẶN WEB ĐỘC"     { Load-Module "BrowserPrivacy.ps1" } | Out-Null
 Add-Btn $P2 "🔥 TẮT TƯỜNG LỬA"    { netsh advfirewall set allprofiles state off; [System.Windows.Forms.MessageBox]::Show("Đã Tắt Firewall!") } | Out-Null
 
 $P3 = Add-Card "CÀI ĐẶT" "INSTALL" 685 20 320 400
-Add-Btn $P3 "💿 CÀI WIN TỰ ĐỘNG"     { Load-Module "WinInstall.ps1" } $true | Out-Null # Cần VIP
-Add-Btn $P3 "📝 CÀI OFFICE 365"   { Load-Module "OfficeInstaller.ps1" } $true | Out-Null # Cần VIP
+Add-Btn $P3 "💿 CÀI WIN TỰ ĐỘNG"     { Load-Module "WinInstall.ps1" } $true | Out-Null 
+Add-Btn $P3 "📝 CÀI OFFICE 365"   { Load-Module "OfficeInstaller.ps1" } $true | Out-Null 
 Add-Btn $P3 "🔧 TỐI ƯU HÓA WIN"       { Load-Module "WinModder.ps1" } | Out-Null
-Add-Btn $P3 "📦 ĐÓNG GÓI ISO"     { Load-Module "WinAIOBuilder.ps1" } $true | Out-Null # Cần VIP
+Add-Btn $P3 "📦 ĐÓNG GÓI ISO"     { Load-Module "WinAIOBuilder.ps1" } $true | Out-Null 
 Add-Btn $P3 "🤖 TRỢ LÝ AI"        { Load-Module "GeminiAI.ps1" } | Out-Null
 Add-Btn $P3 "👜 CÀI STORE"        { Load-Module "AppStore.ps1" } | Out-Null
 Add-Btn $P3 "📥 TẢI ISO GỐC"      { Load-Module "ISODownloader.ps1" } | Out-Null
 Add-Btn $P3 "⚡ TẠO USB BOOT"      { Load-Module "UsbBootMaker.ps1" } | Out-Null
-Add-Btn $P3 "🍏 JAILBREAK iOS"       { Load-Module "iOS_Jailbreak.ps1" } $true | Out-Null # Cần VIP
+Add-Btn $P3 "🍏 JAILBREAK iOS"       { Load-Module "iOS_Jailbreak.ps1" } $true | Out-Null 
 
 # --- KHÔI PHỤC TÍNH NĂNG ĐỌC JSON TẠO TABS ---
 try { 
@@ -331,11 +402,9 @@ try {
 $PnlFooter = New-Object System.Windows.Forms.Panel; $PnlFooter.Location="0,580"; $PnlFooter.Size="1080,160"; $PnlFooter.BackColor=[System.Drawing.Color]::FromArgb(25,25,30); $Form.Controls.Add($PnlFooter)
 function Add-NeonFooterBtn ($P, $T, $X, $Y, $W, $H, $C, $Cmd) { $Pnl=New-Object System.Windows.Forms.Panel; $Pnl.Location="$X,$Y"; $Pnl.Size="$W,$H"; $Pnl.Tag=$C; $Pnl.Add_Paint($Paint_Glow); $Pnl.Padding="7,7,7,7"; $B=New-Object System.Windows.Forms.Button; $B.Text=$T; $B.Dock="Fill"; $B.FlatStyle="Flat"; $B.FlatAppearance.BorderSize=0; $B.BackColor=$C; $B.ForeColor="White"; $B.Font="Segoe UI, 10, Bold"; $B.Cursor="Hand"; $B.Tag=$C; $B.Add_Click($Cmd); Add-HoverEffect $B; $Pnl.Controls.Add($B); $P.Controls.Add($Pnl); return $B }
 
-# Nút Checkbox
 Add-NeonFooterBtn $PnlFooter "CHỌN HẾT" 20 20 120 45 "DeepSkyBlue" { foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$true} } } } } | Out-Null
 Add-NeonFooterBtn $PnlFooter "BỎ CHỌN" 150 20 120 45 "Crimson" { foreach($P in $TabControl.TabPages){ foreach($F in $P.Controls){ foreach($C in $F.Controls){ if($C -is [System.Windows.Forms.CheckBox]){$C.Checked=$false} } } } } | Out-Null
 
-# Khối xử lý cài đặt ngầm JSON
 $ProgressBar = New-Object System.Windows.Forms.ProgressBar; $ProgressBar.Location="290,50"; $ProgressBar.Size="280,15"; $ProgressBar.Style="Continuous"; $PnlFooter.Controls.Add($ProgressBar)
 $LblStatus = New-Object System.Windows.Forms.Label; $LblStatus.Location="285,75"; $LblStatus.AutoSize=$true; $LblStatus.Text="Trạng thái: Đang chờ lệnh..."; $LblStatus.Font="Segoe UI, 8, Italic"; $LblStatus.ForeColor="Silver"; $PnlFooter.Controls.Add($LblStatus)
 
