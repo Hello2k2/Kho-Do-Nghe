@@ -70,7 +70,16 @@ function Show-Store {
     $S.ShowDialog() | Out-Null
 }
 
-function Call-API ($Action, $Payload) { try { $Payload.Add("action", $Action); return Invoke-RestMethod -Uri $Global:ApiServer -Method Post -Body ($Payload | ConvertTo-Json) -ContentType "application/json" -TimeoutSec 15 } catch { return @{ status="error"; message="Mất kết nối Máy chủ!" } } }
+function Call-API ($Action, $Payload) { 
+    try { 
+        $Payload.Add("action", $Action)
+        $JsonString = $Payload | ConvertTo-Json -Compress
+        $Utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($JsonString)
+        return Invoke-RestMethod -Uri $Global:ApiServer -Method Post -Body $Utf8Bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 15 
+    } catch { 
+        return @{ status="error"; message="Mất kết nối Máy chủ!" } 
+    } 
+}
 function Save-Session ($E, $T, $H, $LP, $SP) { $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"; $B = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R)); [string]::join('', ($B.ToCharArray()[($B.Length - 1)..0])) | Out-File $Global:SessionFile -Force }
 function Load-Session {
     if (Test-Path $Global:SessionFile) {
