@@ -1,6 +1,6 @@
 # =============================================================================
 # ISODownloader_v2.7_FixedUI.ps1
-# PHAT TAN PC - ISO DOWNLOADER EXTREME (FIXED UI & PROGRESS)
+# PHAT TAN PC - ISO DOWNLOADER EXTREME (FIXED UI, PROGRESS & CONNECTION)
 # =============================================================================
 
 # 1. YÊU CẦU QUYỀN ADMIN
@@ -19,8 +19,13 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $JsonUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/main/iso_list.json"
 $AriaUrl = "https://github.com/aria2/aria2/releases/download/release-1.36.0/aria2-1.36.0-win-64bit-build1.zip"
 
-# --- TỐI ƯU KẾT NỐI ---
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+# --- TỐI ƯU KẾT NỐI (Đã Fix cho WinPE/Win cũ) ---
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true} # Bỏ qua lỗi SSL
+try {
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+} catch {
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 # Fallback Tls12
+}
 [System.Net.ServicePointManager]::DefaultConnectionLimit = 512
 [System.Net.ServicePointManager]::CheckCertificateRevocationList = $false
 
@@ -80,11 +85,11 @@ if (Get-Aria2Path) { $LblAria.Text="[ARIA2: INSTALLED]"; $LblAria.ForeColor="Lim
 $GbFilter = New-Object System.Windows.Forms.GroupBox; $GbFilter.Text="Bo Loc & Cau Hinh"; $GbFilter.Location="20,60"; $GbFilter.Size="720,80"; $GbFilter.ForeColor="Yellow"; $GbFilter.Font=$FontBold; $Form.Controls.Add($GbFilter)
 
 $CbType = New-Object System.Windows.Forms.ComboBox; $CbType.Location="20,30"; $CbType.Size="120,30"; $CbType.DropDownStyle="DropDownList"; $CbType.Font=$FontNormal; $GbFilter.Controls.Add($CbType)
-$CbBit = New-Object System.Windows.Forms.ComboBox; $CbBit.Location="150,30"; $CbBit.Size="60,30"; $CbBit.DropDownStyle="DropDownList"; $CbBit.Font=$FontNormal; $CbBit.Items.AddRange(@("All", "x64", "x86", "arm64")); $CbBit.SelectedIndex=0; $GbFilter.Controls.Add($CbBit)
+$CbBit = New-Object System.Windows.Forms.ComboBox; $CbBit.Location="150,30"; $CbBit.Size="60,30"; $CbBit.DropDownStyle="DropDownList"; $CbBit.Font=$FontNormal; [void]$CbBit.Items.AddRange(@("All", "x64", "x86", "arm64")); $CbBit.SelectedIndex=0; $GbFilter.Controls.Add($CbBit)
 $CbLang = New-Object System.Windows.Forms.ComboBox; $CbLang.Location="220,30"; $CbLang.Size="90,30"; $CbLang.DropDownStyle="DropDownList"; $CbLang.Font=$FontNormal; $GbFilter.Controls.Add($CbLang)
 
 $LblThread = New-Object System.Windows.Forms.Label; $LblThread.Text="Luong:"; $LblThread.Location="320,33"; $LblThread.AutoSize=$true; $LblThread.Font=$FontNormal; $GbFilter.Controls.Add($LblThread)
-$CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location="370,30"; $CbThread.Size="50,30"; $CbThread.DropDownStyle="DropDownList"; $CbThread.Font=$FontNormal; $CbThread.Items.AddRange(@("4", "8", "16", "32")); $CbThread.SelectedItem="16"; $GbFilter.Controls.Add($CbThread)
+$CbThread = New-Object System.Windows.Forms.ComboBox; $CbThread.Location="370,30"; $CbThread.Size="50,30"; $CbThread.DropDownStyle="DropDownList"; $CbThread.Font=$FontNormal; [void]$CbThread.Items.AddRange(@("4", "8", "16", "32")); $CbThread.SelectedItem="16"; $GbFilter.Controls.Add($CbThread)
 
 $LblEng = New-Object System.Windows.Forms.Label; $LblEng.Text="Engine:"; $LblEng.Location="440,33"; $LblEng.AutoSize=$true; $LblEng.Font=$FontNormal; $GbFilter.Controls.Add($LblEng)
 $RadNative = New-Object System.Windows.Forms.RadioButton; $RadNative.Text="Native"; $RadNative.Location="500,30"; $RadNative.AutoSize=$true; $RadNative.Font=$FontNormal; $RadNative.Checked=$true; $GbFilter.Controls.Add($RadNative)
@@ -148,14 +153,12 @@ function Start-NativeDownload ($Url, $DestPath, $ThreadCount, $SilentMode) {
         }
         if ($TotalSize -gt 0) {
             $Percent = [Math]::Min(100, [Math]::Round(($Downloaded / $TotalSize) * 100))
-            # --- FIX HIỂN THỊ SỐ ẢO Ở ĐÂY ---
             if (!$SilentMode) { 
                 $CurrentMB = [Math]::Round($Downloaded / 1MB, 2)
                 $TotalMB = [Math]::Round($TotalSize / 1MB, 2)
                 $Bar.Value = [int]$Percent
                 $Status.Text = "Dang tai... $Percent% ($CurrentMB MB / $TotalMB MB)" 
             }
-            # --------------------------------
         }
         if ($Completed -eq $Threads) { $IsDone = $true }
         [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 200
@@ -193,16 +196,35 @@ function Start-AriaDownload ($Url, $DestPath, $ThreadCount, $ExePath, $SilentMod
     return $false
 }
 
-# --- HANDLERS ---
+# --- HANDLERS (Đã Fix lỗi tải JSON) ---
 function Load-JsonData {
     $Status.Text = "Dang tai du lieu..."; $Form.Cursor = "WaitCursor"
     try {
-        $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds(); $Json = Invoke-RestMethod -Uri "$($JsonUrl.Trim())?t=$Ts"
-        $Global:IsoData = $Json
-        $CbType.Items.Clear(); $CbType.Items.Add("All"); ($Json.type | Select -Unique | Sort) | % { $CbType.Items.Add($_) }; $CbType.SelectedIndex=0
-        $CbLang.Items.Clear(); $CbLang.Items.Add("All"); ($Json.language | Select -Unique | Sort) | % { $CbLang.Items.Add($_) }; $CbLang.SelectedIndex=0
+        $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
+        $FullUrl = "$($JsonUrl.Trim())?t=$Ts"
+        $JsonRaw = $null
+        
+        # Thử phương pháp 1: Invoke-RestMethod
+        try {
+            $JsonRaw = Invoke-RestMethod -Uri $FullUrl -UseBasicParsing -Headers @{"User-Agent"="Mozilla/5.0"}
+        } catch {
+            # Thử phương pháp 2 (Fallback cho WinPE): WebClient nguyên thủy
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers.Add("User-Agent", "Mozilla/5.0")
+            $JsonRaw = $wc.DownloadString($FullUrl) | ConvertFrom-Json
+        }
+
+        if ($null -eq $JsonRaw) { throw "Khong the phan tich du lieu JSON!" }
+        
+        $Global:IsoData = $JsonRaw
+        $CbType.Items.Clear(); [void]$CbType.Items.Add("All"); ($JsonRaw.type | Select-Object -Unique | Sort-Object) | ForEach-Object { [void]$CbType.Items.Add($_) }; $CbType.SelectedIndex=0
+        $CbLang.Items.Clear(); [void]$CbLang.Items.Add("All"); ($JsonRaw.language | Select-Object -Unique | Sort-Object) | ForEach-Object { [void]$CbLang.Items.Add($_) }; $CbLang.SelectedIndex=0
+        
         Filter-List; $Status.Text = "San sang."
-    } catch { [System.Windows.Forms.MessageBox]::Show("Khong tai duoc danh sach ISO!","Loi Mang") }
+    } catch { 
+        $Status.Text = "Loi ket noi JSON!"
+        [System.Windows.Forms.MessageBox]::Show("Khong tai duoc danh sach ISO!`nNguyen Nhan: $($_.Exception.Message)","Loi Mang") 
+    }
     $Form.Cursor = "Default"
 }
 
@@ -211,7 +233,7 @@ function Filter-List {
     if ($T -ne "All") { $List = $List | ? { $_.type -eq $T } }
     if ($B -ne "All") { $List = $List | ? { $_.bit -eq $B } }
     if ($L -ne "All") { $List = $List | ? { $_.language -eq $L } }
-    foreach ($I in $List) { $CbResult.Items.Add($I.name) }
+    foreach ($I in $List) { [void]$CbResult.Items.Add($I.name) }
     if ($CbResult.Items.Count -gt 0) { $CbResult.SelectedIndex=0; $BtnDown.Enabled=$true } else { $BtnDown.Enabled=$false }
 }
 
@@ -220,7 +242,7 @@ $CbType.Add_SelectedIndexChanged({ Filter-List }); $CbBit.Add_SelectedIndexChang
 # --- BTN DOWN LOGIC ---
 $BtnDown.Add_Click({
     $Sel = $CbResult.SelectedItem
-    $Item = $Global:IsoData | ? { $_.name -eq $Sel } | Select -First 1
+    $Item = $Global:IsoData | ? { $_.name -eq $Sel } | Select-Object -First 1
     if (!$Item) { return }
 
     $SafeName = $Item.name -replace '[\\/:*?"<>|]', '' -replace '\s+', '_'
