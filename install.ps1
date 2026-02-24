@@ -292,7 +292,7 @@ Add-Btn $P1 "🚑 CỨU DỮ LIỆU(HDD)" { Tai-Va-Chay "Disk.Genius.rar" "DiskG
 Add-Btn $P1 "🗑 GỠ APP RÁC"       { Load-Module "Debloater.ps1" } | Out-Null
 Add-Btn $P1 "🛠️ Tùy chỉnh Windows" { Load-Module "WinSettings.ps1" } | Out-Null
 Add-Btn $P1 "🔧 SỬA LỖI HỆ THỐNG" { Load-Module "SystemRepair.ps1" } | Out-Null
-Add-Btn $P1 "🔎 QUÉT TẬP TIN"     { Load-Module "FileScanner.ps1" } | Out-Null
+Add-Btn $P1 "🔎 QUÉT TẬP TIN"     { Load-Module "scanfile.ps1" } | Out-Null
 
 $P2 = Add-Card "BẢO MẬT" "SECURITY" 350 20 320 400
 Add-Btn $P2 "🌐 ĐỔI DNS SIÊU TỐC"    { Load-Module "NetworkMaster.ps1" } | Out-Null
