@@ -4,21 +4,25 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Exit
 }
 
+# Load thư viện UI
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
 # --- CẤU HÌNH LÕI & DỮ LIỆU ---
 $sigcheckUrl = "https://live.sysinternals.com/sigcheck64.exe"
 $sigcheckPath = "$env:TEMP\sigcheck64.exe"
 
-# Phân tách rõ ràng User (Người dùng hiện tại) và System (Toàn hệ thống)
-$targetPaths = @(
+$defaultTargetPaths = @(
     @{ Scope = "User";   Path = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup" }
     @{ Scope = "User";   Path = "$env:LOCALAPPDATA\Temp" }
     @{ Scope = "System"; Path = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup" }
-    @{ Scope = "System"; Path = "$env:WINDIR\Temp" } # Thêm thư mục Temp của System
+    @{ Scope = "System"; Path = "$env:WINDIR\Temp" }
 )
 
-# --- HÀM LÕI XỬ LÝ QUÉT (Chạy độc lập với UI) ---
+# --- HÀM LÕI XỬ LÝ QUÉT ---
 function Start-DeepScan {
     param(
+        [array]$Targets,
         [ScriptBlock]$UpdateStatusAction,
         [ScriptBlock]$AddRowAction,
         [ScriptBlock]$CompleteAction
@@ -27,17 +31,15 @@ function Start-DeepScan {
     $count = 0
     $dangerCount = 0
 
-    # 1. Tải Core
     if (-not (Test-Path $sigcheckPath)) {
         &$UpdateStatusAction "Đang tải Core Sysinternals..."
         try { Invoke-WebRequest -Uri $sigcheckUrl -OutFile $sigcheckPath -UseBasicParsing } 
         catch { &$UpdateStatusAction "Lỗi mạng! Không thể tải Core."; &$CompleteAction 0 0; return }
     }
 
-    &$UpdateStatusAction "Đang quét và băm Hash toàn bộ file..."
+    &$UpdateStatusAction "Đang quét và băm Hash..."
 
-    # 2. Quét từng vùng theo Scope
-    foreach ($target in $targetPaths) {
+    foreach ($target in $Targets) {
         $path = $target.Path
         $scope = $target.Scope
 
@@ -46,9 +48,10 @@ function Start-DeepScan {
             if ($sigOutput -and $sigOutput.Count -gt 1) {
                 $csvData = $sigOutput | ConvertFrom-Csv -Delimiter ","
                 foreach ($row in $csvData) {
+                    # [FIX LỖI SPLIT-PATH]: Bỏ qua nếu dòng này không có Path
+                    if ([string]::IsNullOrWhiteSpace($row.Path)) { continue }
+
                     $count++
-                    
-                    # --- PHÂN LOẠI FILE ĐA DẠNG ---
                     $ext = [System.IO.Path]::GetExtension($row.Path).ToLower()
                     $fileType = "Khác"
                     $isRun = $false
@@ -61,7 +64,6 @@ function Start-DeepScan {
                     elseif ($ext -match "\.(jpg|png|gif|mp4|mp3|wav|avi|mkv)$") { $fileType = "Đa phương tiện" }
                     elseif ($ext -match "\.(db|sqlite|sql|mdb)$") { $fileType = "Database" }
 
-                    # --- ĐÁNH GIÁ AN TOÀN ---
                     $publisher = $row.Publisher
                     $status = ""
 
@@ -82,14 +84,11 @@ function Start-DeepScan {
                     $pub = if([string]::IsNullOrWhiteSpace($publisher)) { "---" } else { $publisher }
                     $fileName = Split-Path $row.Path -Leaf
 
-                    # Gửi data lên UI
                     &$AddRowAction $scope $status $fileType $hashMD5 $pub $fileName $row.Path
                 }
             }
         }
     }
-    
-    # Báo hoàn thành
     &$CompleteAction $count $dangerCount
 }
 
@@ -101,15 +100,17 @@ try { Add-Type -AssemblyName PresentationFramework -ErrorAction Stop }
 catch { $useWPF = $false }
 
 if ($useWPF) {
-    # ---------------- UI: WPF (Ưu tiên) ----------------
+    # ---------------- UI: WPF ----------------
     [xml]$xaml = @"
-    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="Deep Scanner v4 (WPF - Modern)" Height="600" Width="1050" Background="#f8f9fa">
+    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="Deep Scanner v5 (Custom Folder)" Height="600" Width="1050" Background="#f8f9fa">
         <Grid Margin="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="*"/> <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Text="Bộ Quét Chuyên Sâu v4 (Hỗ trợ chia Scope &amp; Đa định dạng)" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
+            <TextBlock Text="Bộ Quét Chuyên Sâu v5 (Hỗ trợ chọn thư mục tuỳ ý)" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
             <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                <Button Name="btnBrowse" Content="Chọn thư mục..." Width="100" Height="30" Margin="0,0,10,0"/>
+                <TextBox Name="txtTarget" Width="250" Height="30" VerticalContentAlignment="Center" Text="[Mặc định] Các vùng trọng điểm" IsReadOnly="True" Margin="0,0,10,0" Background="#eee"/>
                 <Button Name="btnScan" Content="Bắt đầu Quét" Width="120" Height="30" Background="#DC3545" Foreground="White" FontWeight="Bold"/>
                 <TextBlock Name="txtStatus" Text="Sẵn sàng..." Margin="15,5,0,0" FontStyle="Italic" Foreground="#555"/>
             </StackPanel>
@@ -132,14 +133,28 @@ if ($useWPF) {
 "@
     $reader = (New-Object System.Xml.XmlNodeReader $xaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
+    $btnBrowse = $window.FindName("btnBrowse"); $txtTarget = $window.FindName("txtTarget")
     $btnScan = $window.FindName("btnScan"); $txtStatus = $window.FindName("txtStatus")
     $lstResults = $window.FindName("lstResults"); $txtSummary = $window.FindName("txtSummary")
 
+    # Sự kiện chọn thư mục
+    $btnBrowse.Add_Click({
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "Chọn thư mục bạn muốn quét mã độc"
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $txtTarget.Text = $dialog.SelectedPath
+        }
+    })
+
     $btnScan.Add_Click({
-        $btnScan.IsEnabled = $false; $lstResults.Items.Clear(); $txtSummary.Text = ""
+        $btnScan.IsEnabled = $false; $btnBrowse.IsEnabled = $false
+        $lstResults.Items.Clear(); $txtSummary.Text = ""
         $dispatcher = [System.Windows.Threading.Dispatcher]::CurrentDispatcher
 
-        # Định nghĩa các Action để truyền vào hàm Lõi
+        $targetsToScan = @()
+        if ($txtTarget.Text -match "\[Mặc định\]") { $targetsToScan = $defaultTargetPaths } 
+        else { $targetsToScan = @( @{ Scope = "Custom"; Path = $txtTarget.Text } ) }
+
         $actStatus = { param($msg) $dispatcher.Invoke([Action]{ $txtStatus.Text = $msg }) }
         $actRow = { param($sc, $st, $ft, $hs, $pb, $fn, $pt) 
             $dispatcher.Invoke([Action]{
@@ -151,33 +166,41 @@ if ($useWPF) {
                 $txtStatus.Text = "Hoàn tất quét $c file."
                 if ($dc -gt 0) { $txtSummary.Text = "Phát hiện $dc file NGUY HIỂM!"; $txtSummary.Foreground = "Red" } 
                 else { $txtSummary.Text = "Hệ thống an toàn."; $txtSummary.Foreground = "Green" }
-                $btnScan.IsEnabled = $true
+                $btnScan.IsEnabled = $true; $btnBrowse.IsEnabled = $true
             })
         }
         
-        Start-DeepScan -UpdateStatusAction $actStatus -AddRowAction $actRow -CompleteAction $actDone
+        Start-DeepScan -Targets $targetsToScan -UpdateStatusAction $actStatus -AddRowAction $actRow -CompleteAction $actDone
     })
     $window.ShowDialog() | Out-Null
 
 } else {
     # ---------------- UI: WinForms (Dự phòng) ----------------
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Deep Scanner v4 (WinForms - Fallback)"
+    $form.Text = "Deep Scanner v5 (WinForms - Fallback)"
     $form.Size = New-Object System.Drawing.Size(1050, 600)
     $form.StartPosition = "CenterScreen"
 
+    $btnBrowse = New-Object System.Windows.Forms.Button
+    $btnBrowse.Location = New-Object System.Drawing.Point(10, 10)
+    $btnBrowse.Size = New-Object System.Drawing.Size(100, 30)
+    $btnBrowse.Text = "Chọn thư mục..."
+
+    $txtTarget = New-Object System.Windows.Forms.TextBox
+    $txtTarget.Location = New-Object System.Drawing.Point(120, 15)
+    $txtTarget.Size = New-Object System.Drawing.Size(250, 30)
+    $txtTarget.Text = "[Mặc định] Các vùng trọng điểm"
+    $txtTarget.ReadOnly = $true
+
     $btnScan = New-Object System.Windows.Forms.Button
-    $btnScan.Location = New-Object System.Drawing.Point(10, 10)
-    $btnScan.Size = New-Object System.Drawing.Size(120, 30)
+    $btnScan.Location = New-Object System.Drawing.Point(380, 10)
+    $btnScan.Size = New-Object System.Drawing.Size(100, 30)
     $btnScan.Text = "Bắt đầu Quét"
     $btnScan.BackColor = [System.Drawing.Color]::Crimson
     $btnScan.ForeColor = [System.Drawing.Color]::White
 
     $lblStatus = New-Object System.Windows.Forms.Label
-    $lblStatus.Location = New-Object System.Drawing.Point(140, 18)
+    $lblStatus.Location = New-Object System.Drawing.Point(490, 15)
     $lblStatus.Size = New-Object System.Drawing.Size(400, 20)
     $lblStatus.Text = "Sẵn sàng (Đang chạy chế độ WinForms)..."
 
@@ -185,26 +208,26 @@ if ($useWPF) {
     $lstView.Location = New-Object System.Drawing.Point(10, 50)
     $lstView.Size = New-Object System.Drawing.Size(1010, 480)
     $lstView.View = [System.Windows.Forms.View]::Details
-    $lstView.GridLines = $true
-    $lstView.FullRowSelect = $true
+    $lstView.GridLines = $true; $lstView.FullRowSelect = $true
     $lstView.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
-    # Add Columns
-    $lstView.Columns.Add("Scope", 70) | Out-Null
-    $lstView.Columns.Add("Cảnh báo", 120) | Out-Null
-    $lstView.Columns.Add("Loại File", 120) | Out-Null
-    $lstView.Columns.Add("MD5 Hash", 230) | Out-Null
-    $lstView.Columns.Add("Nhà phát hành", 120) | Out-Null
-    $lstView.Columns.Add("Tên File", 150) | Out-Null
-    $lstView.Columns.Add("Đường dẫn", 200) | Out-Null
+    $lstView.Columns.Add("Scope", 70) | Out-Null; $lstView.Columns.Add("Cảnh báo", 120) | Out-Null
+    $lstView.Columns.Add("Loại File", 120) | Out-Null; $lstView.Columns.Add("MD5 Hash", 230) | Out-Null
+    $lstView.Columns.Add("Nhà phát hành", 120) | Out-Null; $lstView.Columns.Add("Tên File", 150) | Out-Null; $lstView.Columns.Add("Đường dẫn", 200) | Out-Null
 
-    $form.Controls.Add($btnScan)
-    $form.Controls.Add($lblStatus)
-    $form.Controls.Add($lstView)
+    $form.Controls.AddRange(@($btnBrowse, $txtTarget, $btnScan, $lblStatus, $lstView))
+
+    $btnBrowse.Add_Click({
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $txtTarget.Text = $dialog.SelectedPath }
+    })
 
     $btnScan.Add_Click({
-        $btnScan.Enabled = $false
-        $lstView.Items.Clear()
+        $btnScan.Enabled = $false; $btnBrowse.Enabled = $false; $lstView.Items.Clear()
+
+        $targetsToScan = @()
+        if ($txtTarget.Text -match "\[Mặc định\]") { $targetsToScan = $defaultTargetPaths } 
+        else { $targetsToScan = @( @{ Scope = "Custom"; Path = $txtTarget.Text } ) }
 
         $actStatus = { param($msg) $lblStatus.Text = $msg; [System.Windows.Forms.Application]::DoEvents() }
         $actRow = { param($sc, $st, $ft, $hs, $pb, $fn, $pt) 
@@ -214,16 +237,14 @@ if ($useWPF) {
             $item.SubItems.Add($fn) | Out-Null; $item.SubItems.Add($pt) | Out-Null
             if ($st -match "NGUY HIỂM") { $item.BackColor = [System.Drawing.Color]::MistyRose }
             $lstView.Items.Add($item) | Out-Null
-            # Update UI mượt mà
             if ($lstView.Items.Count % 10 -eq 0) { [System.Windows.Forms.Application]::DoEvents() }
         }
         $actDone = { param($c, $dc)
-            if ($dc -gt 0) { $lblStatus.Text = "Hoàn tất $c file. Phát hiện $dc file NGUY HIỂM!" } 
-            else { $lblStatus.Text = "Hoàn tất. Hệ thống an toàn." }
-            $btnScan.Enabled = $true
+            if ($dc -gt 0) { $lblStatus.Text = "Hoàn tất $c file. Phát hiện $dc file NGUY HIỂM!" } else { $lblStatus.Text = "Hoàn tất. Hệ thống an toàn." }
+            $btnScan.Enabled = $true; $btnBrowse.Enabled = $true
         }
 
-        Start-DeepScan -UpdateStatusAction $actStatus -AddRowAction $actRow -CompleteAction $actDone
+        Start-DeepScan -Targets $targetsToScan -UpdateStatusAction $actStatus -AddRowAction $actRow -CompleteAction $actDone
     })
 
     $form.ShowDialog() | Out-Null
