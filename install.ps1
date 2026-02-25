@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.3 ARCHITECTURE (WPF Primary -> WinForms Fallback)
+    Version: 20.4 ARCHITECTURE (WPF Primary with Full System Buttons -> WinForms Fallback)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -121,7 +121,7 @@ function Load-Session {
 }
 
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.3 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.4 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = "Segoe UI, 18, Bold"; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -201,16 +201,27 @@ if (Load-Session) {
 if (-not $Global:IsAuthenticated) { Exit }
 
 # ==============================================================================
-# HÀM FILELESS ẢO HÓA HOÀN TOÀN
+# HÀM FILELESS TẢI & CHẠY MODULE (WPF VÀ WINFORMS DÙNG CHUNG)
 # ==============================================================================
 function Invoke-SmartDownload ($Url, $OutFile) {
+    if ($Url -match "drive\.google\.com") {
+        $id = ""; if ($Url -match "id=([a-zA-Z0-9_-]+)") { $id = $matches[1] } elseif ($Url -match "/d/([a-zA-Z0-9_-]+)") { $id = $matches[1] }
+        if ($id) {
+            $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession; $BaseDriveUrl = "https://drive.google.com/uc?id=$id&export=download"
+            try { $Resp1 = Invoke-WebRequest -Uri $BaseDriveUrl -WebSession $Session -UseBasicParsing -ErrorAction Stop; [System.IO.File]::WriteAllBytes($OutFile, $Resp1.Content); return $true } 
+            catch {
+                $Html = $_.Exception.Response.GetResponseStream(); $Reader = New-Object System.IO.StreamReader($Html); $Content = $Reader.ReadToEnd(); $Reader.Close()
+                if ($Content -match "confirm=([a-zA-Z0-9_-]+)") { try { Invoke-WebRequest -Uri "$BaseDriveUrl&confirm=$($matches[1])" -OutFile $OutFile -WebSession $Session -UseBasicParsing; return $true } catch { return $false } }
+            }
+        }
+    }
     if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { $p = Start-Process "curl" "-L -o `"$OutFile`" `"$Url`" -s --retry 3 -k" -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode -eq 0 -and (Test-Path $OutFile)) { return $true } }
     try { $w = New-Object System.Net.WebClient; $w.DownloadFile($Url, $OutFile); return $true } catch { return $false }
 }
+
 function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }; if ($L -notmatch "^http") { $L = "$BaseUrl$L" }; $D = "$TempDir\$N"; if (Invoke-SmartDownload $L $D) { if ($T -eq "Msi") { Start-Process "msiexec.exe" "/i `"$D`" /quiet /norestart" -Wait } else { Start-Process $D -Wait } } }
 
 function Load-Module ($N) { 
-    if ($this -ne $null) { $this.Enabled = $false }
     try { 
         $TargetUrl = "$RawUrl$N`?t=$(Get-Date -UFormat %s)"
         $StubCmd = "
@@ -226,12 +237,11 @@ function Load-Module ($N) {
         $EncodedStub = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedStub" 
     } catch { }
-    if ($this -ne $null) { Start-Sleep -Milliseconds 500; $this.Enabled = $true }
 }
 
 
 # ==============================================================================
-# GIAO DIỆN WPF - CỐ GẮNG KHỞI TẠO TRƯỚC (WPF FIRST)
+# GIAO DIỆN WPF - CHUẨN MƯỢT MÀ VỚI DANH SÁCH NÚT HỆ THỐNG
 # ==============================================================================
 $Global:IsWpfLoaded = $false
 
@@ -240,10 +250,9 @@ try {
     Add-Type -AssemblyName PresentationCore -ErrorAction Stop
     Add-Type -AssemblyName WindowsBase -ErrorAction Stop
 
-    # Khung xương WPF (Có thể code thêm chức năng tại đây)
     [xml]$WpfXaml = @"
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            Title="PHAT TAN PC V20.3 | GÓI: $($Global:LicenseType) | User: $($Global:UserEmail)" 
+            Title="PHAT TAN PC V20.4 | GÓI: $($Global:LicenseType) | User: $($Global:UserEmail)" 
             Height="780" Width="1080" WindowStartupLocation="CenterScreen" Background="#19191E"
             FontFamily="Segoe UI">
         <Grid>
@@ -256,16 +265,32 @@ try {
             <Grid Grid.Row="0" Background="#232328">
                 <TextBlock Text="PHAT TAN PC TOOLKIT" Foreground="DeepSkyBlue" FontSize="24" FontWeight="Bold" Margin="20,15,0,0"/>
                 <TextBlock Text="Enterprise Cloud Architecture - Current Plan: $($Global:LicenseType)" Foreground="Lime" FontSize="12" FontStyle="Italic" Margin="25,55,0,0"/>
-                
                 <Button Name="BtnProfileWpf" Content="👤 TRANG CÁ NHÂN" Width="160" Height="35" HorizontalAlignment="Right" Margin="0,0,20,0" Background="DimGray" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
             </Grid>
             
             <Grid Grid.Row="1" Background="#1E1E23">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="ĐANG PHÁT TRIỂN MODULE WPF MỚI..." Foreground="White" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Cảm ơn bạn đã đồng hành cùng TITAN TOOLKIT" Foreground="Silver" FontSize="14" HorizontalAlignment="Center" Margin="0,10,0,30"/>
-                    <Button Name="BtnFallback" Content="↪ CHUYỂN VỀ GIAO DIỆN WINFORMS HIỆN TẠI" Width="350" Height="45" Background="Crimson" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
-                </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20">
+                        <Border Background="#28282D" CornerRadius="10" Padding="15">
+                            <StackPanel>
+                                <TextBlock Text="HỆ THỐNG (SYSTEM)" Foreground="#00BEFF" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                                <WrapPanel>
+                                    <Button Name="WpfSys1" Content="ℹ KIỂM TRA CẤU HÌNH" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys2" Content="♻ DỌN RÁC MÁY TÍNH" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys3" Content="💾 QUẢN LÝ Ổ ĐĨA" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys4" Content="🔍 QUÉT LỖI WINDOWS" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys5" Content="⚡ TỐI ƯU RAM" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys6" Content="🗝 KÍCH HOẠT BẢN QUYỀN" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys7" Content="🚑 CỨU DỮ LIỆU(HDD)" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys8" Content="🔧 SỬA LỖI HỆ THỐNG" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                    <Button Name="WpfSys9" Content="🔎 QUÉT TẬP TIN" Width="150" Height="45" Margin="5" Background="#00BEFF" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        
+                        <Button Name="BtnFallback" Content="↪ GIAO DIỆN WPF ĐANG HOÀN THIỆN - BẤM ĐỂ CHUYỂN VỀ WINFORMS CŨ" Width="500" Height="45" Margin="0,30,0,0" Background="Crimson" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
             
             <Grid Grid.Row="2" Background="#232328">
@@ -277,21 +302,21 @@ try {
     $Reader = (New-Object System.Xml.XmlNodeReader $WpfXaml)
     $WpfForm = [System.Windows.Markup.XamlReader]::Load($Reader)
     
-    # Bắt sự kiện Nút Cửa Hàng
-    $BtnBuyKeyWpf = $WpfForm.FindName("BtnBuyKeyWpf")
-    $BtnBuyKeyWpf.Add_Click({ Show-Store })
+    # BẮT SỰ KIỆN CHO CÁC NÚT TRÊN WPF
+    $WpfForm.FindName("WpfSys1").Add_Click({ Load-Module "SystemInfo.ps1" })
+    $WpfForm.FindName("WpfSys2").Add_Click({ Load-Module "SystemCleaner.ps1" })
+    $WpfForm.FindName("WpfSys3").Add_Click({ Load-Module "DiskManager.ps1" })
+    $WpfForm.FindName("WpfSys4").Add_Click({ Load-Module "SystemScan.ps1" })
+    $WpfForm.FindName("WpfSys5").Add_Click({ Load-Module "RamBooster.ps1" })
+    $WpfForm.FindName("WpfSys6").Add_Click({ Load-Module "WinActivator.ps1" })
+    $WpfForm.FindName("WpfSys7").Add_Click({ Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" })
+    $WpfForm.FindName("WpfSys8").Add_Click({ Load-Module "SystemRepair.ps1" })
+    $WpfForm.FindName("WpfSys9").Add_Click({ Load-Module "scanfile.ps1" })
     
-    # Nút chuyển về WinForms
-    $BtnFallback = $WpfForm.FindName("BtnFallback")
-    $BtnFallback.Add_Click({ 
-        $WpfForm.Close()
-        $Global:IsWpfLoaded = $false 
-    })
+    $WpfForm.FindName("BtnBuyKeyWpf").Add_Click({ Show-Store })
+    $WpfForm.FindName("BtnFallback").Add_Click({ $WpfForm.Close(); $Global:IsWpfLoaded = $false })
 
-    # Cờ này quyết định xem WPF có chạy lên được hay không
     $Global:IsWpfLoaded = $true 
-    
-    # Chạy Window WPF
     $WpfForm.ShowDialog() | Out-Null
     
 } catch {
@@ -301,7 +326,7 @@ try {
 
 
 # ==============================================================================
-# GIAO DIỆN WINFORMS - CHẠY NẾU WPF LỖI HOẶC BỊ ĐÓNG (FALLBACK)
+# GIAO DIỆN WINFORMS - CHẠY NẾU WPF LỖI HOẶC BẤM NÚT QUAY LẠI
 # ==============================================================================
 if (-not $Global:IsWpfLoaded) {
     
@@ -328,7 +353,7 @@ if (-not $Global:IsWpfLoaded) {
     }
 
     $Form = New-Object System.Windows.Forms.Form; 
-    $Form.Text = "PHAT TAN PC V20.3 | GÓI: $($Global:LicenseType) | User: $($Global:UserEmail)" 
+    $Form.Text = "PHAT TAN PC V20.4 | GÓI: $($Global:LicenseType) | User: $($Global:UserEmail)" 
     $Form.Size = New-Object System.Drawing.Size(1080, 780); $Form.StartPosition = "CenterScreen"; $Form.FormBorderStyle = "FixedSingle"; $Form.MaximizeBox = $false
 
     $Global:TimeLeft = 1800 
@@ -336,7 +361,7 @@ if (-not $Global:IsWpfLoaded) {
         $Script:DoomTimer = New-Object System.Windows.Forms.Timer; $Script:DoomTimer.Interval = 1000
         $Script:DoomTimer.Add_Tick({
             $Global:TimeLeft--; if ($Global:TimeLeft -le 0) { $Script:DoomTimer.Stop(); [System.Windows.Forms.MessageBox]::Show("HẾT THỜI GIAN DÙNG THỬ! Vui lòng mua Key.", "HẾT HẠN", 0, 16); Remove-Item $Global:SessionFile -Force; [Environment]::Exit(0) }
-            $m = [math]::Floor($Global:TimeLeft / 60); $s = $Global:TimeLeft % 60; $Form.Text = "PHAT TAN PC V20.3 | TRẢI NGHIỆM FREE - HẾT HẠN SAU: $m phút $s giây"
+            $m = [math]::Floor($Global:TimeLeft / 60); $s = $Global:TimeLeft % 60; $Form.Text = "PHAT TAN PC V20.4 | TRẢI NGHIỆM FREE - HẾT HẠN SAU: $m phút $s giây"
         }); $Script:DoomTimer.Start()
     }
 
@@ -457,13 +482,20 @@ if (-not $Global:IsWpfLoaded) {
         $BtnInstall.Enabled=$false; $BtnInstall.Text="ĐANG CHẠY NGẦM..."; $Global:SyncHash.Queue=$L; $Global:SyncHash.Total=$L.Count; $Global:SyncHash.Current=0; $Global:SyncHash.Progress=0; $Global:SyncHash.IsDone=$false; $TimerUpdate.Start()
         $Runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace(); $Runspace.Open(); $Runspace.SessionStateProxy.SetVariable("sync", $Global:SyncHash)
         $Pipeline = $Runspace.CreatePipeline(); $Pipeline.Commands.AddScript({
-            $FDown = { param ($U, $O); if(Get-Command "curl.exe" -ErrorAction SilentlyContinue){$p=Start-Process "curl" "-L -o `"$O`" `"$U`" -s -k" -Wait -PassThru -WindowStyle Hidden; if($p.ExitCode -eq 0 -and (Test-Path $O)){return $true}}; try{Add-Type -AssemblyName System.Net.Http;$c=New-Object System.Net.Http.HttpClient;$r=$c.GetAsync($U).GetAwaiter().GetResult();if($r.IsSuccessStatusCode){$s=$r.Content.ReadAsStreamAsync().GetAwaiter().GetResult();$fs=[System.IO.File]::Create($O);$s.CopyTo($fs);$fs.Close();$s.Close();$c.Dispose();return $true}}catch{}; try{$w=New-Object System.Net.WebClient;$w.DownloadFile($U, $O);return $true}catch{return $false} }
-            foreach ($A in $sync.Queue) {
-                $sync.Current++; $sync.Status = "[$($sync.Current)/$($sync.Total)] $($A.name)..."; $sync.Progress = [math]::Round((($sync.Current - 1) / $sync.Total) * 100)
-                if ($A.type -eq "Script") { try { Invoke-Expression $A.irm } catch {} } 
-                else { $L = if ($A.link -notmatch "^http") { "$($sync.BaseUrl)$($A.link)" } else { $A.link }; $D = "$($sync.TempDir)\$($A.filename)"; if (&$FDown $L $D) { try { if ($A.type -eq "Msi") { Start-Process "msiexec.exe" "/i `"$D`" /quiet /norestart" -Wait -WindowStyle Hidden } else { Start-Process $D -Wait -WindowStyle Hidden }; if ($A.irm) { Invoke-Expression $A.irm } } catch {} } }
-                $sync.Progress = [math]::Round(($sync.Current / $sync.Total) * 100)
-            } $sync.Status = "Xong!"; $sync.IsDone = $true
+            $FDown = { param ($U, $O); 
+            if ($U -match "drive\.google\.com") {
+                $id = ""; if ($U -match "id=([a-zA-Z0-9_-]+)") { $id = $matches[1] } elseif ($U -match "/d/([a-zA-Z0-9_-]+)") { $id = $matches[1] }
+                if ($id) {
+                    $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession; $BaseDriveUrl = "https://drive.google.com/uc?id=$id&export=download"
+                    try { $Resp1 = Invoke-WebRequest -Uri $BaseDriveUrl -WebSession $Session -UseBasicParsing -ErrorAction Stop; [System.IO.File]::WriteAllBytes($O, $Resp1.Content); return $true } 
+                    catch {
+                        $Html = $_.Exception.Response.GetResponseStream(); $Reader = New-Object System.IO.StreamReader($Html); $Content = $Reader.ReadToEnd(); $Reader.Close()
+                        if ($Content -match "confirm=([a-zA-Z0-9_-]+)") { try { Invoke-WebRequest -Uri "$BaseDriveUrl&confirm=$($matches[1])" -OutFile $O -WebSession $Session -UseBasicParsing; return $true } catch { return $false } }
+                    }
+                }
+            }
+            if(Get-Command "curl.exe" -ErrorAction SilentlyContinue){$p=Start-Process "curl" "-L -o `"$O`" `"$U`" -s -k" -Wait -PassThru -WindowStyle Hidden; if($p.ExitCode -eq 0 -and (Test-Path $O)){return $true}}; try{Add-Type -AssemblyName System.Net.Http;$c=New-Object System.Net.Http.HttpClient;$r=$c.GetAsync($U).GetAwaiter().GetResult();if($r.IsSuccessStatusCode){$s=$r.Content.ReadAsStreamAsync().GetAwaiter().GetResult();$fs=[System.IO.File]::Create($O);$s.CopyTo($fs);$fs.Close();$s.Close();$c.Dispose();return $true}}catch{}; try{$w=New-Object System.Net.WebClient;$w.DownloadFile($U, $O);return $true}catch{return $false} 
+        }
         }) | Out-Null; $Pipeline.InvokeAsync()
     }
 
