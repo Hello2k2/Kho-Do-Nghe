@@ -1,6 +1,7 @@
 <#
-    VENTOY BOOT MAKER - PHAT TAN PC (V15.1 TRUE ASYNC)
+    VENTOY BOOT MAKER - PHAT TAN PC (V15.2 TRUE ASYNC & PARSE FIX)
     Updates:
+    - [FIX PARSE] Sửa lỗi "Missing property name" và "Unexpected token" do đặt tên biến bắt đầu bằng số (7zToolUrl -> Tool7zUrl).
     - [FIX TREO UI] Áp dụng kiến trúc Runspace (Đa luồng thực sự). 
     - [UI TIMER] Giao diện WPF/WinForms hoàn toàn không bị đơ khi tải file hoặc format.
 #>
@@ -29,7 +30,7 @@ $Global:UseWpf = $Global:WpfAvailable; $Global:AppRunning = $true
 $Global:VentoyRepo = "https://api.github.com/repos/ventoy/Ventoy/releases/latest"
 $Global:MasUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 $Global:ThemeConfigUrl = "https://raw.githubusercontent.com/Hello2k2/Kho-Do-Nghe/refs/heads/main/themes.json" 
-$Global:7zToolUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
+$Global:Tool7zUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
 $Global:MemtestFallback = "https://www.memtest.org/download/v8.00/mt86plus_8.00_x86_64.iso.zip"
 $Global:WorkDir = "C:\PhatTan_Ventoy_Temp"
 $Global:DebugFile = "$PSScriptRoot\debug_log.txt" 
@@ -64,7 +65,7 @@ $Global:CoreLogic = {
     # Kế thừa biến môi trường từ UI
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
     $Global:VentoyRepo = $G.VentoyRepo; $Global:MasUrl = $G.MasUrl; $Global:ThemeConfigUrl = $G.ThemeConfigUrl
-    $Global:7zToolUrl = $G.7zToolUrl; $Global:MemtestFallback = $G.MemtestFallback
+    $Global:Tool7zUrl = $G.Tool7zUrl; $Global:MemtestFallback = $G.MemtestFallback
     $Global:WorkDir = $G.WorkDir; $Global:DebugFile = $G.DebugFile; $Global:VersionFile = $G.VersionFile
 
     function Write-SystemLog ($Msg) {
@@ -80,7 +81,7 @@ $Global:CoreLogic = {
         Write-SystemLog "Đang tạo cấu trúc thư mục Phát Tấn PC..."
         $Dirs = @("ventoy\script", "ventoy\themes\theme-vfc", "ISO_Windows\Win7", "ISO_Windows\Win10", "ISO_Windows\Win11", "ISO_Windows\LTSC10", "ISO_Windows\LTSC11", "ISO_Windows\Server", "ISO_Windows\LTSC", "ISO_Linux\Ubuntu", "ISO_Linux\Kali", "ISO_Linux\Mint", "ISO_Linux\CentOS", "ISO_Rescue", "Tools_Drivers", "ISO_Android", "DATA\Documents", "DATA\Music", "DATA\Picture", "DATA\Video", "DATA\App", "DATA\Shortcut", "BanQuyen\Windows7", "BanQuyen\Windows10", "BanQuyen\Windows11", "BanQuyen\Office", "BanQuyen\Keys")
         foreach ($d in $Dirs) { $Path = Join-Path $UsbRoot $d; if (!(Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null } }
-        "USB BOOT MASTER - PHAT TAN PC`nCreated: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')`nTool version: 15.1 ASYNC" | Out-File (Join-Path $UsbRoot "ReadMe.txt") -Encoding UTF8 -Force
+        "USB BOOT MASTER - PHAT TAN PC`nCreated: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')`nTool version: 15.2 ASYNC" | Out-File (Join-Path $UsbRoot "ReadMe.txt") -Encoding UTF8 -Force
     }
 
     function Force-Disk-Refresh {
@@ -103,11 +104,11 @@ $Global:CoreLogic = {
     function Extract-Recursive ($SourceFile, $DestDir) {
         if (Test-Path $DestDir) { Remove-Item $DestDir -Recurse -Force }; New-Item $DestDir -ItemType Directory | Out-Null
         Write-SystemLog "Giải nén: $([System.IO.Path]::GetFileName($SourceFile))"
-        $7zExe = "$Global:WorkDir\7za.exe"; if (!(Test-Path $7zExe)) { Download-File-Robust $Global:7zToolUrl $7zExe }
-        $Proc = Start-Process -FilePath $7zExe -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y -bso0 -bsp0" -Wait -NoNewWindow -PassThru
+        $Exe7z = "$Global:WorkDir\7za.exe"; if (!(Test-Path $Exe7z)) { Download-File-Robust $Global:Tool7zUrl $Exe7z }
+        $Proc = Start-Process -FilePath $Exe7z -ArgumentList "x `"$SourceFile`" -o`"$DestDir`" -y -bso0 -bsp0" -Wait -NoNewWindow -PassThru
         if ($Proc.ExitCode -ne 0) { try { [System.IO.Compression.ZipFile]::ExtractToDirectory($SourceFile, $DestDir) } catch { throw "Lỗi giải nén" } }
         $InnerTar = Get-ChildItem -Path $DestDir -Filter "*.tar" | Select -First 1
-        if ($InnerTar) { Start-Process -FilePath $7zExe -ArgumentList "x `"$($InnerTar.FullName)`" -o`"$DestDir`" -y -bso0 -bsp0" -Wait -NoNewWindow | Out-Null; Remove-Item $InnerTar.FullName -Force }
+        if ($InnerTar) { Start-Process -FilePath $Exe7z -ArgumentList "x `"$($InnerTar.FullName)`" -o`"$DestDir`" -y -bso0 -bsp0" -Wait -NoNewWindow | Out-Null; Remove-Item $InnerTar.FullName -Force }
     }
 
     function Prepare-Ventoy-Core {
@@ -246,7 +247,7 @@ function Start-AsyncJob ($Config) {
     
     $GlobalsHash = @{
         VentoyRepo = $Global:VentoyRepo; MasUrl = $Global:MasUrl; ThemeConfigUrl = $Global:ThemeConfigUrl
-        7zToolUrl = $Global:7zToolUrl; MemtestFallback = $Global:MemtestFallback
+        Tool7zUrl = $Global:Tool7zUrl; MemtestFallback = $Global:MemtestFallback
         WorkDir = $Global:WorkDir; DebugFile = $Global:DebugFile; VersionFile = $Global:VersionFile
     }
 
@@ -271,14 +272,14 @@ function Start-AsyncJob ($Config) {
 function Show-WpfGUI {
     $XAML = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        Title="PHAT TAN VENTOY V15.1 (WPF ENGINE)" Height="750" Width="900" Background="#1E1E23" WindowStartupLocation="CenterScreen">
+        Title="PHAT TAN VENTOY V15.2 (WPF ENGINE)" Height="750" Width="900" Background="#1E1E23" WindowStartupLocation="CenterScreen">
     <Grid Margin="10">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <StackPanel>
                 <TextBlock Text="USB BOOT MASTER - VENTOY EDITION" FontSize="20" FontWeight="Bold" Foreground="#00B4FF"/>
-                <TextBlock Text="True Async Multithreading | Không treo máy | Cấu trúc chuẩn" Foreground="Gray"/>
+                <TextBlock Text="True Async Multithreading | Parse Fix | Cấu trúc chuẩn" Foreground="Gray"/>
             </StackPanel>
             <Button Name="BtnSwitch" Content="Sang WinForms" HorizontalAlignment="Right" VerticalAlignment="Center" Background="Orange" FontWeight="Bold" Padding="10,5"/>
         </Grid>
@@ -397,7 +398,7 @@ function Show-WpfGUI {
 # --- 6. GIAO DIỆN WINFORMS (FALLBACK) ---
 function Show-WinFormsGUI {
     $F = New-Object System.Windows.Forms.Form
-    $F.Text = "PHAT TAN VENTOY V15.1 (WINFORMS)"; $F.Size = "950,850"; $F.StartPosition = "CenterScreen"; $F.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $F.ForeColor = [System.Drawing.Color]::White
+    $F.Text = "PHAT TAN VENTOY V15.2 (WINFORMS)"; $F.Size = "950,850"; $F.StartPosition = "CenterScreen"; $F.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $F.ForeColor = [System.Drawing.Color]::White
 
     $FTit = New-Object System.Drawing.Font("Segoe UI", 14, 1); $FNor = New-Object System.Drawing.Font("Segoe UI", 9, 0)
     $Pnl = New-Object System.Windows.Forms.Panel; $Pnl.Dock = "Top"; $Pnl.Height = 120; $F.Controls.Add($Pnl)
