@@ -195,20 +195,27 @@ function Show-AuthGateway {
 }
 
 # --- KHỞI ĐỘNG XÁC THỰC ---
+# --- KHỞI ĐỘNG XÁC THỰC ---
 Write-Host "DEBUG: Đang kiểm tra Session (Registry/File)..." -ForegroundColor Yellow
 if (Load-Session) { 
     Write-Host "DEBUG: Đã tìm thấy Session. Đang gọi Form Pass Cấp 2..." -ForegroundColor Yellow
     $InputAES = Show-Level2Pass "Nhập Mật mã Tool Cấp 2 (Hoặc Master Pass từ Server):"
+    
+    # Kiểm tra Pass cấp 2
     if ($InputAES -ne $Global:LocalPass -and $InputAES -ne $Global:ServerPass) { 
         [System.Windows.Forms.MessageBox]::Show("Sai Mật mã Cấp 2! Tool sẽ thoát.", "LỖI", 0, 16); Exit 
-    } 
+    } else {
+        # ĐÂY LÀ DÒNG CHÚA TỂ CỨU SỐNG TOOL: Bật cờ xác thực thành công!
+        $Global:IsAuthenticated = $true 
+    }
 } else { 
     Write-Host "DEBUG: Không có Session hợp lệ. Bật cổng đăng nhập..." -ForegroundColor Yellow
     Show-AuthGateway 
 }
+
+# Nếu tới bước này mà vẫn chưa Auth thì sút ra ngoài
 if (-not $Global:IsAuthenticated) { Exit }
 Write-Host "DEBUG: Xác thực thành công! Đang tải Main UI..." -ForegroundColor Green
-
 
 # ==============================================================================
 # HÀM RUN-MODULE BẰNG .NET DIAGNOSTICS PROCESS (KHÔNG THỂ TREO, KHÔNG THỂ CRASH)
