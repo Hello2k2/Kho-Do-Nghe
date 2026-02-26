@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.8 ULTRA STABLE (Fixed Background Jobs, Fixed UI Hang, Anti-Crash Lifecycle)
+    Version: 20.9 ULTRA CORE (Registry Session, .NET Process Multi-threading, Zero Crash)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -28,11 +28,11 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null
 
-# --- HÀM GHI LOG UI & CONSOLE (DEBUG) ---
+# --- HÀM GHI LOG ---
 function Write-GuiLog ($Msg) {
     $Time = Get-Date -Format "HH:mm:ss"
     $FullMsg = "[$Time] $Msg`n"
-    Write-Host "DEBUG: $Msg" -ForegroundColor Yellow # In ra Console để Debug
+    Write-Host "LOG: $Msg" -ForegroundColor Cyan
     if ($Global:IsWpfMode -and $Global:LogBox) {
         $Global:LogBox.Dispatcher.Invoke({ $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToEnd() })
     } elseif (-not $Global:IsWpfMode -and $Global:LogBox) {
@@ -40,7 +40,7 @@ function Write-GuiLog ($Msg) {
     }
 }
 
-# --- CÁC HÀM CUSTOM FORM & LOGIN (GIỮ NGUYÊN) ---
+# --- CÁC HÀM UI CƠ BẢN ---
 function Show-OtpInput ($Title, $Msg, $Link) {
     $OForm = New-Object System.Windows.Forms.Form; $OForm.Text = $Title; $OForm.Size = "400, 240"; $OForm.StartPosition = "CenterParent"; $OForm.FormBorderStyle = "FixedToolWindow"; $OForm.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 25); $OForm.ForeColor = "White"
     $LblMsg = New-Object System.Windows.Forms.Label; $LblMsg.Text = $Msg; $LblMsg.Location = "20, 15"; $LblMsg.Size = "340, 45"; $LblMsg.Font = "Segoe UI, 10"; $OForm.Controls.Add($LblMsg)
@@ -49,7 +49,6 @@ function Show-OtpInput ($Title, $Msg, $Link) {
     $BtnOk = New-Object System.Windows.Forms.Button; $BtnOk.Text = "XÁC NHẬN"; $BtnOk.Location = "20, 145"; $BtnOk.Size = "340, 40"; $BtnOk.BackColor = "ForestGreen"; $BtnOk.ForeColor = "White"; $BtnOk.Font = "Segoe UI, 11, Bold"; $BtnOk.FlatStyle = "Flat"; $BtnOk.DialogResult = "OK"; $OForm.Controls.Add($BtnOk)
     $OForm.AcceptButton = $BtnOk; $OForm.ShowDialog() | Out-Null; $Res = if ($OForm.DialogResult -eq "OK") { $TxtOtp.Text.Trim() } else { $null }; $OForm.Dispose(); return $Res
 }
-
 function Show-Level2Pass ($TitleMsg) {
     $OForm = New-Object System.Windows.Forms.Form; $OForm.Text = "BẢO MẬT CỤC BỘ"; $OForm.Size = "400, 200"; $OForm.StartPosition = "CenterScreen"; $OForm.FormBorderStyle = "FixedToolWindow"; $OForm.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 25); $OForm.ForeColor = "White"
     $LblMsg = New-Object System.Windows.Forms.Label; $LblMsg.Text = $TitleMsg; $LblMsg.Location = "20, 20"; $LblMsg.Size = "340, 25"; $LblMsg.Font = "Segoe UI, 10"; $OForm.Controls.Add($LblMsg)
@@ -92,22 +91,62 @@ function Show-Store {
 
 function Call-API ($Action, $Payload) { try { $Payload.Add("action", $Action); $JsonString = $Payload | ConvertTo-Json -Compress; $Utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($JsonString); return Invoke-RestMethod -Uri $Global:ApiServer -Method Post -Body $Utf8Bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 15 } catch { return @{ status="error"; message="Mất kết nối Máy chủ!" } } }
 
-# FIX CỨNG LỖI CRASH FILE SESSION
+
+# ==============================================================================
+# HỆ THỐNG LƯU SESSION REGISTRY (CHỐNG CRASH FILE LOCK)
+# ==============================================================================
+$Global:RegPath = "HKCU:\Software\TitanPC"
+
 function Save-Session ($E, $T, $H, $LP, $SP) { 
-    $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"; $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R)); [System.IO.File]::WriteAllText($Global:SessionFile, $Encoded) 
-}
-function Load-Session { 
-    if ([System.IO.File]::Exists($Global:SessionFile)) { 
-        try { 
-            $Encoded = [System.IO.File]::ReadAllText($Global:SessionFile).Trim(); $Decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded)); $P = $Decoded -split "\|"
-            if ($P[4] -eq $Global:MyHWID) { $Global:UserEmail = $P[0]; $Global:LicenseType = $P[2]; $Global:LocalPass = $P[6]; $Global:ServerPass = $P[8]; return $true } else { Remove-Item $Global:SessionFile -Force; return $false } 
-        } catch { Remove-Item $Global:SessionFile -Force; return $false } 
-    } return $false 
+    $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"
+    $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R))
+    
+    # Ưu tiên ghi vào Registry (Xịn & Ổn định)
+    if (-not (Test-Path $Global:RegPath)) { New-Item -Path $Global:RegPath -Force | Out-Null }
+    Set-ItemProperty -Path $Global:RegPath -Name "SessionData" -Value $Encoded -Force
+    
+    # Ghi dự phòng vào file .dat (Phòng hờ lỗi Win)
+    try { [System.IO.File]::WriteAllText($Global:SessionFile, $Encoded) } catch {}
 }
 
+function Load-Session { 
+    $Encoded = $null
+
+    # Ưu tiên đọc từ Registry trước
+    if (Test-Path $Global:RegPath) {
+        $RegVal = Get-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue
+        if ($RegVal) { $Encoded = $RegVal.SessionData }
+    }
+
+    # Nếu Registry trống, đọc từ file .dat (Trường hợp bản cũ chuyển sang)
+    if ([string]::IsNullOrEmpty($Encoded) -and [System.IO.File]::Exists($Global:SessionFile)) {
+        try { $Encoded = [System.IO.File]::ReadAllText($Global:SessionFile).Trim() } catch {}
+    }
+
+    if ($Encoded) {
+        try { 
+            $Decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded))
+            $P = $Decoded -split "\|"
+            if ($P[4] -eq $Global:MyHWID) { 
+                $Global:UserEmail = $P[0]; $Global:LicenseType = $P[2]; $Global:LocalPass = $P[6]; $Global:ServerPass = $P[8]
+                return $true 
+            }
+        } catch { }
+    }
+    
+    # Dọn dẹp rác nếu giải mã lỗi
+    if (Test-Path $Global:RegPath) { Remove-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue }
+    if (Test-Path $Global:SessionFile) { Remove-Item $Global:SessionFile -Force -ErrorAction SilentlyContinue }
+    return $false 
+}
+
+# ==============================================================================
+# GIAO DIỆN ĐĂNG NHẬP
+# ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.8 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.9 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = "Segoe UI, 18, Bold"; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
+    
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
     $L1=New-Object System.Windows.Forms.Label;$L1.Text="Email đăng nhập:";$L1.Location="20,10";$L1.AutoSize=$true;$PnlLogin.Controls.Add($L1); $TUser=New-Object System.Windows.Forms.TextBox;$TUser.Location="20,30";$TUser.Size="420,30";$TUser.Font="Segoe UI, 12";$PnlLogin.Controls.Add($TUser)
     $L2=New-Object System.Windows.Forms.Label;$L2.Text="Mật khẩu:";$L2.Location="20,70";$L2.AutoSize=$true;$PnlLogin.Controls.Add($L2); $TPass=New-Object System.Windows.Forms.TextBox;$TPass.Location="20,90";$TPass.Size="420,30";$TPass.Font="Segoe UI, 12";$TPass.PasswordChar="*";$PnlLogin.Controls.Add($TPass)
@@ -156,7 +195,7 @@ function Show-AuthGateway {
 }
 
 # --- KHỞI ĐỘNG XÁC THỰC ---
-Write-Host "DEBUG: Đang kiểm tra Session..." -ForegroundColor Yellow
+Write-Host "DEBUG: Đang kiểm tra Session (Registry/File)..." -ForegroundColor Yellow
 if (Load-Session) { 
     Write-Host "DEBUG: Đã tìm thấy Session. Đang gọi Form Pass Cấp 2..." -ForegroundColor Yellow
     $InputAES = Show-Level2Pass "Nhập Mật mã Tool Cấp 2 (Hoặc Master Pass từ Server):"
@@ -164,15 +203,15 @@ if (Load-Session) {
         [System.Windows.Forms.MessageBox]::Show("Sai Mật mã Cấp 2! Tool sẽ thoát.", "LỖI", 0, 16); Exit 
     } 
 } else { 
-    Write-Host "DEBUG: Không có Session. Bật cổng đăng nhập..." -ForegroundColor Yellow
+    Write-Host "DEBUG: Không có Session hợp lệ. Bật cổng đăng nhập..." -ForegroundColor Yellow
     Show-AuthGateway 
 }
 if (-not $Global:IsAuthenticated) { Exit }
-Write-Host "DEBUG: Đăng nhập thành công! Bắt đầu nạp Giao diện..." -ForegroundColor Green
+Write-Host "DEBUG: Xác thực thành công! Đang tải Main UI..." -ForegroundColor Green
 
 
 # ==============================================================================
-# HÀM RUN-MODULE BẰNG POWERSHELL JOBS (CỐT LÕI MỚI - CHỐNG HANG UI)
+# HÀM RUN-MODULE BẰNG .NET DIAGNOSTICS PROCESS (KHÔNG THỂ TREO, KHÔNG THỂ CRASH)
 # ==============================================================================
 function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     $OriginalText = if ($IsWpfBtn) { $Btn.Content } else { $Btn.Text }
@@ -186,44 +225,43 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
         $Btn.Text = "⏳ ĐANG MỞ..."; $Btn.BackColor = [System.Drawing.Color]::DimGray; $Btn.Enabled = $false
     }
     
-    # Dùng tính năng Background Job tích hợp sẵn của PowerShell để độ ổn định cao nhất
-    $JobScript = {
-        param ($Url)
-        [System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288
-        try { 
-            $w = New-Object System.Net.WebClient
-            $w.Headers.Add('User-Agent', 'Titan/20')
-            $w.Encoding = [System.Text.Encoding]::UTF8
-            $code = $w.DownloadString($Url)
-            $w.Dispose()
-            if ($code) { [scriptblock]::Create($code).Invoke() }
-        } catch { }
-    }
+    # 1. Đóng gói lệnh tải và chạy (Encode để vượt tường lửa)
+    $TargetUrl = "$($RawUrl)$($ModulePath)?t=$(Get-Date -UFormat %s)"
+    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'Titan/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }"
+    $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
     
-    $FullUrl = "$($RawUrl)$($ModulePath)?t=$(Get-Date -UFormat %s)"
-    $Job = Start-Job -ScriptBlock $JobScript -ArgumentList $FullUrl
+    # 2. Dùng thư viện lõi .NET để tạo tiến trình (Cách ly hoàn toàn với UI hiện tại)
+    $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $ProcInfo.FileName = "powershell.exe"
+    $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
+    $ProcInfo.UseShellExecute = $false
     
-    Write-GuiLog "Tiến trình [$($Job.Id)] đã được tạo ngầm..."
+    $Proc = [System.Diagnostics.Process]::Start($ProcInfo)
+    Write-GuiLog "Tiến trình độc lập [PID: $($Proc.Id)] đã được tạo..."
 
-    # Vòng lặp Timer bắt Log và nhả Nút (Chỉ check xem Job đã chạy xong chưa)
-    $CheckTimer = New-Object System.Windows.Forms.Timer; $CheckTimer.Interval = 500
+    # 3. Dùng Timer của WinForms để giám sát tiến trình (Tuyệt đối an toàn cho Thread)
+    $CheckTimer = New-Object System.Windows.Forms.Timer
+    $CheckTimer.Interval = 500
     $CheckTimer.Add_Tick({
-        if ($Job.State -ne "Running") {
+        # Nếu Process đã tắt (hoặc mở lên giao diện riêng của nó)
+        if ($Proc.HasExited) {
             $CheckTimer.Stop(); $CheckTimer.Dispose()
-            Receive-Job -Job $Job -Wait -AutoRemoveJob | Out-Null
+            
+            # Trả lại trạng thái cho Nút bấm
             if ($IsWpfBtn) {
                 $Btn.Content = $OriginalText; $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($Btn.Tag); $Btn.IsEnabled = $true
             } else {
                 $Btn.Text = $OriginalText; $Btn.BackColor = $Btn.Tag; $Btn.Enabled = $true
             }
-            Write-GuiLog "=> [$($Job.Id)] Đã mở thành công: $ModulePath"
+            Write-GuiLog "=> [$($Proc.Id)] Khởi chạy hoàn tất: $ModulePath"
+            $Proc.Dispose()
         }
     })
     $CheckTimer.Start()
 }
 
 # ==============================================================================
-# GIAO DIỆN WPF VÀ WINFORMS BÊN DƯỚI GIỮ NGUYÊN HOÀN TOÀN CỦA V20.6
+# GIAO DIỆN WPF & WINFORMS FULL TÍNH NĂNG
 # ==============================================================================
 $Global:IsWpfMode = $true 
 
@@ -232,7 +270,7 @@ function Load-WPF {
         Add-Type -AssemblyName PresentationFramework -ErrorAction Stop; Add-Type -AssemblyName PresentationCore; Add-Type -AssemblyName WindowsBase
         [xml]$WpfXaml = @"
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                Title="PHAT TAN PC V20.8 | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.9 | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Grid>
                 <Grid.RowDefinitions>
@@ -240,7 +278,7 @@ function Load-WPF {
                 
                 <Grid Grid.Row="0" Background="#232328">
                     <TextBlock Text="PHAT TAN PC TOOLKIT" Foreground="DeepSkyBlue" FontSize="26" FontWeight="Bold" Margin="20,15,0,0"/>
-                    <TextBlock Text="Enterprise Cloud Architecture - Extreme Stable UI" Foreground="Lime" FontSize="13" FontStyle="Italic" Margin="25,55,0,0"/>
+                    <TextBlock Text="Enterprise Cloud Architecture - .NET Async Core Mode" Foreground="Lime" FontSize="13" FontStyle="Italic" Margin="25,55,0,0"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,20,0">
                         <Button Name="BtnToggleUI" Content="🌐 DÙNG WINFORMS" Width="160" Height="35" Background="#8A2BE2" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="0,0,15,0"/>
                         <Button Name="BtnProfileWpf" Content="👤 TRANG CÁ NHÂN" Width="150" Height="35" Background="DimGray" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
@@ -323,7 +361,7 @@ function Load-WPF {
 }
 
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.8 | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.9 | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font="Segoe UI, 24, Bold"; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     $BtnToggleUI = New-Object System.Windows.Forms.Button; $BtnToggleUI.Location="750, 25"; $BtnToggleUI.Size="140, 35"; $BtnToggleUI.FlatStyle="Flat"; $BtnToggleUI.Font="Segoe UI, 9, Bold"; $BtnToggleUI.Text="✨ DÙNG WPF"; $BtnToggleUI.BackColor=[System.Drawing.Color]::BlueViolet; $BtnToggleUI.Add_Click({ $Global:IsWpfMode = $true; $Form.Close() }); $PnlHeader.Controls.Add($BtnToggleUI)
@@ -369,7 +407,7 @@ function Load-WinForms {
     $Form.ShowDialog() | Out-Null; $Form.Dispose()
 }
 
-Write-Host "DEBUG: Khởi động Form chính..." -ForegroundColor Yellow
+Write-Host "DEBUG: Bắt đầu nạp giao diện chính..." -ForegroundColor Yellow
 while ($true) {
     if ($Global:IsWpfMode) { 
         if (-not (Load-WPF)) { Write-Host "DEBUG: Fallback sang WinForms" -ForegroundColor Cyan; $Global:IsWpfMode = $false } 
@@ -377,6 +415,6 @@ while ($true) {
     if ([System.Windows.Forms.Application]::OpenForms.Count -eq 0) { break }
 }
 
-Write-Host "DEBUG: Dọn dẹp bộ nhớ và thoát an toàn..." -ForegroundColor Green
+Write-Host "DEBUG: Dọn dẹp tài nguyên và kết thúc Tool..." -ForegroundColor Green
 [System.GC]::Collect()
 Stop-Process -Id $PID -Force
