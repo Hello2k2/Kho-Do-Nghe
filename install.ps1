@@ -358,6 +358,9 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     elseif ($ModulePath -match "DefenderMgr.ps1") {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
     }
+    elseif ($ModulePath -match "SystemInfo.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    }
     else {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
     }
