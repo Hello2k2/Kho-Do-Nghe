@@ -403,7 +403,6 @@ function Async-Rebuild {
             LogBg "1. Đang Unmount và lưu thay đổi bằng DISM..."
             cmd /c "dism /Unmount-Image /MountDir:`"$($Sync.MountDir)`" /Commit >nul 2>&1"
         }
-        
         if (Test-Path $WimExe) {
             LogBg "2. Ép xung WIM bằng WIMLIB (Nén LZX Solid)..."
             $WimFile = "$($Sync.ExtractDir)\sources\install.wim"
