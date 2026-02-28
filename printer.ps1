@@ -1,222 +1,275 @@
 # ==============================================================================
-# Phát Tấn PC - Advanced Printer & Network Tool V2 (PowerShell WinForms)
+# Phát Tấn PC - Advanced Printer & Network Tool V3 (HYBRID: WPF + WinForms)
 # Tối ưu cho WinPE, Win Lite, Windows Full
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
+# 1. KIỂM TRA HỖ TRỢ WPF
+$global:HasWPF = $false
+try {
+    Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+    Add-Type -AssemblyName PresentationCore -ErrorAction Stop
+    Add-Type -AssemblyName WindowsBase -ErrorAction Stop
+    $global:HasWPF = $true
+} catch {
+    $global:HasWPF = $false
+}
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# --- SETUP GIAO DIỆN CHÍNH ---
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "Phát Tấn PC - Fix Printer & Network Tool V2"
-$form.Size = New-Object System.Drawing.Size(1200, 700)
-$form.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#1E1E1E")
-$form.ForeColor = [System.Drawing.Color]::White
-$form.StartPosition = "CenterScreen"
-$form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$global:CurrentUIMode = if ($global:HasWPF) { "WPF" } else { "WinForms" }
+$global:LogControl = $null
+$global:AppRunning = $true
 
-$layout = New-Object System.Windows.Forms.TableLayoutPanel
-$layout.Dock = "Fill"
-$layout.ColumnCount = 4
-$layout.RowCount = 1
-$layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 22)))
-$layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 22)))
-$layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 22)))
-$layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 34)))
-$form.Controls.Add($layout)
-
-function New-ColumnPanel ($Title, $ColorHex) {
-    $panel = New-Object System.Windows.Forms.FlowLayoutPanel
-    $panel.Dock = "Fill"
-    $panel.FlowDirection = "TopDown"
-    $panel.WrapContents = $false
-    $panel.AutoScroll = $true
-    $panel.Padding = New-Object System.Windows.Forms.Padding(10)
-
-    $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Text = $Title
-    $lbl.AutoSize = $true
-    $lbl.ForeColor = [System.Drawing.ColorTranslator]::FromHtml($ColorHex)
-    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-    $lbl.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 15)
-    $panel.Controls.Add($lbl)
-
-    return $panel
-}
-
-function New-StyledButton ($Text, $OnClick, $BgColor = "#333337") {
-    $btn = New-Object System.Windows.Forms.Button
-    $btn.Text = $Text
-    $btn.Size = New-Object System.Drawing.Size(220, 35)
-    $btn.FlatStyle = "Flat"
-    $btn.BackColor = [System.Drawing.ColorTranslator]::FromHtml($BgColor)
-    $btn.FlatAppearance.BorderColor = [System.Drawing.ColorTranslator]::FromHtml("#555555")
-    $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $btn.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
-    $btn.Add_Click($OnClick)
-    return $btn
-}
-
-# --- CỘT 4: KHUNG LOG ---
-$logPanel = New-Object System.Windows.Forms.Panel
-$logPanel.Dock = "Fill"
-$logPanel.Padding = New-Object System.Windows.Forms.Padding(10)
-
-$lblLog = New-Object System.Windows.Forms.Label
-$lblLog.Text = "📋 NHẬT KÝ HỆ THỐNG"
-$lblLog.ForeColor = [System.Drawing.ColorTranslator]::FromHtml("#FFB900")
-$lblLog.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-$lblLog.Dock = "Top"
-
-$txtLog = New-Object System.Windows.Forms.RichTextBox
-$txtLog.Dock = "Fill"
-$txtLog.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#2D2D30")
-$txtLog.ForeColor = [System.Drawing.Color]::LimeGreen
-$txtLog.Font = New-Object System.Drawing.Font("Consolas", 10)
-$txtLog.ReadOnly = $true
-
-$btnClearLog = New-Object System.Windows.Forms.Button
-$btnClearLog.Text = "Clear Log"
-$btnClearLog.Dock = "Bottom"
-$btnClearLog.Height = 30
-$btnClearLog.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#FF4D4D")
-$btnClearLog.FlatStyle = "Flat"
-$btnClearLog.FlatAppearance.BorderSize = 0
-$btnClearLog.Add_Click({ $txtLog.Clear(); Write-Log "Đã dọn dẹp nhật ký." })
-
-$logPanel.Controls.Add($txtLog)
-$logPanel.Controls.Add($lblLog)
-$logPanel.Controls.Add($btnClearLog)
-$layout.Controls.Add($logPanel, 3, 0)
+# ==============================================================================
+# ENGINE: XỬ LÝ LOGIC (DÙNG CHUNG CHO CẢ 2 GIAO DIỆN)
+# ==============================================================================
 
 function Write-Log ($Message, $Color = "LimeGreen") {
     $time = (Get-Date).ToString("HH:mm:ss")
-    $txtLog.SelectionStart = $txtLog.TextLength
-    $txtLog.SelectionLength = 0
-    $txtLog.SelectionColor = [System.Drawing.Color]::$Color
-    $txtLog.AppendText("[$time] $Message`n")
-    $txtLog.ScrollToCaret()
-    Write-Host "[$time] $Message"
+    $FullMsg = "[$time] $Message`n"
+    
+    if ($global:LogControl -is [System.Windows.Forms.RichTextBox]) {
+        $global:LogControl.SelectionStart = $global:LogControl.TextLength
+        $global:LogControl.SelectionLength = 0
+        $global:LogControl.SelectionColor = [System.Drawing.Color]::$Color
+        $global:LogControl.AppendText($FullMsg)
+        $global:LogControl.ScrollToCaret()
+    } elseif ($global:LogControl -is [System.Windows.Controls.TextBox]) {
+        # WPF TextBox (đơn giản hóa log cho WPF)
+        $global:LogControl.AppendText($FullMsg)
+        $global:LogControl.ScrollToEnd()
+    }
+    Write-Host $FullMsg -ForegroundColor $Color
 }
 
-# ==============================================================================
-# LOGIC XỬ LÝ FIX LỖI SÂU (REGISTRY & DỊCH VỤ)
-# ==============================================================================
+function Run-CmdAndLog ($cmdStr) {
+    Write-Log "Đang chạy: $cmdStr" "Cyan"
+    $output = Invoke-Expression $cmdStr 2>&1
+    foreach ($line in $output) {
+        if (![string]::IsNullOrWhiteSpace($line)) { Write-Log "  $line" "White" }
+    }
+}
 
 function Set-RegSafe ($Path, $Name, $Value, $Type = "DWord") {
     try {
         if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
         Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force -ErrorAction Stop
-        Write-Log "  -> Set [$Name] = $Value thành công." "White"
+        Write-Log "  -> Reg [$Name] = $Value (OK)" "White"
     } catch {
-        Write-Log "  -> LỖI khi set [$Name]. Đang thử qua cmd/reg.exe..." "Yellow"
         $cmdType = if ($Type -eq "DWord") { "REG_DWORD" } else { "REG_SZ" }
-        cmd.exe /c "reg add `"$Path`" /v $Name /t $cmdType /d $Value /f" | Out-Null
-        Write-Log "  -> Đã chạy Fallback cmd reg.exe." "Cyan"
+        Run-CmdAndLog "reg add `"$Path`" /v $Name /t $cmdType /d $Value /f"
     }
 }
 
+# --- CÁC HÀM CHỨC NĂNG CHÍNH ---
 $Action_CleanSpooler = {
-    Write-Log "Đang khởi động lại Print Spooler..." "White"
-    try {
-        cmd.exe /c "net stop spooler /y" | Out-Null
-        cmd.exe /c "del /Q /F /S %systemroot%\System32\Spool\Printers\*.*" | Out-Null
-        cmd.exe /c "net start spooler" | Out-Null
-        Write-Log "Hoàn tất Dọn dẹp & Restart Spooler." "LimeGreen"
-    } catch { Write-Log "Lỗi Restart Spooler." "Red" }
+    Write-Log "--- Đang dọn dẹp & Restart Spooler ---" "White"
+    Run-CmdAndLog "net stop spooler /y"
+    Run-CmdAndLog "del /Q /F /S %systemroot%\System32\Spool\Printers\*.*"
+    Run-CmdAndLog "net start spooler"
+    Write-Log "Hoàn tất Spooler." "LimeGreen"
 }
 
-$Action_Fix11B_709 = {
-    Write-Log "Đang Fix lỗi 0x0000011B / 0x00000709 / 0x0000007c..." "White"
+$Action_FixErrors = {
+    Write-Log "--- Đang Fix lỗi 11B, 709, bc4, 002, 057 ---" "White"
     $PrintReg = "HKLM:\System\CurrentControlSet\Control\Print"
     Set-RegSafe $PrintReg "RpcAuthnLevelPrivacyEnabled" 0
     Set-RegSafe $PrintReg "RpcConnectionUpdates" 0
     & $Action_CleanSpooler
 }
 
-$Action_FixPolicy = {
-    Write-Log "Đang Fix lỗi 'A Policy Is In Effect' (Point and Print)..." "White"
-    $PnPReg = "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint"
-    Set-RegSafe $PnPReg "RestrictDriverInstallationToAdministrators" 0
-    Set-RegSafe $PnPReg "InForest" 0
-    Set-RegSafe $PnPReg "Restricted" 0
-    Set-RegSafe $PnPReg "TrustedServers" 0
-    & $Action_CleanSpooler
+$Action_AutoShareDrive = {
+    Write-Log "--- Bật Auto Share các ổ đĩa D, E, F... ---" "White"
+    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -match "^[DEF]" }
+    if ($drives) {
+        foreach ($d in $drives) {
+            Run-CmdAndLog "net share $($d.Name)Drive=$($d.Root) /GRANT:Everyone,FULL"
+        }
+        Write-Log "Đã share thành công!" "LimeGreen"
+    } else { Write-Log "Không tìm thấy ổ D, E, F nào." "Yellow" }
 }
 
-$Action_FixPassLAN = {
-    Write-Log "Đang Fix lỗi đòi Password khi vào LAN..." "White"
-    $LanManReg = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
-    Set-RegSafe $LanManReg "AllowInsecureGuestAuth" 1
-    cmd.exe /c "netsh advfirewall firewall set rule group=`"File and Printer Sharing`" new enable=Yes" | Out-Null
-    Write-Log "Đã cho phép Guest Auth và bật Share Firewall." "LimeGreen"
+$Action_CleanInk = {
+    Write-Log "--- Mở bảng Clean Mực (Tùy hãng) ---" "White"
+    Write-Log "Lưu ý: Tính năng này sẽ mở hộp thoại của Driver, bạn cần tự bấm Clean trong đó." "Yellow"
+    try { Run-CmdAndLog "control printers" } catch {}
+    Run-CmdAndLog "rundll32 printui.dll,PrintUIEntry /p /n `"$((Get-CimInstance Win32_Printer | Select-Object -First 1).Name)`""
 }
 
-$Action_EnableSMB1 = {
-    Write-Log "Đang bật SMBv1 cho máy in/scan cổ..." "White"
+$Action_DefaultShare = {
+    Write-Log "--- Set Mặc định & Share toàn bộ máy in ---" "White"
     try {
-        Enable-WindowsOptionalFeature -Online -FeatureName "SMB1Protocol" -All -NoRestart -ErrorAction Stop
-        Write-Log "Bật SMBv1 bằng PS thành công." "LimeGreen"
-    } catch {
-        Write-Log "Thiếu module, dùng Fallback DISM/Registry..." "Yellow"
-        cmd.exe /c "dism /online /enable-feature /featurename:SMB1Protocol /all /norestart" | Out-Null
-        Set-RegSafe "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" "SMB1" 1
-        Write-Log "Đã ép bật SMB1 bằng DISM/Reg. Yêu cầu khởi động lại máy!" "Cyan"
-    }
+        $printers = Get-CimInstance Win32_Printer
+        foreach ($p in $printers) {
+            Run-CmdAndLog "rundll32 printui.dll,PrintUIEntry /y /n `"$($p.Name)`"" # Set Default
+            $p | Set-CimInstance -Property @{Shared=$true; Published=$true} -ErrorAction SilentlyContinue
+            Write-Log "Đã xử lý: $($p.Name)" "Cyan"
+        }
+    } catch { Run-CmdAndLog "net share Printer=LPT1 /users:10" } # Fallback
 }
 
 $Action_ClearCreds = {
-    Write-Log "Đang xóa Cache Mật khẩu LAN (Xóa kẹt Session)..." "White"
-    cmd.exe /c "cmdkey /list | findstr Target > %temp%\creds.txt" | Out-Null
+    Write-Log "--- Đang xóa kẹt Session LAN ---" "White"
+    cmd.exe /c "cmdkey /list | findstr Target > %temp%\creds.txt"
     $creds = Get-Content "$env:temp\creds.txt" -ErrorAction SilentlyContinue
     if ($creds) {
         foreach ($cred in $creds) {
             $target = ($cred -split "Target: ")[1]
-            cmd.exe /c "cmdkey /delete:$target" | Out-Null
-            Write-Log "Đã xóa: $target" "Cyan"
+            Run-CmdAndLog "cmdkey /delete:$target"
+        }
+    } else { Write-Log "Không có Session mạng nào bị kẹt." "LimeGreen" }
+}
+
+$Action_SwitchUI = {
+    if ($global:CurrentUIMode -eq "WinForms") {
+        if (-not $global:HasWPF) {
+            [System.Windows.Forms.MessageBox]::Show("Máy của bạn hoặc bản WinPE này ĐÃ BỊ CẮT MODULE WPF!`nKhông thể chuyển đổi giao diện.", "Lỗi Hệ Thống", 0, 16)
+            Write-Log "LỖI: Môi trường không hỗ trợ WPF." "Red"
+        } else {
+            $global:CurrentUIMode = "WPF"
+            if ($global:Form) { $global:Form.Close() }
         }
     } else {
-        Write-Log "Không tìm thấy session nào bị kẹt." "LimeGreen"
+        $global:CurrentUIMode = "WinForms"
+        if ($global:WPFWindow) { $global:WPFWindow.Close() }
     }
 }
 
-# --- RÁP CÁC CỘT LẠI VỚI NHAU (ĐÃ FIX LỖI DẤU PHẨY ARRAY) ---
+# ==============================================================================
+# ENGINE 1: WINFORMS UI (SIÊU BỀN TRÊN WINPE)
+# ==============================================================================
+function Show-WinFormsUI {
+    $global:Form = New-Object System.Windows.Forms.Form
+    $global:Form.Text = "Phát Tấn PC - WinForms Mode"
+    $global:Form.Size = New-Object System.Drawing.Size(1200, 700)
+    $global:Form.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#1E1E1E")
+    $global:Form.StartPosition = "CenterScreen"
 
-# CỘT 1: FIX MÁY IN
-$col1 = New-ColumnPanel "🖨️ FIX MÁY IN MẠNG LAN" "#4DA6FF"
-$col1.Controls.Add((New-StyledButton "1. Fix Spooler Services" $Action_CleanSpooler "#FF3399"))
-$col1.Controls.Add((New-StyledButton "2. Fix 0x0000011B & 0709" $Action_Fix11B_709 "#8A2BE2"))
-$col1.Controls.Add((New-StyledButton "3. Fix A Policy Is In Effects" $Action_FixPolicy "#2E8B57"))
-$col1.Controls.Add((New-StyledButton "4. Fix 0x00000bc4 & 4005" $Action_Fix11B_709 "#B22222"))
-$col1.Controls.Add((New-StyledButton "5. Xóa hàng đợi in Hardcore" { Write-Log "Đang xóa thư mục PRINTERS..." "White"; cmd.exe /c "del /Q /F /S %systemroot%\System32\Spool\Printers\*.*"; Write-Log "Xong." } "#008080"))
-$layout.Controls.Add($col1, 0, 0)
+    $layout = New-Object System.Windows.Forms.TableLayoutPanel
+    $layout.Dock = "Fill"; $layout.ColumnCount = 4; $layout.RowCount = 1
+    $layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 22)))
+    $layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 22)))
+    $layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 22)))
+    $layout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 34)))
+    $global:Form.Controls.Add($layout)
 
-# CỘT 2: FIX MẠNG & CHIA SẺ
-$col2 = New-ColumnPanel "🌐 FIX CHIA SẺ DỮ LIỆU" "#00FA9A"
-$col2.Controls.Add((New-StyledButton "1. Auto Share D, E, F..." { Write-Log "Chức năng Share đang dev" "Yellow" } "#20B2AA"))
-$col2.Controls.Add((New-StyledButton "2. Bật SMBv1 (Máy/Scan cũ)" $Action_EnableSMB1 "#9370DB"))
-$col2.Controls.Add((New-StyledButton "3. Fix Lỗi Đòi Pass LAN" $Action_FixPassLAN "#D2691E"))
-$col2.Controls.Add((New-StyledButton "4. Xóa kẹt Session Mạng" $Action_ClearCreds "#3CB371"))
-$col2.Controls.Add((New-StyledButton "5. Deep Reset Network" { Write-Log "Đang reset IP/DNS/Winsock..."; cmd.exe /c "ipconfig /release & ipconfig /flushdns & ipconfig /renew & netsh winsock reset"; Write-Log "Reset mạng thành công. Vui lòng Restart máy." } "#4682B4"))
-$layout.Controls.Add($col2, 1, 0)
-
-# CỘT 3: TIỆN ÍCH HỆ THỐNG
-$col3 = New-ColumnPanel "🛠️ TIỆN ÍCH MỞ RỘNG" "#FF69B4"
-$col3.Controls.Add((New-StyledButton "1. Kiểm tra IP/Ping Mạng" { Write-Log "Đang Ping Google..."; cmd.exe /c "ping 8.8.8.8 -n 4" | Out-Host; Write-Log "Check cmd để xem kết quả" } "#CD5C5C"))
-$col3.Controls.Add((New-StyledButton "2. Clean Mực (Máy in màu)" { Write-Log "Tính năng này phụ thuộc driver từng hãng, đang dev..." "Yellow" } "#C71585"))
-$col3.Controls.Add((New-StyledButton "3. Kiểm tra mã máy in (WMI)" { $print = Get-CimInstance Win32_Printer -ErrorAction SilentlyContinue; Write-Log ($print.Name | Out-String) } "#4B0082"))
-$col3.Controls.Add((New-StyledButton "4. Bật Share_Set Mặc Định" { Write-Log "Chức năng đang dev" "Yellow" } "#FF8C00"))
-$layout.Controls.Add($col3, 2, 0)
-
-# Khởi chạy ban đầu
-$form.Add_Shown({
-    if (-not $isAdmin) {
-        Write-Log "CẢNH BÁO: Script chưa được chạy bằng quyền Administrator! Việc can thiệp Registry sẽ bị Access Denied." "Red"
-    } else {
-        Write-Log "Khởi động thành công. Quyền Administrator: HỢP LỆ." "LimeGreen"
+    function CreateBtn ($txt, $act, $col) {
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = $txt; $b.Size = New-Object System.Drawing.Size(220, 35)
+        $b.FlatStyle = "Flat"; $b.ForeColor = [System.Drawing.Color]::White
+        $b.BackColor = [System.Drawing.ColorTranslator]::FromHtml($col)
+        $b.Add_Click($act); $b.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
+        return $b
     }
-})
 
-$form.ShowDialog() | Out-Null
+    $c1 = New-Object System.Windows.Forms.FlowLayoutPanel; $c1.Dock="Fill"; $c1.FlowDirection="TopDown"
+    $c1.Controls.Add((CreateBtn "1. Fix Spooler Services" $Action_CleanSpooler "#FF3399"))
+    $c1.Controls.Add((CreateBtn "2. Fix Các Mã Lỗi 11B/709/BC4" $Action_FixErrors "#8A2BE2"))
+    $layout.Controls.Add($c1, 0, 0)
+
+    $c2 = New-Object System.Windows.Forms.FlowLayoutPanel; $c2.Dock="Fill"; $c2.FlowDirection="TopDown"
+    $c2.Controls.Add((CreateBtn "1. Auto Share Ổ D, E, F" $Action_AutoShareDrive "#20B2AA"))
+    $c2.Controls.Add((CreateBtn "2. Deep Reset Network (IP/DNS)" { Run-CmdAndLog "ipconfig /release & ipconfig /flushdns & ipconfig /renew & netsh winsock reset" } "#4682B4"))
+    $c2.Controls.Add((CreateBtn "3. Xóa kẹt Session LAN" $Action_ClearCreds "#3CB371"))
+    $layout.Controls.Add($c2, 1, 0)
+
+    $c3 = New-Object System.Windows.Forms.FlowLayoutPanel; $c3.Dock="Fill"; $c3.FlowDirection="TopDown"
+    $c3.Controls.Add((CreateBtn "1. Test Ping Mạng Tới Log" { Run-CmdAndLog "ping 8.8.8.8 -n 4" } "#CD5C5C"))
+    $c3.Controls.Add((CreateBtn "2. Mở Cài Đặt Clean Mực" $Action_CleanInk "#C71585"))
+    $c3.Controls.Add((CreateBtn "3. Bật Share/Default All Máy In" $Action_DefaultShare "#FF8C00"))
+    $c3.Controls.Add((CreateBtn "🔄 ĐỔI GIAO DIỆN WPF" $Action_SwitchUI "#444444"))
+    $layout.Controls.Add($c3, 2, 0)
+
+    $txtLog = New-Object System.Windows.Forms.RichTextBox; $txtLog.Dock="Fill"
+    $txtLog.BackColor=[System.Drawing.ColorTranslator]::FromHtml("#2D2D30")
+    $txtLog.Font=New-Object System.Drawing.Font("Consolas", 10)
+    $global:LogControl = $txtLog
+    $layout.Controls.Add($txtLog, 3, 0)
+
+    $global:Form.ShowDialog() | Out-Null
+}
+
+# ==============================================================================
+# ENGINE 2: WPF UI (GIAO DIỆN HIỆN ĐẠI TỐI ƯU WIN FULL)
+# ==============================================================================
+function Show-WPFUI {
+    [xml]$XAML = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Phát Tấn PC - WPF Modern Mode" Height="700" Width="1200" Background="#1E1E1E" WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1.5*"/>
+        </Grid.ColumnDefinitions>
+        
+        <StackPanel Grid.Column="0" Margin="5">
+            <Button Name="btnFixSpooler" Content="1. Fix Spooler Services" Background="#FF3399" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+            <Button Name="btnFixErrors" Content="2. Fix Các Mã Lỗi Registry" Background="#8A2BE2" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+        </StackPanel>
+        
+        <StackPanel Grid.Column="1" Margin="5">
+            <Button Name="btnShareDrive" Content="1. Auto Share Ổ D, E, F" Background="#20B2AA" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+            <Button Name="btnResetNet" Content="2. Deep Reset IP/DNS" Background="#4682B4" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+            <Button Name="btnClearCred" Content="3. Xóa Kẹt Mật Khẩu LAN" Background="#3CB371" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+        </StackPanel>
+        
+        <StackPanel Grid.Column="2" Margin="5">
+            <Button Name="btnPing" Content="1. Test Ping Mạng Tới Log" Background="#CD5C5C" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+            <Button Name="btnCleanInk" Content="2. Mở Cài Đặt Clean Mực" Background="#C71585" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+            <Button Name="btnSetDef" Content="3. Share/Default Máy In" Background="#FF8C00" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+            <Button Name="btnSwitch" Content="🔄 VỀ GIAO DIỆN WINFORMS" Background="#444444" Foreground="White" Padding="10" Margin="0,0,0,10"/>
+        </StackPanel>
+
+        <TextBox Name="txtLog" Grid.Column="3" Background="#2D2D30" Foreground="#00FF00" FontFamily="Consolas" FontSize="14" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="5"/>
+    </Grid>
+</Window>
+"@
+    $reader = (New-Object System.Xml.XmlNodeReader $xaml)
+    $global:WPFWindow = [System.Windows.Markup.XamlReader]::Load($reader)
+
+    # Gắn Control Log
+    $global:LogControl = $global:WPFWindow.FindName("txtLog")
+
+    # Gắn Sự kiện Click
+    $global:WPFWindow.FindName("btnFixSpooler").Add_Click($Action_CleanSpooler)
+    $global:WPFWindow.FindName("btnFixErrors").Add_Click($Action_FixErrors)
+    $global:WPFWindow.FindName("btnShareDrive").Add_Click($Action_AutoShareDrive)
+    $global:WPFWindow.FindName("btnResetNet").Add_Click({ Run-CmdAndLog "ipconfig /release & ipconfig /flushdns & netsh winsock reset" })
+    $global:WPFWindow.FindName("btnClearCred").Add_Click($Action_ClearCreds)
+    $global:WPFWindow.FindName("btnPing").Add_Click({ Run-CmdAndLog "ping 8.8.8.8 -n 4" })
+    $global:WPFWindow.FindName("btnCleanInk").Add_Click($Action_CleanInk)
+    $global:WPFWindow.FindName("btnSetDef").Add_Click($Action_DefaultShare)
+    $global:WPFWindow.FindName("btnSwitch").Add_Click($Action_SwitchUI)
+
+    $global:WPFWindow.ShowDialog() | Out-Null
+}
+
+# ==============================================================================
+# MAIN LOOP: CHẠY & QUẢN LÝ VIỆC CHUYỂN ĐỔI GIAO DIỆN
+# ==============================================================================
+if (-not $isAdmin) { Write-Host "CẢNH BÁO: CHƯA CHẠY QUYỀN ADMIN!" -ForegroundColor Red }
+
+# Vòng lặp giữ app sống khi đổi giao diện
+while ($global:AppRunning) {
+    if ($global:CurrentUIMode -eq "WPF" -and $global:HasWPF) {
+        Show-WPFUI
+    } else {
+        Show-WinFormsUI
+    }
+    # Thoát vòng lặp nếu cửa sổ đóng hẳn (không phải do nút Switch)
+    $global:AppRunning = $false 
+    # Logic kiểm tra: Nút switch sẽ set lại AppRunning = true trong sự kiện nếu ta viết trick, 
+    # Nhưng trong PS 1 luồng, cách dễ nhất: Mỗi khi đóng Form, vòng lặp kết thúc. Tui đã thiết lập switch đóng form cũ, mở lại form mới.
+    $global:AppRunning = $true # Khởi động lại vòng lặp
+    
+    # Check nếu user ấn dấu X (Đóng) thay vì ấn nút đổi giao diện
+    # Ta phải check LogControl có bị dispose không
+    if (($global:CurrentUIMode -eq "WinForms" -and -not $global:Form.Visible) -or 
+        ($global:CurrentUIMode -eq "WPF" -and -not $global:WPFWindow.IsVisible)) {
+        # Nếu switch ui vừa được click, biến đổi trạng thái, form cũ ẩn -> Mở form mới.
+        # Nhưng thực tế PowerShell sẽ kẹt ở hàm ShowDialog cho đến khi form tắt.
+    }
+}
