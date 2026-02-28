@@ -1,6 +1,7 @@
 # ==============================================================================
-# Phát Tấn PC - Advanced Printer & Network Tool V4.1 (HORIZONTAL HYBRID)
-# - Cập nhật Menu Mã Lỗi (Chỉ lọc lỗi phần mềm thực chiến)
+# Phát Tấn PC - Advanced Printer & Network Tool V4.2 (HORIZONTAL HYBRID)
+# - Đã fix lỗi Scope biến của nút bấm Menu (GetNewClosure)
+# - Phân loại rõ ràng Lỗi Máy Chủ (Server) và Máy Khách (Client)
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -84,10 +85,13 @@ $Action_CleanSpooler = {
     Write-Log "Hoàn tất Spooler." "LimeGreen"
 }
 
+# -------------------------------------------------------------
+# MENU FIX LỖI (ĐÃ CHIA SERVER VÀ CLIENT)
+# -------------------------------------------------------------
 $Action_ShowErrorMenu = {
     $MForm = New-Object System.Windows.Forms.Form
-    $MForm.Text = "Menu Sửa Mã Lỗi Máy In"
-    $MForm.Size = New-Object System.Drawing.Size(320, 420) # Mở rộng Form để chứa nhiều nút hơn
+    $MForm.Text = "Menu Sửa Mã Lỗi Chuyên Sâu"
+    $MForm.Size = New-Object System.Drawing.Size(340, 520) # Kéo dài Form ra để chứa đủ list
     $MForm.StartPosition = "CenterParent"
     $MForm.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#2D2D30")
     $MForm.FormBorderStyle = "FixedToolWindow"
@@ -95,27 +99,62 @@ $Action_ShowErrorMenu = {
     $pnl = New-Object System.Windows.Forms.FlowLayoutPanel
     $pnl.Dock = "Fill"; $pnl.FlowDirection = "TopDown"; $pnl.Padding = New-Object System.Windows.Forms.Padding(10)
 
-    function Add-MBtn($txt, $colHex, $act) {
+    # Hàm tạo Label tiêu đề phân loại
+    function Add-Label($txt) {
+        $lbl = New-Object System.Windows.Forms.Label
+        $lbl.Text = $txt; $lbl.AutoSize = $true
+        $lbl.ForeColor = [System.Drawing.Color]::Gold
+        $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+        $lbl.Margin = New-Object System.Windows.Forms.Padding(0,10,0,5)
+        $pnl.Controls.Add($lbl)
+    }
+
+    # Hàm tạo Nút bấm (Đã fix lỗi GetNewClosure)
+    function Add-MBtn($txt, $colHex, [scriptblock]$act) {
         $b = New-Object System.Windows.Forms.Button
-        $b.Text = $txt; $b.Size = New-Object System.Drawing.Size(280, 35)
+        $b.Text = $txt; $b.Size = New-Object System.Drawing.Size(300, 35)
         $b.FlatStyle = "Flat"; $b.ForeColor = [System.Drawing.Color]::White
         $b.BackColor = [System.Drawing.ColorTranslator]::FromHtml($colHex)
         $b.Cursor = [System.Windows.Forms.Cursors]::Hand
         $b.Margin = New-Object System.Windows.Forms.Padding(0,0,0,8)
-        $b.Add_Click({ &$act; $MForm.Close() })
+        
+        # ĐÂY LÀ CHÌA KHÓA FIX LỖI: .GetNewClosure() sẽ lưu biến $act vào bộ nhớ nút bấm
+        $handler = { & $act; $MForm.Close() }.GetNewClosure()
+        $b.Add_Click($handler)
+        
         $pnl.Controls.Add($b)
     }
 
-    # 1. Lỗi PrintNightmare (RPC)
-    Add-MBtn "1. Lỗi 11B, 0709, 07c (Không thể Share)" "#8A2BE2" {
+    # ============ MÁY CHỦ (SERVER) ============
+    Add-Label "💻 MÁY CHỦ CẮM USB (SERVER)"
+
+    Add-MBtn "1. Lỗi 11B, 0709, 07c (Máy trạm không vô được)" "#8A2BE2" {
+        Write-Log "[SERVER] Đang Fix lỗi RPC PrintNightmare..." "White"
         $PReg = "HKLM:\System\CurrentControlSet\Control\Print"
         Set-RegSafe $PReg "RpcAuthnLevelPrivacyEnabled" 0
         Set-RegSafe $PReg "RpcConnectionUpdates" 0
         & $Action_CleanSpooler
     }
     
-    # 2. Lỗi Group Policy
-    Add-MBtn "2. Lỗi BC4, 4005 (A Policy Is In Effect)" "#B22222" {
+    Add-MBtn "2. Lỗi 6D9, BCB (Tường lửa chặn Share)" "#D2691E" {
+        Write-Log "[SERVER] Đang bật dịch vụ Windows Firewall và Share..." "White"
+        Run-CmdAndLog "sc config mpssvc start= auto"
+        Run-CmdAndLog "net start mpssvc"
+        Run-CmdAndLog "netsh advfirewall firewall set rule group=`"File and Printer Sharing`" new enable=Yes"
+        Write-Log "Đã mở cổng tường lửa thành công!" "LimeGreen"
+    }
+
+    Add-MBtn "3. Lỗi 002 (Kẹt Driver cũ, không cài được)" "#C71585" {
+        Write-Log "[SERVER] HƯỚNG DẪN: Đang mở Print Management." "Yellow"
+        Write-Log "-> Vô All Drivers -> Xóa sạch Driver cũ hãng đó -> Cài lại." "White"
+        Run-CmdAndLog "printmanagement.msc"
+    }
+
+    # ============ MÁY TRẠM (CLIENT) ============
+    Add-Label "🖥️ MÁY TRẠM KẾT NỐI (CLIENT)"
+
+    Add-MBtn "4. Lỗi BC4, 4005 (A Policy Is In Effect)" "#B22222" {
+        Write-Log "[CLIENT] Đang gỡ chặn cài đặt qua mạng (Point and Print)..." "White"
         $PnReg = "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint"
         Set-RegSafe $PnReg "RestrictDriverInstallationToAdministrators" 0
         Set-RegSafe $PnReg "InForest" 0
@@ -123,46 +162,30 @@ $Action_ShowErrorMenu = {
         Set-RegSafe $PnReg "TrustedServers" 0
         & $Action_CleanSpooler
     }
-    
-    # 3. Lỗi Tường Lửa (6D9, BCB)
-    Add-MBtn "3. Lỗi 6D9, BCB (Kết nối mạng / Firewall)" "#D2691E" {
-        Write-Log "Đang bật dịch vụ Windows Firewall và Share..." "White"
-        Run-CmdAndLog "sc config mpssvc start= auto"
-        Run-CmdAndLog "net start mpssvc"
-        Run-CmdAndLog "netsh advfirewall firewall set rule group=`"File and Printer Sharing`" new enable=Yes"
-        Write-Log "Đã mở cổng tường lửa thành công!" "LimeGreen"
+
+    Add-MBtn "5. Truy cập máy chủ bị đòi Password / Access Denied" "#20B2AA" {
+        Write-Log "[CLIENT] Đang bật Guest Auth & Xóa Session kẹt..." "White"
+        Set-RegSafe "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" "AllowInsecureGuestAuth" 1
+        cmd.exe /c "cmdkey /list | findstr Target > %temp%\creds.txt"
+        $creds = Get-Content "$env:temp\creds.txt" -ErrorAction SilentlyContinue
+        if ($creds) { foreach ($c in $creds) { Run-CmdAndLog "cmdkey /delete:$(($c -split 'Target: ')[1])" } }
+        Write-Log "Đã xóa cache Password LAN." "LimeGreen"
     }
 
-    # 4. Lỗi 002 (Xung đột Driver cũ)
-    Add-MBtn "4. Lỗi 002 (Driver Is Unavailable)" "#C71585" {
-        Write-Log "HƯỚNG DẪN: Đang mở Print Management." "Yellow"
-        Write-Log "-> Hãy tự xóa hết Driver cũ trong mục 'All Drivers', sau đó cài lại bản mới." "White"
-        Run-CmdAndLog "printmanagement.msc"
-    }
-
-    # 5. Lỗi Another computer is using the printer (Kẹt trạng thái)
-    Add-MBtn "5. Lỗi 'Another computer is using...'" "#20B2AA" {
-        Write-Log "Đang tắt Bidirectional Support để gỡ kẹt..." "White"
+    Add-MBtn "6. Lỗi 'Another computer is using...' / Bận ảo" "#556B2F" {
+        Write-Log "[CLIENT/SERVER] Đang tắt Bidirectional Support..." "White"
         $PrintersPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers"
         if (Test-Path $PrintersPath) {
             Get-ChildItem $PrintersPath | ForEach-Object {
                 Set-ItemProperty -Path $_.PSPath -Name "BidiEnabled" -Value 0 -ErrorAction SilentlyContinue
             }
-            Write-Log "Đã tắt Hỗ trợ 2 chiều toàn bộ máy in." "LimeGreen"
             & $Action_CleanSpooler
         }
     }
 
-    # 6. Lỗi Print Spooler Service Not Running
-    Add-MBtn "6. Sửa Lỗi Spooler (Service Not Running)" "#3CB371" {
-        & $Action_CleanSpooler
-    }
-
-    # 7. Lỗi 3E3 (Local Port)
-    Add-MBtn "7. Lỗi 3E3 (Không nhận Local Port)" "#4682B4" {
-        Write-Log "HƯỚNG DẪN: Đang mở cửa sổ Add Printer." "Yellow"
-        Write-Log "-> Hãy bấm 'Add a printer' -> Chọn 'Add a local printer...'" "White"
-        Write-Log "-> Tạo Port mới dạng 'Standard TCP/IP Port' thay vì Local." "White"
+    Add-MBtn "7. Lỗi 3E3 (Add qua IP thay vì bấm thẳng)" "#4682B4" {
+        Write-Log "[CLIENT] HƯỚNG DẪN: Đang mở Add Printer." "Yellow"
+        Write-Log "-> Bấm Add a printer -> Chọn Add a local printer -> Create a new port (Standard TCP/IP) -> Nhập IP Server." "White"
         try { Run-CmdAndLog "control printers" } catch {}
     }
 
