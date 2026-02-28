@@ -1,7 +1,6 @@
 # ==============================================================================
-# Phát Tấn PC - Advanced Printer & Network Tool V4 (HORIZONTAL HYBRID)
-# - Layout Ngang (WrapPanel)
-# - Thêm: Check SMB 445, Restart Explorer, Toggle Firewall, Get SysInfo, Tắt IPv6
+# Phát Tấn PC - Advanced Printer & Network Tool V4.1 (HORIZONTAL HYBRID)
+# - Cập nhật Menu Mã Lỗi (Chỉ lọc lỗi phần mềm thực chiến)
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -66,19 +65,15 @@ function Set-RegSafe ($Path, $Name, $Value, $Type = "DWord") {
 
 function Get-SysInfo {
     Write-Log "--- ĐANG LẤY THÔNG TIN HỆ THỐNG ---" "Yellow"
-    $pcName = $env:COMPUTERNAME
-    $ip = "Không rõ"
+    Write-Log "🖥️ Tên máy: $env:COMPUTERNAME" "Cyan"
     try {
-        # Fallback cho WinPE (thường cắt module NetTCPIP)
         $ipObj = (ipconfig | Select-String "IPv4").Line
-        if ($ipObj) { $ip = ($ipObj -split ": ")[-1].Trim() }
+        if ($ipObj) { Write-Log "🌐 IP LAN: $(($ipObj -split ": ")[-1].Trim())" "Cyan" }
     } catch {}
-    Write-Log "🖥️ Tên máy (Hostname): $pcName" "Cyan"
-    Write-Log "🌐 IP LAN (IPv4): $ip" "Cyan"
 }
 
 # ==============================================================================
-# ACTIONS TÍNH NĂNG CHÍNH
+# ACTIONS TÍNH NĂNG CHÍNH VÀ MENU MÃ LỖI
 # ==============================================================================
 
 $Action_CleanSpooler = {
@@ -91,8 +86,8 @@ $Action_CleanSpooler = {
 
 $Action_ShowErrorMenu = {
     $MForm = New-Object System.Windows.Forms.Form
-    $MForm.Text = "Chọn Mã Lỗi"
-    $MForm.Size = New-Object System.Drawing.Size(280, 240)
+    $MForm.Text = "Menu Sửa Mã Lỗi Máy In"
+    $MForm.Size = New-Object System.Drawing.Size(320, 420) # Mở rộng Form để chứa nhiều nút hơn
     $MForm.StartPosition = "CenterParent"
     $MForm.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#2D2D30")
     $MForm.FormBorderStyle = "FixedToolWindow"
@@ -102,7 +97,7 @@ $Action_ShowErrorMenu = {
 
     function Add-MBtn($txt, $colHex, $act) {
         $b = New-Object System.Windows.Forms.Button
-        $b.Text = $txt; $b.Size = New-Object System.Drawing.Size(240, 35)
+        $b.Text = $txt; $b.Size = New-Object System.Drawing.Size(280, 35)
         $b.FlatStyle = "Flat"; $b.ForeColor = [System.Drawing.Color]::White
         $b.BackColor = [System.Drawing.ColorTranslator]::FromHtml($colHex)
         $b.Cursor = [System.Windows.Forms.Cursors]::Hand
@@ -111,13 +106,16 @@ $Action_ShowErrorMenu = {
         $pnl.Controls.Add($b)
     }
 
-    Add-MBtn "1. Lỗi 11B, 0709, 07c" "#8A2BE2" {
+    # 1. Lỗi PrintNightmare (RPC)
+    Add-MBtn "1. Lỗi 11B, 0709, 07c (Không thể Share)" "#8A2BE2" {
         $PReg = "HKLM:\System\CurrentControlSet\Control\Print"
         Set-RegSafe $PReg "RpcAuthnLevelPrivacyEnabled" 0
         Set-RegSafe $PReg "RpcConnectionUpdates" 0
         & $Action_CleanSpooler
     }
-    Add-MBtn "2. Lỗi bc4, 4005" "#B22222" {
+    
+    # 2. Lỗi Group Policy
+    Add-MBtn "2. Lỗi BC4, 4005 (A Policy Is In Effect)" "#B22222" {
         $PnReg = "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint"
         Set-RegSafe $PnReg "RestrictDriverInstallationToAdministrators" 0
         Set-RegSafe $PnReg "InForest" 0
@@ -125,7 +123,48 @@ $Action_ShowErrorMenu = {
         Set-RegSafe $PnReg "TrustedServers" 0
         & $Action_CleanSpooler
     }
-    Add-MBtn "3. Lỗi 002, 057" "#D2691E" { & $Action_CleanSpooler }
+    
+    # 3. Lỗi Tường Lửa (6D9, BCB)
+    Add-MBtn "3. Lỗi 6D9, BCB (Kết nối mạng / Firewall)" "#D2691E" {
+        Write-Log "Đang bật dịch vụ Windows Firewall và Share..." "White"
+        Run-CmdAndLog "sc config mpssvc start= auto"
+        Run-CmdAndLog "net start mpssvc"
+        Run-CmdAndLog "netsh advfirewall firewall set rule group=`"File and Printer Sharing`" new enable=Yes"
+        Write-Log "Đã mở cổng tường lửa thành công!" "LimeGreen"
+    }
+
+    # 4. Lỗi 002 (Xung đột Driver cũ)
+    Add-MBtn "4. Lỗi 002 (Driver Is Unavailable)" "#C71585" {
+        Write-Log "HƯỚNG DẪN: Đang mở Print Management." "Yellow"
+        Write-Log "-> Hãy tự xóa hết Driver cũ trong mục 'All Drivers', sau đó cài lại bản mới." "White"
+        Run-CmdAndLog "printmanagement.msc"
+    }
+
+    # 5. Lỗi Another computer is using the printer (Kẹt trạng thái)
+    Add-MBtn "5. Lỗi 'Another computer is using...'" "#20B2AA" {
+        Write-Log "Đang tắt Bidirectional Support để gỡ kẹt..." "White"
+        $PrintersPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers"
+        if (Test-Path $PrintersPath) {
+            Get-ChildItem $PrintersPath | ForEach-Object {
+                Set-ItemProperty -Path $_.PSPath -Name "BidiEnabled" -Value 0 -ErrorAction SilentlyContinue
+            }
+            Write-Log "Đã tắt Hỗ trợ 2 chiều toàn bộ máy in." "LimeGreen"
+            & $Action_CleanSpooler
+        }
+    }
+
+    # 6. Lỗi Print Spooler Service Not Running
+    Add-MBtn "6. Sửa Lỗi Spooler (Service Not Running)" "#3CB371" {
+        & $Action_CleanSpooler
+    }
+
+    # 7. Lỗi 3E3 (Local Port)
+    Add-MBtn "7. Lỗi 3E3 (Không nhận Local Port)" "#4682B4" {
+        Write-Log "HƯỚNG DẪN: Đang mở cửa sổ Add Printer." "Yellow"
+        Write-Log "-> Hãy bấm 'Add a printer' -> Chọn 'Add a local printer...'" "White"
+        Write-Log "-> Tạo Port mới dạng 'Standard TCP/IP Port' thay vì Local." "White"
+        try { Run-CmdAndLog "control printers" } catch {}
+    }
 
     $MForm.Controls.Add($pnl); $MForm.ShowDialog() | Out-Null
 }
@@ -143,16 +182,28 @@ $Action_ClearCreds = {
     if ($creds) { foreach ($c in $creds) { Run-CmdAndLog "cmdkey /delete:$(($c -split 'Target: ')[1])" } }
 }
 
-# --- CÁC TÍNH NĂNG MỚI ĐẮP THÊM ---
+$Action_CleanInk = {
+    Write-Log "--- Mở bảng Clean Mực ---" "White"
+    try { Run-CmdAndLog "control printers" } catch {}
+    Run-CmdAndLog "rundll32 printui.dll,PrintUIEntry /p /n `"$((Get-CimInstance Win32_Printer | Select-Object -First 1).Name)`""
+}
+
+$Action_DefaultShare = {
+    Write-Log "--- Set Mặc định & Share toàn bộ máy in ---" "White"
+    try {
+        $printers = Get-CimInstance Win32_Printer
+        foreach ($p in $printers) {
+            Run-CmdAndLog "rundll32 printui.dll,PrintUIEntry /y /n `"$($p.Name)`""
+            $p | Set-CimInstance -Property @{Shared=$true; Published=$true} -ErrorAction SilentlyContinue
+        }
+    } catch { Run-CmdAndLog "net share Printer=LPT1 /users:10" }
+}
 
 $Action_RestartExplorer = {
     Write-Log "--- Restarting Explorer.exe ---" "White"
-    $exp = Get-Process -Name explorer -ErrorAction SilentlyContinue
-    if ($exp) {
-        Stop-Process -Name explorer -Force
-        Start-Process explorer
-        Write-Log "Đã khởi động lại Windows UI." "LimeGreen"
-    } else { Write-Log "Không tìm thấy tiến trình Explorer (Đang ở WinPE?)." "Yellow" }
+    if (Get-Process -Name explorer -ErrorAction SilentlyContinue) {
+        Stop-Process -Name explorer -Force; Start-Process explorer
+    } else { Write-Log "Không tìm thấy tiến trình Explorer." "Yellow" }
 }
 
 $Action_CheckPort445 = {
@@ -160,27 +211,23 @@ $Action_CheckPort445 = {
     try {
         $tcp = New-Object System.Net.Sockets.TcpClient
         $tcp.Connect("127.0.0.1", 445)
-        Write-Log "✅ Port 445 đang MỞ. Máy chủ đã sẵn sàng chia sẻ." "LimeGreen"
-        $tcp.Close()
-    } catch { Write-Log "❌ Port 445 ĐÓNG hoặc bị chặn bởi Firewall!" "Red" }
+        Write-Log "✅ Port 445 đang MỞ." "LimeGreen"; $tcp.Close()
+    } catch { Write-Log "❌ Port 445 ĐÓNG hoặc bị Firewall chặn!" "Red" }
 }
 
 $Action_ToggleFirewall = {
     Write-Log "--- Chuyển đổi trạng thái Firewall ---" "White"
-    $state = cmd.exe /c "netsh advfirewall show allprofiles state"
-    if ($state -match "ON") {
+    if ((cmd.exe /c "netsh advfirewall show allprofiles state") -match "ON") {
         Run-CmdAndLog "netsh advfirewall set allprofiles state off"
-        Write-Log "🔥 ĐÃ TẮT FIREWALL (Thích hợp test LAN)" "Yellow"
     } else {
         Run-CmdAndLog "netsh advfirewall set allprofiles state on"
-        Write-Log "🛡️ ĐÃ BẬT LẠI FIREWALL" "LimeGreen"
     }
 }
 
 $Action_DisableIPv6 = {
     Write-Log "--- Tắt IPv6 Ưu tiên IPv4 ---" "White"
     Set-RegSafe "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" "DisabledComponents" 255
-    Write-Log "Đã ép dùng IPv4. Vui lòng Restart máy để áp dụng!" "LimeGreen"
+    Write-Log "Vui lòng Restart máy để áp dụng!" "LimeGreen"
 }
 
 # ==============================================================================
@@ -244,7 +291,6 @@ function Start-App {
         $global:MainForm = [System.Windows.Markup.XamlReader]::Load($reader)
         $global:LogControl = $global:MainForm.FindName("txtLog")
 
-        # Gắn sự kiện
         $global:MainForm.FindName("btnFixSpooler").Add_Click($Action_CleanSpooler)
         $global:MainForm.FindName("btnFixErrors").Add_Click($Action_ShowErrorMenu)
         $global:MainForm.FindName("btnCleanInk").Add_Click($Action_CleanInk)
@@ -263,7 +309,6 @@ function Start-App {
         $global:MainForm.ShowDialog() | Out-Null
 
     } else {
-        # ---- GIAO DIỆN WINFORMS NGANG ----
         $global:MainForm = New-Object System.Windows.Forms.Form
         $global:MainForm.Text = "Phát Tấn PC - WinForms Horizontal Mode"
         $global:MainForm.Size = New-Object System.Drawing.Size(1000, 750)
