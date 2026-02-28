@@ -340,7 +340,11 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     
     $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
     $ProcInfo.FileName = "powershell.exe"
-    $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
+    if ($ModulePath -match "WinModder.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    } else {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
+    }
     $ProcInfo.UseShellExecute = $false
     $Proc = [System.Diagnostics.Process]::Start($ProcInfo)
     Write-GuiLog "Tien trinh doc lap [PID: $($Proc.Id)] da tao..."
