@@ -342,7 +342,23 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     $ProcInfo.FileName = "powershell.exe"
     if ($ModulePath -match "WinModder.ps1") {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
-    } else {
+    }
+    elseif ($ModulePath -match "GeminiAI.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    }
+    elseif ($ModulePath -match "AppStore.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    }
+    elseif ($ModulePath -match "BitLockerMgr.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    }
+    elseif ($ModulePath -match "WinUpdatePro.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    }
+    elseif ($ModulePath -match "DefenderMgr.ps1") {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    }
+    else {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
     }
     $ProcInfo.UseShellExecute = $false
@@ -440,7 +456,7 @@ function Load-WPF {
                                     <Button Name="sec_DefenderMgr" Content="🛡 DEFENDER ON/OFF" Background="#8A2BE2" Tag="#8A2BE2"/>
                                     <Button Name="sec_AntiEFS_GUI" Content="🛡 VÔ HIỆU EFSs" Background="#8A2BE2" Tag="#8A2BE2"/>
                                     <Button Name="sec_BitLockerMgr" Content="🔒 KHÓA BITLOCKER" Background="#8A2BE2" Tag="#8A2BE2"/>
-                                    <Button Name="sec_BrowserPrivacy" Content="⛔ CHẶN WEB ĐỘC" Background="#8A2BE2" Tag="#8A2BE2"/>
+                                    <Button Name="sec_BrowserPrivacy" Content="⛔ CHẶN LỊCH SỬ WEB" Background="#8A2BE2" Tag="#8A2BE2"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
@@ -567,7 +583,7 @@ function Load-WinForms {
     Add-WinBtn $GrpSys "🚑 CỨU DỮ LIỆU" "DISK_GENIUS" [System.Drawing.Color]::DeepSkyBlue $true
 
     $GrpSec = Add-HozWinGroup "🛡 BẢO MẬT" [System.Drawing.Color]::BlueViolet
-    @("🌐 ĐỔI DNS|NetworkMaster.ps1", "↻ QUẢN UPDATE|WinUpdatePro.ps1", "🛡 DEFENDER|DefenderMgr.ps1", "⛔ CHẶN WEB|BrowserPrivacy.ps1") | % {
+    @("🌐 ĐỔI DNS|NetworkMaster.ps1", "↻ QUẢN UPDATE|WinUpdatePro.ps1", "🛡 DEFENDER|DefenderMgr.ps1", "⛔ CHẶN LỊCH SỬ WEB|BrowserPrivacy.ps1") | % {
         $d=$_ -split '\|'; Add-WinBtn $GrpSec $d[0] $d[1] [System.Drawing.Color]::BlueViolet
     }
     Add-WinBtn $GrpSec "🛡 VÔ HIỆU EFSs" "AntiEFS_GUI.ps1" [System.Drawing.Color]::BlueViolet $true
