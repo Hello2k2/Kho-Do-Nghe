@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.10.1 TITANIUM (Fixed WinForms Font Crash, UI Stable)
+    Version: 20.10.2 KILLER KERNEL (Auto-Kill Ghost PID, Watchdog Timer, Fixed Device API)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -14,7 +14,7 @@ Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawi
 [System.Windows.Forms.Application]::EnableVisualStyles()
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ErrorActionPreference = "SilentlyContinue"
 
-# TẠO BIẾN FONT DÙNG CHUNG (CHỐNG LỖI WINFORMS)
+# TẠO BIẾN FONT DÙNG CHUNG
 $FontTitle = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
 $FontHeader = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
 $FontBtn = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
@@ -39,14 +39,9 @@ $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmai
 $Global:LogBox = $null
 
 function Write-GuiLog ($Msg) {
-    $Time = Get-Date -Format "HH:mm:ss"
-    $FullMsg = "[$Time] $Msg`n"
-    Write-Host "[TITAN-CORE] $Msg" -ForegroundColor Cyan
-    if ($Global:IsWpfMode -and $Global:LogBox) {
-        $Global:LogBox.Dispatcher.Invoke({ $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToEnd() })
-    } elseif (-not $Global:IsWpfMode -and $Global:LogBox) {
-        $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToCaret()
-    }
+    $Time = Get-Date -Format "HH:mm:ss"; $FullMsg = "[$Time] $Msg`n"; Write-Host "[TITAN-CORE] $Msg" -ForegroundColor Cyan
+    if ($Global:IsWpfMode -and $Global:LogBox) { $Global:LogBox.Dispatcher.Invoke({ $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToEnd() }) } 
+    elseif (-not $Global:IsWpfMode -and $Global:LogBox) { $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToCaret() }
 }
 
 function Call-API ($Action, $Payload) { try { $Payload.Add("action", $Action); $JsonString = $Payload | ConvertTo-Json -Depth 10 -Compress; $Utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($JsonString); return Invoke-RestMethod -Uri $Global:ApiServer -Method Post -Body $Utf8Bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 15 } catch { return @{ status="error"; message="Mất kết nối Máy chủ!" } } }
@@ -56,8 +51,7 @@ function Call-API ($Action, $Payload) { try { $Payload.Add("action", $Action); $
 # ==============================================================================
 $Global:RegPath = "HKCU:\Software\TitanPC"
 function Save-Session ($E, $T, $H, $LP, $SP) { 
-    $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"
-    $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R))
+    $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"; $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R))
     if (-not (Test-Path $Global:RegPath)) { New-Item -Path $Global:RegPath -Force | Out-Null }
     Set-ItemProperty -Path $Global:RegPath -Name "SessionData" -Value $Encoded -Force
     try { [System.IO.File]::WriteAllText($Global:SessionFile, $Encoded) } catch {}
@@ -78,7 +72,7 @@ function Load-Session {
 }
 
 # ==============================================================================
-# UI FORMS CƠ BẢN (ĐÃ FIX FONT)
+# UI FORMS CƠ BẢN
 # ==============================================================================
 function Show-OtpInput ($Title, $Msg, $Link) {
     $OForm = New-Object System.Windows.Forms.Form; $OForm.Text = $Title; $OForm.Size = "400, 240"; $OForm.StartPosition = "CenterParent"; $OForm.FormBorderStyle = "FixedToolWindow"; $OForm.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 25); $OForm.ForeColor = "White"
@@ -129,6 +123,9 @@ function Show-Store {
     $S.ShowDialog() | Out-Null; $S.Dispose()
 }
 
+# ==============================================================================
+# FIX API DANH SÁCH THIẾT BỊ 
+# ==============================================================================
 function Show-DeviceManager {
     $DM = New-Object System.Windows.Forms.Form
     $DM.Text = "QUẢN LÝ THIẾT BỊ ĐĂNG NHẬP | $($Global:UserEmail)"
@@ -149,8 +146,14 @@ function Show-DeviceManager {
 
     $DM.Cursor = "WaitCursor"
     $Res = Call-API "get_devices" @{ email=$Global:UserEmail }
+    
+    # Fix ép kiểu nếu API trả về 1 Object thay vì mảng Array
     if ($Res.status -eq "success") {
-        foreach ($dev in $Res.devices) {
+        $DeviceList = @()
+        if ($Res.devices -is [array]) { $DeviceList = $Res.devices }
+        elseif ($Res.devices -ne $null) { $DeviceList += $Res.devices }
+        
+        foreach ($dev in $DeviceList) {
             $RowIdx = $Grid.Rows.Add()
             $Grid.Rows[$RowIdx].Cells[1].Value = $dev.machine_name
             $Grid.Rows[$RowIdx].Cells[2].Value = $dev.hwid
@@ -162,7 +165,7 @@ function Show-DeviceManager {
                 $Grid.Rows[$RowIdx].Cells[0].ReadOnly = $true 
             }
         }
-    } else { [System.Windows.Forms.MessageBox]::Show("Không thể tải danh sách thiết bị!", "Lỗi") }
+    } else { [System.Windows.Forms.MessageBox]::Show("Không thể tải danh sách thiết bị!", "Lỗi", 0, 16) }
     $DM.Cursor = "Default"
 
     $BtnRemove = New-Object System.Windows.Forms.Button; $BtnRemove.Text="🗑 GỠ MÁY ĐÃ CHỌN"; $BtnRemove.Location="20, 350"; $BtnRemove.Size="200, 40"; $BtnRemove.BackColor="OrangeRed"; $BtnRemove.FlatStyle="Flat"; $BtnRemove.Font=$FontBtn
@@ -239,8 +242,11 @@ function Show-ProfileForm {
     $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
 }
 
+# ==============================================================================
+# GIAO DIỆN ĐĂNG NHẬP GATEWAY
+# ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.10.1 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.10.2 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -306,7 +312,7 @@ if (-not $Global:IsAuthenticated) { Exit }
 Write-Host "[TITAN-CORE] Xac thuc thanh cong! Nap Giao dien..." -ForegroundColor Green
 
 # ==============================================================================
-# HÀM RUN-MODULE BẰNG .NET PROCESS (CÁCH LY HOÀN TOÀN, CHỐNG TREO)
+# HÀM RUN-MODULE VÀ DIỆT GHOST PID BẰNG WATCHDOG TIMER
 # ==============================================================================
 function Invoke-SmartDownload ($Url, $OutFile) {
     if ($Url -match "drive\.google\.com") { $id = ""; if ($Url -match "id=([a-zA-Z0-9_-]+)") { $id = $matches[1] } elseif ($Url -match "/d/([a-zA-Z0-9_-]+)") { $id = $matches[1] }; if ($id) { $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession; $BaseDriveUrl = "https://drive.google.com/uc?id=$id&export=download"; try { $Resp1 = Invoke-WebRequest -Uri $BaseDriveUrl -WebSession $Session -UseBasicParsing -ErrorAction Stop; [System.IO.File]::WriteAllBytes($OutFile, $Resp1.Content); return $true } catch { $Html = $_.Exception.Response.GetResponseStream(); $Reader = New-Object System.IO.StreamReader($Html); $Content = $Reader.ReadToEnd(); $Reader.Close(); if ($Content -match "confirm=([a-zA-Z0-9_-]+)") { try { Invoke-WebRequest -Uri "$BaseDriveUrl&confirm=$($matches[1])" -OutFile $OutFile -WebSession $Session -UseBasicParsing; return $true } catch { return $false } } } } }
@@ -327,7 +333,9 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     }
     
     $TargetUrl = "$($RawUrl)$($ModulePath)?t=$(Get-Date -UFormat %s)"
-    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'Titan/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }"
+    
+    # 🚨 SÁT THỦ DIỆT GHOST PID: Ép PowerShell ngầm tự sát sau khi hoàn thành hoặc đóng
+    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'Titan/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }; [System.GC]::Collect(); [Environment]::Exit(0)"
     $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
     
     $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -337,13 +345,28 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     $Proc = [System.Diagnostics.Process]::Start($ProcInfo)
     Write-GuiLog "Tien trinh doc lap [PID: $($Proc.Id)] da tao..."
 
-    $TimerState = New-Object PSObject -Property @{ Button = $Btn; OrigText = $OriginalText; OrigColor = $Btn.Tag; IsWpf = $IsWpfBtn; Timer = $null }
-    $CheckTimer = New-Object System.Windows.Forms.Timer; $CheckTimer.Interval = 3000; $CheckTimer.Tag = $TimerState 
+    $TimerState = New-Object PSObject -Property @{ Button = $Btn; OrigText = $OriginalText; OrigColor = $Btn.Tag; IsWpf = $IsWpfBtn; Timer = $null; Pid = $Proc.Id }
+    $CheckTimer = New-Object System.Windows.Forms.Timer; $CheckTimer.Interval = 1000; $CheckTimer.Tag = $TimerState 
+    
+    # BỘ GIÁM SÁT KÉP (Vừa check thời gian 3s để nhả nút, vừa theo dõi PID)
+    $Global:Counter = 0
     $CheckTimer.Add_Tick({
-        $State = $this.Tag; $State.Timer.Stop()
-        if ($State.IsWpf) { $State.Button.Content = $State.OrigText; $State.Button.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($State.OrigColor); $State.Button.IsEnabled = $true } 
-        else { $State.Button.Text = $State.OrigText; $State.Button.BackColor = $State.OrigColor; $State.Button.Enabled = $true }
-        $State.Timer.Dispose()
+        $State = $this.Tag
+        $Global:Counter++
+        
+        # Sau 3 giây (3 tick) -> Bắt buộc nhả nút bấm ra cho phép bấm tiếp
+        if ($Global:Counter -ge 3) {
+            if ($State.IsWpf) { $State.Button.Content = $State.OrigText; $State.Button.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($State.OrigColor); $State.Button.IsEnabled = $true } 
+            else { $State.Button.Text = $State.OrigText; $State.Button.BackColor = $State.OrigColor; $State.Button.Enabled = $true }
+        }
+
+        # Nếu PID thực sự đã bị chết (tắt Tool con), thì dừng đồng hồ Watchdog lại
+        $ProcStatus = Get-Process -Id $State.Pid -ErrorAction SilentlyContinue
+        if ($null -eq $ProcStatus) {
+            Write-GuiLog "=> [PID: $($State.Pid)] Da dong va don rac!"
+            $State.Timer.Stop()
+            $State.Timer.Dispose()
+        }
     })
     $TimerState.Timer = $CheckTimer; $CheckTimer.Start()
 }
@@ -359,7 +382,7 @@ function Load-WPF {
         [xml]$WpfXaml = @"
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.10.1 | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.10.2 | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -497,7 +520,7 @@ function Load-WPF {
 # GIAO DIỆN WINFORMS - ĐỒNG BỘ
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.10.1 | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.10.2 | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
@@ -556,9 +579,9 @@ function Load-WinForms {
     Add-WinBtn $GrpIns "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" [System.Drawing.Color]::MediumSeaGreen $true
 
     $Global:LogBox = New-Object System.Windows.Forms.TextBox
-    $Global:LogBox.Location="10, 560"; $Global:LogBox.Size="1060, 150"; $Global:LogBox.Multiline=$true; $Global:LogBox.ReadOnly=$true; $Global:LogBox.BackColor=[System.Drawing.Color]::Black; $Global:LogBox.ForeColor=[System.Drawing.Color]::Lime; $Global:LogBox.Font=$FontConsole; $Form.Controls.Add($Global:LogBox)
+    $Global:LogBox.Location="10, 560"; $Global:LogBox.Size="1060, 150"; $Global:LogBox.Multiline=$true; $Global:LogBox.ReadOnly=$true; $Global:LogBox.BackColor=[System.Drawing.Color]::Black; $Global:LogBox.ForeColor=[System.Drawing.Color]::Lime; $Global:LogBox.Font="Consolas, 10"; $Form.Controls.Add($Global:LogBox)
 
-    $BtnBuyKey = New-Object System.Windows.Forms.Button; $BtnBuyKey.Text="💎 CỬA HÀNG VIP"; $BtnBuyKey.Location="870, 730"; $BtnBuyKey.Size="200,45"; $BtnBuyKey.BackColor="Gold"; $BtnBuyKey.ForeColor="Black"; $BtnBuyKey.FlatStyle="Flat"; $BtnBuyKey.Font=$FontBtn; $BtnBuyKey.Add_Click({ Show-Store }); $Form.Controls.Add($BtnBuyKey)
+    $BtnBuyKey = New-Object System.Windows.Forms.Button; $BtnBuyKey.Text="💎 CỬA HÀNG VIP"; $BtnBuyKey.Location="870, 730"; $BtnBuyKey.Size="200,45"; $BtnBuyKey.BackColor="Gold"; $BtnBuyKey.ForeColor="Black"; $BtnBuyKey.FlatStyle="Flat"; $BtnBuyKey.Font="Segoe UI, 10, Bold"; $BtnBuyKey.Add_Click({ Show-Store }); $Form.Controls.Add($BtnBuyKey)
 
     $Form.ShowDialog() | Out-Null; $Form.Dispose()
 }
