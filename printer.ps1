@@ -1,7 +1,7 @@
 # ==============================================================================
-# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.4.1 PRO (RGB EDITION)
-# - Đã FIX lỗi XAML ('x' undeclared prefix)
-# - Random RGB màu sắc cho toàn bộ nút bấm
+# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.5 PRO (NEON RGB EDITION)
+# - Thuật toán màu sắc siêu sặc sỡ (Vibrant RGB)
+# - Chữ trắng nổi bật, giao diện mượt mà (WPF + WinForms)
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -26,6 +26,7 @@ Add-Type -AssemblyName System.Drawing
 
 $global:CurrentUIMode = if ($global:HasWPF) { "WPF" } else { "WinForms" }
 $global:LogControl = $null
+$global:SysRand = New-Object System.Random # Biến Random toàn cục giúp trộn màu mượt hơn
 
 # ==============================================================================
 # ENGINE: XỬ LÝ LOGIC (LOG, CMD, REGISTRY)
@@ -177,7 +178,7 @@ $UIData = @(
             @{ T="3. Cài Máy In Ảo (Print to PDF)"; A={ Run-CmdAndLog "dism /Online /Enable-Feature /FeatureName:`"Printing-PrintToPDFServices-Features`" /NoRestart" } }
             @{ T="4. Test Ping GG & LAN"; A={ Run-CmdAndLog "ping 8.8.8.8 -n 4"; Write-Log "IP LAN Của Máy:"; Run-CmdAndLog "ipconfig | findstr IPv4" } }
             @{ T="5. Mở Print Management"; A={ Run-CmdAndLog "printmanagement.msc" } }
-            @{ T="6. 🤖 TÌM DRIVER TỰ ĐỘNG"; A=$Act_SearchDriver; Bg="#FF0000" }
+            @{ T="6. 🤖 TÌM DRIVER TỰ ĐỘNG"; A=$Act_SearchDriver; Bg="#FF003C" } # Ép Đỏ Neon cho nút tìm kiếm
             @{ T="7. Auto Start Spooler Service"; A={ Run-CmdAndLog "sc config spooler start= auto"; &$Act_Spooler } }
         )
     },
@@ -217,12 +218,31 @@ $UIData = @(
     }
 )
 
-# Hàm Random Sinh Mã HEX Màu Tránh Quá Sáng
-function Get-RandomColor {
-    $rand = New-Object System.Random
-    $r = $rand.Next(40, 180)
-    $g = $rand.Next(40, 180)
-    $b = $rand.Next(40, 180)
+# ==============================================================================
+# THUẬT TOÁN SINH MÀU SẮC SẶC SỠ (NEON/CYBERPUNK)
+# ==============================================================================
+function Get-VibrantColor {
+    # Ép 1 kênh max (tươi nhất) và 1 kênh min (để không bị pha xám/trắng nhạt)
+    $high = $global:SysRand.Next(200, 255)
+    $low = $global:SysRand.Next(0, 50)
+    $mid = $global:SysRand.Next(0, 255)
+    
+    # Random vị trí các kênh R, G, B để ra đủ các dải màu (Đỏ, Cam, Lục, Lam, Tím, Hồng)
+    $mix = $global:SysRand.Next(1, 7)
+    switch ($mix) {
+        1 { $r = $high; $g = $mid;  $b = $low }
+        2 { $r = $high; $g = $low;  $b = $mid }
+        3 { $r = $mid;  $g = $high; $b = $low }
+        4 { $r = $low;  $g = $high; $b = $mid }
+        5 { $r = $low;  $g = $mid;  $b = $high }
+        6 { $r = $mid;  $g = $low;  $b = $high }
+    }
+    
+    # Để chữ trắng nổi trên nền sặc sỡ, ta giảm độ sáng chung xuống khoảng 15%
+    $r = [int]($r * 0.85)
+    $g = [int]($g * 0.85)
+    $b = [int]($b * 0.85)
+    
     return "#{0:X2}{1:X2}{2:X2}" -f $r, $g, $b
 }
 
@@ -236,7 +256,7 @@ function Start-App {
         [xml]$XAML = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4.1 (RGB WPF)" Height="780" Width="1050" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
+        Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.5 (NEON RGB)" Height="780" Width="1050" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
     <Window.Resources>
         <Style TargetType="TabItem">
             <Setter Property="Template">
@@ -313,10 +333,11 @@ function Start-App {
                 $btn.Content = $BtnDef.T
                 $btn.Width = 290; $btn.Height = 45; $btn.Margin = "8"
                 $btn.Cursor = [System.Windows.Input.Cursors]::Hand
-                $btn.FontSize = 13; $btn.FontWeight = [System.Windows.FontWeights]::Normal
+                $btn.FontSize = 13; $btn.FontWeight = [System.Windows.FontWeights]::Bold # In đậm chữ cho nổi
                 $btn.BorderThickness = "0"
                 
-                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-RandomColor }
+                # Nút nào được set Bg tĩnh thì lấy, không thì Random RGB Sặc Sỡ
+                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-VibrantColor }
                 $btn.Background = $brushConv.ConvertFromString($bgColor)
                 $btn.Foreground = [System.Windows.Media.Brushes]::White
                 
@@ -330,13 +351,13 @@ function Start-App {
             $TabCtrl.Items.Add($TabItem)
         }
 
-        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.4.1 RGB (WPF) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.5 NEON RGB (WPF) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
 
     } else {
         # ---- W I N F O R M S   M O D E   (F A L L B A C K) ----
         $global:MainForm = New-Object System.Windows.Forms.Form
-        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4.1 RGB (WINFORMS)"
+        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.5 NEON RGB (WINFORMS)"
         $global:MainForm.Size = New-Object System.Drawing.Size(1050, 780)
         $global:MainForm.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#1E1E1E")
         $global:MainForm.StartPosition = "CenterScreen"
@@ -383,9 +404,9 @@ function Start-App {
                 $btn.Text = $BtnDef.T; $btn.Size = New-Object System.Drawing.Size(290, 45)
                 $btn.FlatStyle = "Flat"; $btn.ForeColor = [System.Drawing.Color]::White
                 
-                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-RandomColor }
+                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-VibrantColor }
                 $btn.BackColor = [System.Drawing.ColorTranslator]::FromHtml($bgColor)
-                $btn.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+                $btn.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold) # Chữ đậm
                 $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
                 $btn.Margin = New-Object System.Windows.Forms.Padding(6)
                 
@@ -412,7 +433,7 @@ function Start-App {
         $MainLayout.Controls.Add($gbLog, 0, 1)
         $global:MainForm.Controls.Add($MainLayout)
 
-        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.4.1 RGB (WINFORMS) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.5 NEON RGB (WINFORMS) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
     }
 }
