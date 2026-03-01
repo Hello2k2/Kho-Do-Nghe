@@ -1,7 +1,7 @@
 # ==============================================================================
-# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.3 PRO
-# - Chế độ Ưu tiên WPF, tự động Fallback về WinForms
-# - BUNG FULL MÃ LỖI PRINTER & NETWORK LAN THỰC CHIẾN
+# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.4 PRO (RGB EDITION)
+# - Sửa lỗi giao diện Tab bị trắng chữ
+# - Random RGB màu sắc cho toàn bộ nút bấm (Đậm chất Hacker/Gamer)
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -132,12 +132,13 @@ $Act_OpenPrintConfig = {
 }
 
 # ==============================================================================
-# MẢNG DỮ LIỆU ĐỘNG (DÀN NÚT BẤM VÀ MÃ LỖI)
+# MẢNG DỮ LIỆU ĐỘNG 
+# (Thuộc tính Color ở TabDef giờ không dùng nữa vì Nút đã tự random RGB)
 # ==============================================================================
 
 $UIData = @(
     @{
-        TabName = "🖨️ Máy In LAN"; Color = "#8A2BE2"
+        TabName = "🖨️ Máy In LAN";
         Buttons = @(
             @{ T="1. Fix Spooler & Kẹt In"; A=$Act_Spooler }
             @{ T="2. Lỗi 11B (PrintNightmare)"; A={ Set-RegSafe "HKLM:\System\CurrentControlSet\Control\Print" "RpcAuthnLevelPrivacyEnabled" 0; &$Act_Spooler } }
@@ -155,7 +156,7 @@ $UIData = @(
         )
     },
     @{
-        TabName = "🌐 Mạng & Share"; Color = "#20B2AA"
+        TabName = "🌐 Mạng & Share";
         Buttons = @(
             @{ T="1. Share D, E, F (Full Mạng)"; A={ Get-PSDrive -PSProvider FileSystem | ?{$_.Name -match "^[DEF]"} | %{Run-CmdAndLog "net share $($_.Name)Drive=$($_.Root) /GRANT:Everyone,FULL"} } }
             @{ T="2. Bật SMBv1 (Fix 0x80004005)"; A={ Run-CmdAndLog "dism /online /Enable-Feature /FeatureName:SMB1Protocol /All /NoRestart" } }
@@ -170,19 +171,19 @@ $UIData = @(
         )
     },
     @{
-        TabName = "🛠️ Tiện Ích IN"; Color = "#FF8C00"
+        TabName = "🛠️ Tiện Ích IN";
         Buttons = @(
             @{ T="1. Clean Mực / Head Cleaning"; A={ Run-CmdAndLog "rundll32 printui.dll,PrintUIEntry /p /n `"$((Get-CimInstance Win32_Printer | Select-Object -First 1).Name)`"" } }
             @{ T="2. Set Mặc Định Toàn Bộ Máy In"; A={ Get-CimInstance Win32_Printer | %{Run-CmdAndLog "rundll32 printui.dll,PrintUIEntry /y /n `"$($_.Name)`""} } }
             @{ T="3. Cài Máy In Ảo (Print to PDF)"; A={ Run-CmdAndLog "dism /Online /Enable-Feature /FeatureName:`"Printing-PrintToPDFServices-Features`" /NoRestart" } }
             @{ T="4. Test Ping GG & LAN"; A={ Run-CmdAndLog "ping 8.8.8.8 -n 4"; Write-Log "IP LAN Của Máy:"; Run-CmdAndLog "ipconfig | findstr IPv4" } }
             @{ T="5. Mở Print Management"; A={ Run-CmdAndLog "printmanagement.msc" } }
-            @{ T="6. 🤖 TÌM DRIVER TỰ ĐỘNG"; A=$Act_SearchDriver; Bg="#FF1493" }
+            @{ T="6. 🤖 TÌM DRIVER TỰ ĐỘNG"; A=$Act_SearchDriver; Bg="#FF0000" } # Màu Đỏ nổi bật riêng
             @{ T="7. Auto Start Spooler Service"; A={ Run-CmdAndLog "sc config spooler start= auto"; &$Act_Spooler } }
         )
     },
     @{
-        TabName = "📠 Scan VIP"; Color = "#3CB371"
+        TabName = "📠 Scan VIP";
         Buttons = @(
             @{ T="1. Tạo Folder Scan Desktop"; A={ $p="$env:USERPROFILE\Desktop\SCAN_DATA"; md $p -Force; Run-CmdAndLog "net share Scan_Data=`"$p`" /GRANT:Everyone,FULL" } }
             @{ T="2. Mở App WFS (Win Fax Scan)"; A={ Run-CmdAndLog "wfs.exe" } }
@@ -194,7 +195,7 @@ $UIData = @(
         )
     },
     @{
-        TabName = "📦 In Đơn TMĐT & Bill"; Color = "#FF69B4"
+        TabName = "📦 In Đơn TMĐT & Bill";
         Buttons = @(
             @{ T="1. Chỉnh Khổ Shopee (A6)"; A=$Act_OpenPrintConfig }
             @{ T="2. Chỉnh Khổ TikTok (A6)"; A=$Act_OpenPrintConfig }
@@ -205,7 +206,7 @@ $UIData = @(
         )
     },
     @{
-        TabName = "🌟 AI PRO Features"; Color = "#DC143C"
+        TabName = "🌟 AI PRO Features";
         Buttons = @(
             @{ T="1. 🛡️ Bật/Tắt Print Guard (Update)"; A=$Act_PrintGuard }
             @{ T="2. 🔌 Sửa Lỗi Cắm USB Không Nhận"; A={ Write-Log "Mở Device Manager, vui lòng gỡ USB Root Hub rồi quét lại..."; Run-CmdAndLog "devmgmt.msc" } }
@@ -217,6 +218,16 @@ $UIData = @(
     }
 )
 
+# Hàm Random Sinh Mã HEX Màu Tránh Quá Sáng
+function Get-RandomColor {
+    $rand = New-Object System.Random
+    # Lấy dải màu từ 40 đến 180 để nền hơi tối, giúp chữ Trắng nổi bần bật
+    $r = $rand.Next(40, 180)
+    $g = $rand.Next(40, 180)
+    $b = $rand.Next(40, 180)
+    return "#{0:X2}{1:X2}{2:X2}" -f $r, $g, $b
+}
+
 # ==============================================================================
 # HÀM RENDER UI (WPF + WINFORMS HYBRID)
 # ==============================================================================
@@ -225,15 +236,30 @@ function Start-App {
     if ($global:CurrentUIMode -eq "WPF" -and $global:HasWPF) {
         # ---- W P F   M O D E ----
         [xml]$XAML = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.3 (WPF)" Height="780" Width="1050" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4 (RGB WPF)" Height="780" Width="1050" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
     <Window.Resources>
         <Style TargetType="TabItem">
-            <Setter Property="Background" Value="#2D2D30"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Padding" Value="12,10"/>
-            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border Name="Border" Padding="15,10" Margin="0,0,2,0" Background="#2D2D30" CornerRadius="4,4,0,0">
+                            <ContentPresenter x:Name="ContentSite" VerticalAlignment="Center" HorizontalAlignment="Center" ContentSource="Header"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#007ACC"/> <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="False">
+                                <Setter Property="Foreground" Value="#AAAAAA"/> <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#3E3E42"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="ScrollViewer">
             <Setter Property="Template">
@@ -288,7 +314,8 @@ function Start-App {
                 $btn.FontSize = 13; $btn.FontWeight = [System.Windows.FontWeights]::Normal
                 $btn.BorderThickness = "0"
                 
-                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { $TabDef.Color }
+                # Nút nào được set Bg tĩnh thì lấy, không thì Random RGB
+                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-RandomColor }
                 $btn.Background = $brushConv.ConvertFromString($bgColor)
                 $btn.Foreground = [System.Windows.Media.Brushes]::White
                 
@@ -302,13 +329,13 @@ function Start-App {
             $TabCtrl.Items.Add($TabItem)
         }
 
-        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.3 PRO (WPF) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.4 RGB (WPF) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
 
     } else {
         # ---- W I N F O R M S   M O D E   (F A L L B A C K) ----
         $global:MainForm = New-Object System.Windows.Forms.Form
-        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.3 PRO (WINFORMS)"
+        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4 RGB (WINFORMS)"
         $global:MainForm.Size = New-Object System.Drawing.Size(1050, 780)
         $global:MainForm.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#1E1E1E")
         $global:MainForm.StartPosition = "CenterScreen"
@@ -320,6 +347,28 @@ function Start-App {
 
         $TabCtrl = New-Object System.Windows.Forms.TabControl
         $TabCtrl.Dock = "Fill"; $TabCtrl.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+        
+        # Vẽ Lại Tab WinForms để đồng bộ màu Dark Mode
+        $TabCtrl.DrawMode = [System.Windows.Forms.TabDrawMode]::OwnerDrawFixed
+        $TabCtrl.Add_DrawItem({
+            param($sender, $e)
+            $g = $e.Graphics
+            $tabText = $sender.TabPages[$e.Index].Text
+            $font = $sender.Font
+            $brushBg = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml("#2D2D30"))
+            $brushFg = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml("#AAAAAA"))
+
+            if ($e.State -match "Selected") {
+                $brushBg.Color = [System.Drawing.ColorTranslator]::FromHtml("#007ACC") # Màu Tab Chọn
+                $brushFg.Color = [System.Drawing.Color]::White
+            }
+            $g.FillRectangle($brushBg, $e.Bounds)
+            
+            $stringFormat = New-Object System.Drawing.StringFormat
+            $stringFormat.Alignment = [System.Drawing.StringAlignment]::Center
+            $stringFormat.LineAlignment = [System.Drawing.StringAlignment]::Center
+            $g.DrawString($tabText, $font, $brushFg, $e.Bounds, $stringFormat)
+        })
 
         foreach ($TabDef in $UIData) {
             $TabPage = New-Object System.Windows.Forms.TabPage
@@ -334,7 +383,7 @@ function Start-App {
                 $btn.Text = $BtnDef.T; $btn.Size = New-Object System.Drawing.Size(290, 45)
                 $btn.FlatStyle = "Flat"; $btn.ForeColor = [System.Drawing.Color]::White
                 
-                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { $TabDef.Color }
+                $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-RandomColor }
                 $btn.BackColor = [System.Drawing.ColorTranslator]::FromHtml($bgColor)
                 $btn.Font = New-Object System.Drawing.Font("Segoe UI", 10)
                 $btn.Cursor = [System.Windows.Forms.Cursors]::Hand
@@ -363,7 +412,7 @@ function Start-App {
         $MainLayout.Controls.Add($gbLog, 0, 1)
         $global:MainForm.Controls.Add($MainLayout)
 
-        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.3 PRO (WINFORMS) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.4 RGB (WINFORMS) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
     }
 }
