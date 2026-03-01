@@ -1,7 +1,7 @@
 # ==============================================================================
-# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.4 PRO (RGB EDITION)
-# - Sửa lỗi giao diện Tab bị trắng chữ
-# - Random RGB màu sắc cho toàn bộ nút bấm (Đậm chất Hacker/Gamer)
+# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.4.1 PRO (RGB EDITION)
+# - Đã FIX lỗi XAML ('x' undeclared prefix)
+# - Random RGB màu sắc cho toàn bộ nút bấm
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -133,7 +133,6 @@ $Act_OpenPrintConfig = {
 
 # ==============================================================================
 # MẢNG DỮ LIỆU ĐỘNG 
-# (Thuộc tính Color ở TabDef giờ không dùng nữa vì Nút đã tự random RGB)
 # ==============================================================================
 
 $UIData = @(
@@ -178,7 +177,7 @@ $UIData = @(
             @{ T="3. Cài Máy In Ảo (Print to PDF)"; A={ Run-CmdAndLog "dism /Online /Enable-Feature /FeatureName:`"Printing-PrintToPDFServices-Features`" /NoRestart" } }
             @{ T="4. Test Ping GG & LAN"; A={ Run-CmdAndLog "ping 8.8.8.8 -n 4"; Write-Log "IP LAN Của Máy:"; Run-CmdAndLog "ipconfig | findstr IPv4" } }
             @{ T="5. Mở Print Management"; A={ Run-CmdAndLog "printmanagement.msc" } }
-            @{ T="6. 🤖 TÌM DRIVER TỰ ĐỘNG"; A=$Act_SearchDriver; Bg="#FF0000" } # Màu Đỏ nổi bật riêng
+            @{ T="6. 🤖 TÌM DRIVER TỰ ĐỘNG"; A=$Act_SearchDriver; Bg="#FF0000" }
             @{ T="7. Auto Start Spooler Service"; A={ Run-CmdAndLog "sc config spooler start= auto"; &$Act_Spooler } }
         )
     },
@@ -221,7 +220,6 @@ $UIData = @(
 # Hàm Random Sinh Mã HEX Màu Tránh Quá Sáng
 function Get-RandomColor {
     $rand = New-Object System.Random
-    # Lấy dải màu từ 40 đến 180 để nền hơi tối, giúp chữ Trắng nổi bần bật
     $r = $rand.Next(40, 180)
     $g = $rand.Next(40, 180)
     $b = $rand.Next(40, 180)
@@ -236,22 +234,26 @@ function Start-App {
     if ($global:CurrentUIMode -eq "WPF" -and $global:HasWPF) {
         # ---- W P F   M O D E ----
         [xml]$XAML = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4 (RGB WPF)" Height="780" Width="1050" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4.1 (RGB WPF)" Height="780" Width="1050" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
     <Window.Resources>
         <Style TargetType="TabItem">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
                         <Border Name="Border" Padding="15,10" Margin="0,0,2,0" Background="#2D2D30" CornerRadius="4,4,0,0">
-                            <ContentPresenter x:Name="ContentSite" VerticalAlignment="Center" HorizontalAlignment="Center" ContentSource="Header"/>
+                            <ContentPresenter Name="ContentSite" VerticalAlignment="Center" HorizontalAlignment="Center" ContentSource="Header"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#007ACC"/> <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="Border" Property="Background" Value="#007ACC"/> 
+                                <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="False">
-                                <Setter Property="Foreground" Value="#AAAAAA"/> <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="Foreground" Value="#AAAAAA"/> 
+                                <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Border" Property="Background" Value="#3E3E42"/>
@@ -314,7 +316,6 @@ function Start-App {
                 $btn.FontSize = 13; $btn.FontWeight = [System.Windows.FontWeights]::Normal
                 $btn.BorderThickness = "0"
                 
-                # Nút nào được set Bg tĩnh thì lấy, không thì Random RGB
                 $bgColor = if ($BtnDef.Bg) { $BtnDef.Bg } else { Get-RandomColor }
                 $btn.Background = $brushConv.ConvertFromString($bgColor)
                 $btn.Foreground = [System.Windows.Media.Brushes]::White
@@ -329,13 +330,13 @@ function Start-App {
             $TabCtrl.Items.Add($TabItem)
         }
 
-        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.4 RGB (WPF) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.4.1 RGB (WPF) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
 
     } else {
         # ---- W I N F O R M S   M O D E   (F A L L B A C K) ----
         $global:MainForm = New-Object System.Windows.Forms.Form
-        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4 RGB (WINFORMS)"
+        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.4.1 RGB (WINFORMS)"
         $global:MainForm.Size = New-Object System.Drawing.Size(1050, 780)
         $global:MainForm.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#1E1E1E")
         $global:MainForm.StartPosition = "CenterScreen"
@@ -348,7 +349,6 @@ function Start-App {
         $TabCtrl = New-Object System.Windows.Forms.TabControl
         $TabCtrl.Dock = "Fill"; $TabCtrl.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
         
-        # Vẽ Lại Tab WinForms để đồng bộ màu Dark Mode
         $TabCtrl.DrawMode = [System.Windows.Forms.TabDrawMode]::OwnerDrawFixed
         $TabCtrl.Add_DrawItem({
             param($sender, $e)
@@ -359,7 +359,7 @@ function Start-App {
             $brushFg = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml("#AAAAAA"))
 
             if ($e.State -match "Selected") {
-                $brushBg.Color = [System.Drawing.ColorTranslator]::FromHtml("#007ACC") # Màu Tab Chọn
+                $brushBg.Color = [System.Drawing.ColorTranslator]::FromHtml("#007ACC")
                 $brushFg.Color = [System.Drawing.Color]::White
             }
             $g.FillRectangle($brushBg, $e.Bounds)
@@ -412,7 +412,7 @@ function Start-App {
         $MainLayout.Controls.Add($gbLog, 0, 1)
         $global:MainForm.Controls.Add($MainLayout)
 
-        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.4 RGB (WINFORMS) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.4.1 RGB (WINFORMS) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
     }
 }
