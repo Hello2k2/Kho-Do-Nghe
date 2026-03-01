@@ -1,7 +1,7 @@
 # ==============================================================================
-# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.1 PRO (HYBRID EDITION)
+# Phát Tấn PC - ULTIMATE SYSADMIN & PRINTER TOOL V5.2 PRO
 # - Chế độ Ưu tiên WPF, tự động Fallback về WinForms
-# - Giao diện TabControl tự động render từ Dynamic Array
+# - Gắn đầy đủ các mã lỗi Printer LAN thực chiến
 # ==============================================================================
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -140,13 +140,14 @@ $UIData = @(
         TabName = "🖨️ Máy In LAN"; Color = "#8A2BE2"
         Buttons = @(
             @{ T="1. Fix Spooler & Kẹt In"; A=$Act_Spooler }
-            @{ T="2. Lỗi 11B (PrintNightmare)"; A={ Set-RegSafe "HKLM:\System\CurrentControlSet\Control\Print" "RpcAuthnLevelPrivacyEnabled" 0; &$Act_Spooler } }
-            @{ T="3. Lỗi 0709 / 07C"; A={ Set-RegSafe "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\RPC" "RpcUseNamedPipeProtocol" 1 } }
-            @{ T="4. Lỗi BC4 / 4005 (Policy)"; A={ Set-RegSafe "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint" "RestrictDriverInstallationToAdministrators" 0 } }
-            @{ T="5. Lỗi Bận Ảo / Communication"; A={ Write-Log "Tắt BidiSupport trên máy con..."; Run-CmdAndLog "control printers" } }
-            @{ T="6. Lỗi BCB / Tường lửa"; A={ Run-CmdAndLog "netsh advfirewall firewall set rule group=`"File and Printer Sharing`" new enable=Yes" } }
-            @{ T="7. Add Local Port (Lỗi 3E3)"; A={ Run-CmdAndLog "control printers" } }
-            @{ T="8. Fix Triệt Để Registry Spool"; A={ Run-CmdAndLog "reg delete HKLM\SYSTEM\CurrentControlSet\Control\Print\Environments\Windowsx64\PrintProcessors /f" } }
+            @{ T="2. Fix Lỗi 11B (PrintNightmare)"; A={ Set-RegSafe "HKLM:\System\CurrentControlSet\Control\Print" "RpcAuthnLevelPrivacyEnabled" 0; &$Act_Spooler } }
+            @{ T="3. Fix Lỗi 0709 / 007C"; A={ Set-RegSafe "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\RPC" "RpcUseNamedPipeProtocol" 1; &$Act_Spooler } }
+            @{ T="4. Fix Lỗi BC4 / 4005"; A={ Set-RegSafe "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint" "RestrictDriverInstallationToAdministrators" 0; &$Act_Spooler } }
+            @{ T="5. Fix Lỗi BCB / 5B3"; A={ Set-RegSafe "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint" "InForest" 0; Set-RegSafe "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint" "Restricted" 0; Run-CmdAndLog "netsh advfirewall firewall set rule group=`"File and Printer Sharing`" new enable=Yes" } }
+            @{ T="6. Fix Lỗi 3E3 / 0002"; A={ Write-Log "Lỗi này cần Add Local Port (Nhập IP). Đang mở Control Panel..."; Run-CmdAndLog "control printers" } }
+            @{ T="7. Fix Lỗi 0012 / 0057 / 139F"; A={ Write-Log "Lỗi kẹt Driver cũ. Hướng dẫn: Mở Print Management -> Xóa driver lỗi -> Cài lại."; Run-CmdAndLog "printmanagement.msc" } }
+            @{ T="8. Lỗi Bận Ảo / Communication"; A={ Write-Log "Vào Port -> Bỏ tick Enable bidirectional support"; Run-CmdAndLog "control printers" } }
+            @{ T="9. Fix Triệt Để Registry Spool"; A={ Run-CmdAndLog "reg delete HKLM\SYSTEM\CurrentControlSet\Control\Print\Environments\Windowsx64\PrintProcessors /f" } }
         )
     },
     @{
@@ -186,7 +187,7 @@ $UIData = @(
         )
     },
     @{
-        TabName = "📦 In Đơn Shopee"; Color = "#FF69B4"
+        TabName = "📦 In Đơn TMĐT & Bill"; Color = "#FF69B4"
         Buttons = @(
             @{ T="1. Chỉnh Khổ Shopee (A6)"; A=$Act_OpenPrintConfig }
             @{ T="2. Chỉnh Khổ TikTok (A6)"; A=$Act_OpenPrintConfig }
@@ -217,7 +218,7 @@ function Start-App {
     if ($global:CurrentUIMode -eq "WPF" -and $global:HasWPF) {
         # ---- W P F   M O D E ----
         [xml]$XAML = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.1 (WPF)" Height="750" Width="1000" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.2 (WPF)" Height="750" Width="1000" Background="#1E1E1E" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
     <Window.Resources>
         <Style TargetType="TabItem">
             <Setter Property="Background" Value="#2D2D30"/>
@@ -281,13 +282,13 @@ function Start-App {
             $TabCtrl.Items.Add($TabItem)
         }
 
-        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.1 (WPF ENGINE) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Loaded({ Write-Log "=== Khởi động Phát Tấn PC V5.2 (WPF ENGINE) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
 
     } else {
         # ---- W I N F O R M S   M O D E   (F A L L B A C K) ----
         $global:MainForm = New-Object System.Windows.Forms.Form
-        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.1 (WINFORMS)"
+        $global:MainForm.Text = "PHÁT TẤN PC - ULTIMATE SYSADMIN TOOL V5.2 (WINFORMS)"
         $global:MainForm.Size = New-Object System.Drawing.Size(1000, 750)
         $global:MainForm.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#1E1E1E")
         $global:MainForm.StartPosition = "CenterScreen"
@@ -342,7 +343,7 @@ function Start-App {
         $MainLayout.Controls.Add($gbLog, 0, 1)
         $global:MainForm.Controls.Add($MainLayout)
 
-        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.1 (WINFORMS ENGINE) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
+        $global:MainForm.Add_Shown({ Write-Log "=== Khởi động Phát Tấn PC V5.2 (WINFORMS ENGINE) ===" "Gold"; Write-Log "Máy: $env:COMPUTERNAME" "Cyan" })
         $global:MainForm.ShowDialog() | Out-Null
     }
 }
