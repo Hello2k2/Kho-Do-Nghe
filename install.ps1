@@ -447,6 +447,7 @@ function Load-WPF {
                                     <Button Name="sys_SystemRepair" Content="🔧 SỬA LỖI HT" Background="#00BEFF" Tag="#00BEFF"/>
                                     <Button Name="sys_scanfile" Content="🔎 QUÉT TẬP TIN" Background="#00BEFF" Tag="#00BEFF"/>
                                     <Button Name="sys_ContextMenuManager" Content="🖱 MENU CHUỘT PHẢI" Background="#00BEFF" Tag="#00BEFF"/>
+                                    <Button Name="sys_FixPrinter" Content="🖨 FIX MÁY IN" Background="#00BEFF" Tag="#00BEFF"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
@@ -506,6 +507,7 @@ function Load-WPF {
             @{Name="sec_NetworkMaster"; Cmd="NetworkMaster.ps1"; Vip=$false}, @{Name="sec_WinUpdatePro"; Cmd="WinUpdatePro.ps1"; Vip=$false},
             @{Name="sec_DefenderMgr"; Cmd="DefenderMgr.ps1"; Vip=$false}, @{Name="sec_AntiEFS_GUI"; Cmd="AntiEFS_GUI.ps1"; Vip=$true},
             @{Name="sec_BitLockerMgr"; Cmd="BitLockerMgr.ps1"; Vip=$true}, @{Name="sec_BrowserPrivacy"; Cmd="BrowserPrivacy.ps1"; Vip=$false},
+            @{Name="sys_FixPrinter"; Cmd="fixprinter_errors.ps1"; Vip=$false},
             
             @{Name="ins_WinInstall"; Cmd="WinInstall.ps1"; Vip=$true}, @{Name="ins_OfficeInstaller"; Cmd="OfficeInstaller.ps1"; Vip=$true},
             @{Name="ins_WinModder"; Cmd="WinModder.ps1"; Vip=$false}, @{Name="ins_WinAIOBuilder"; Cmd="WinAIOBuilder.ps1"; Vip=$true},
@@ -580,7 +582,7 @@ function Load-WinForms {
     }
 
     $GrpSys = Add-HozWinGroup "⚙ HỆ THỐNG" [System.Drawing.Color]::DeepSkyBlue
-    @("ℹ CẤU HÌNH|SystemInfo.ps1", "♻ DỌN RÁC|SystemCleaner.ps1", "💾 QUẢN LÝ ĐĨA|DiskManager.ps1", "🔍 QUÉT WIN|SystemScan.ps1", "⚡ TỐI ƯU RAM|RamBooster.ps1", "🗝 KÍCH HOẠT|WinActivator.ps1", "🔧 SỬA LỖI HT|SystemRepair.ps1", "🔎 QUÉT TẬP TIN|scanfile.ps1", "🖱 MENU CHUỘT PHẢI|ContextMenuManager.ps1") | % {
+    @("ℹ CẤU HÌNH|SystemInfo.ps1", "♻ DỌN RÁC|SystemCleaner.ps1", "💾 QUẢN LÝ ĐĨA|DiskManager.ps1", "🔍 QUÉT WIN|SystemScan.ps1", "⚡ TỐI ƯU RAM|RamBooster.ps1", "🗝 KÍCH HOẠT|WinActivator.ps1", "🔧 SỬA LỖI HT|SystemRepair.ps1", "🔎 QUÉT TẬP TIN|scanfile.ps1", "🖱 MENU CHUỘT PHẢI|ContextMenuManager.ps1","🖨 FIX MÁY IN|fixprinter_errors.ps1") | % {
         $d=$_ -split '\|'; Add-WinBtn $GrpSys $d[0] $d[1] [System.Drawing.Color]::DeepSkyBlue
     }
     Add-WinBtn $GrpSys "🚑 CỨU DỮ LIỆU" "DISK_GENIUS" [System.Drawing.Color]::DeepSkyBlue $true
