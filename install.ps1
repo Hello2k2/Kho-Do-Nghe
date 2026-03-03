@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.12 TITANIUM MAX (Fixed UTF-8 Download, Encoded JSON Link)
+    Version: 20.12.1 TITANIUM MAX (Solid UTF-8 JSON Fix via Temp File)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -32,7 +32,7 @@ $encApi = "aHR0cHM6Ly9hcGkucGhhdHRhbi5pZC52bi9hcGkucGhw"; $Global:ApiServer = [S
 $encBaseUrl = "aHR0cHM6Ly9naXRodWIuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjAv"; $BaseUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encBaseUrl))
 $encRawUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sLw=="; $RawUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encRawUrl))
 
-# ĐÃ MÃ HÓA LINK MỚI: https://script.phattan.id.vn/tool/apps.json
+# MÃ HÓA LINK JSON
 $encJsonUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sL2FwcHMuanNvbg=="; $JsonUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encJsonUrl))
 
 $TempDir = "$env:TEMP\PhatTan_Tool"; if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
@@ -41,17 +41,23 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
-# --- HÀM TẢI JSON MỘT LẦN DUY NHẤT (FIXED UTF-8) ---
+# --- HÀM TẢI JSON (TẢI VỀ Ổ CỨNG ÉP UTF-8 ĐỂ CHỐNG LỖI) ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
         Write-Host "[TITAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
         try { 
             $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-            $wc = New-Object Net.WebClient
-            $wc.Encoding = [System.Text.Encoding]::UTF8 # ÉP KIỂU UTF-8 TỪ LÚC TẢI VỀ
-            $wc.Headers.Add("User-Agent", "Titan/20")
-            $RawJson = $wc.DownloadString("$($JsonUrl)?t=$Ts")
-            $Global:JsonData = $RawJson | ConvertFrom-Json
+            $TempJsonFile = "$TempDir\temp_apps.json"
+            
+            # Tải file về dạng nguyên bản (Raw bytes) để không bị lỗi Encoding của WebClient
+            Invoke-WebRequest -Uri "$($JsonUrl)?t=$Ts" -OutFile $TempJsonFile -UseBasicParsing -ErrorAction Stop
+            
+            if (Test-Path $TempJsonFile) {
+                # Đọc file lên bằng PowerShell với chuẩn UTF8
+                $RawJson = Get-Content -Path $TempJsonFile -Encoding UTF8 -Raw
+                $Global:JsonData = $RawJson | ConvertFrom-Json
+                Remove-Item -Path $TempJsonFile -Force -ErrorAction SilentlyContinue
+            }
         } catch { Write-Host "[TITAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
     }
 }
@@ -264,7 +270,7 @@ function Show-ProfileForm {
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.12 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.12.1 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -393,7 +399,7 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
 }
 
 # ==============================================================================
-# GIAO DIỆN WPF
+# GIAO DIỆN WPF - ĐÃ THÊM TAB TỪ JSON (FIXED XML PARSING)
 # ==============================================================================
 $Global:IsWpfMode = $true 
 
@@ -401,12 +407,15 @@ function Load-WPF {
     try {
         Add-Type -AssemblyName PresentationFramework -ErrorAction Stop; Add-Type -AssemblyName PresentationCore; Add-Type -AssemblyName WindowsBase
         
+        # 1. TẠO CÁC TAB TỪ JSON VÀ FIX KÝ TỰ ĐẶC BIỆT CỦA XML
         $JsonTabsXaml = ""
         if ($Global:JsonData) {
             $JsonTabs = $Global:JsonData | Select-Object -ExpandProperty tab -Unique
             foreach ($T in $JsonTabs) {
+                # MÃ HÓA LUÔN CẢ KÝ TỰ TIẾNG VIỆT VÀ KÝ TỰ ĐẶC BIỆT ĐỂ XML KHÔNG BÁO LỖI
                 $SafeHeader = [Security.SecurityElement]::Escape($T.ToUpper())
                 $PanelName = "wpTab_" + ($T -replace '[^a-zA-Z0-9]', '')
+                
                 $JsonTabsXaml += @"
                     <TabItem Header=" $SafeHeader ">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -417,11 +426,12 @@ function Load-WPF {
             }
         }
 
+        # KHAI BÁO <?xml ... ?> LÊN ĐẦU FILE ĐỂ ÉP ENCODING
         [xml]$WpfXaml = @"
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.12 TITANIUM | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.12.1 TITANIUM | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -498,6 +508,7 @@ function Load-WPF {
         $Reader = (New-Object System.Xml.XmlNodeReader $WpfXaml); $WpfForm = [System.Windows.Markup.XamlReader]::Load($Reader)
         $Global:LogBox = $WpfForm.FindName("txtLog")
         
+        # 2. HÀM TẠO NÚT CHO DASHBOARD
         function Add-WpfBtn ($PanelName, $Text, $Cmd, $ColorHex, $IsVip = $false) {
             $Btn = New-Object System.Windows.Controls.Button; $Btn.Content = $Text; $Btn.Width = 165; $Btn.Height = 45; $Btn.Margin = "5"; $Btn.BorderThickness = 0; $Btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $Btn.FontWeight = [System.Windows.FontWeights]::Bold; $Btn.Foreground = [System.Windows.Media.Brushes]::White
@@ -512,6 +523,7 @@ function Load-WPF {
             $WpfForm.FindName($PanelName).Children.Add($Btn)
         }
 
+        # ĐẮP NÚT
         Add-WpfBtn "wpSystem" "ℹ CẤU HÌNH" "SystemInfo.ps1" "#00BEFF"
         Add-WpfBtn "wpSystem" "♻ DỌN RÁC" "SystemCleaner.ps1" "#00BEFF"
         Add-WpfBtn "wpSystem" "💾 QUẢN LÝ ĐĨA" "DiskManager.ps1" "#00BEFF"
@@ -542,6 +554,7 @@ function Load-WPF {
         Add-WpfBtn "wpInstall" "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" "#32E682" $true
         Add-WpfBtn "wpInstall" "🖧 CÀI DRIVER" "AutoDriver.ps1" "#32E682"
 
+        # 3. ĐẮP CHECKBOX ỨNG DỤNG TỪ JSON VÀO CÁC TAB CHUẨN XÁC
         $Global:WpfAppCheckBoxes = @()
         if ($Global:JsonData) {
             foreach ($App in $Global:JsonData) {
@@ -560,6 +573,7 @@ function Load-WPF {
             }
         }
 
+        # SỰ KIỆN CÀI ĐẶT ỨNG DỤNG (WPF)
         $WpfForm.FindName("BtnInstallAppsWpf").Add_Click({
             $ListToInstall = @()
             foreach ($Chk in $Global:WpfAppCheckBoxes) { if ($Chk.IsChecked) { $ListToInstall += $Chk.Tag; $Chk.IsChecked = $false } }
@@ -591,10 +605,10 @@ function Load-WPF {
 }
 
 # ==============================================================================
-# GIAO DIỆN WINFORMS
+# GIAO DIỆN WINFORMS - ĐỒNG BỘ
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.12 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.12.1 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
@@ -676,7 +690,7 @@ function Load-WinForms {
         
         Write-GuiLog "Bắt đầu tải và cài đặt $($ListToInstall.Count) ứng dụng ngầm..."
         $SyncHash_Win = [hashtable]::Synchronized(@{ Queue=$ListToInstall; BaseUrl=$BaseUrl; TempDir=$TempDir; Log=$Global:LogBox })
-        $Runspace_Win = [runspacefactory]::CreateRunspace(); $Runspace_Win.Open(); $Runspace_Wpf.SessionStateProxy.SetVariable("sync", $SyncHash_Win)
+        $Runspace_Win = [runspacefactory]::CreateRunspace(); $Runspace_Win.Open(); $Runspace_Win.SessionStateProxy.SetVariable("sync", $SyncHash_Win)
         $Pipe_Win = $Runspace_Win.CreatePipeline()
         $Pipe_Win.Commands.AddScript({
             foreach ($A in $sync.Queue) {
@@ -708,3 +722,4 @@ while ($true) {
 Write-Host "[TITAN-CORE] Đã đóng Form, dọn dẹp hệ thống..." -ForegroundColor Green
 [System.GC]::Collect()
 Stop-Process -Id $PID -Force
+
