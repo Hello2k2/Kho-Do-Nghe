@@ -1,7 +1,34 @@
 {
-  "Rescue_Zip": {
-    "FileName": "PITVN_AVL.zip",
-    "Description": "File WIM của WinPE đã được nén zip",
-    "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/PITVN_AVL.zip"
-  }
+  "Rescue_PE": [
+    {
+      "Name": "Nasiboot Windows 11 x64 (Khuyên dùng)",
+      "FileName": "w11x64.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/w11x64.zip"
+    },
+    {
+      "Name": "Nasiboot Windows 10 x64",
+      "FileName": "W10x64.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/W10x64.zip"
+    },
+    {
+      "Name": "Nasiboot Windows 10 x86 (Máy RAM 2GB)",
+      "FileName": "W10x86.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/W10x86.zip"
+    },
+    {
+      "Name": "Nasiboot Windows 8 x86 (Máy cổ siêu nhẹ)",
+      "FileName": "W8x86.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/W8x86.zip"
+    },
+    {
+      "Name": "Nasiboot Windows 8 x86 Native",
+      "FileName": "W8x86NE.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/W8x86NE.zip"
+    },
+    {
+      "Name": "PITVN AVL WinPE",
+      "FileName": "PITVN_AVL.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/PITVN_AVL.zip"
+    }
+  ]
 }
