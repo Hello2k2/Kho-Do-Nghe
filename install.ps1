@@ -1,12 +1,13 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.12.1 TITANIUM MAX (Solid UTF-8 JSON Fix via Temp File)
+    Version: 20.12.2 TITANIUM MAX (Fixed TLS WebClient JSON Download)
 #>
 
 if ($host.Name -match "ISE") { Exit }
 if ($MyInvocation.MyCommand.Path) { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show("Truy cập trái phép! Vui lòng dùng lệnh tải từ Server.", "BẢO VỆ", 0, 16); Exit }
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://script.phattan.id.vn/tool/install.ps1 | iex`"" -Verb RunAs; Exit }
 
+# BẮT BUỘC: Ép chuẩn mạng bảo mật cao nhất để tải file không bị lỗi
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 [System.Net.ServicePointManager]::Expect100Continue = $true; [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
@@ -41,23 +42,19 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
-# --- HÀM TẢI JSON (TẢI VỀ Ổ CỨNG ÉP UTF-8 ĐỂ CHỐNG LỖI) ---
+# --- HÀM TẢI JSON (DÙNG WEBCLIENT + UTF8 ĐỂ VƯỢT LỖI MẠNG) ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
         Write-Host "[TITAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
         try { 
             $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-            $TempJsonFile = "$TempDir\temp_apps.json"
+            $wc = New-Object System.Net.WebClient
+            $wc.Encoding = [System.Text.Encoding]::UTF8
+            $wc.Headers.Add("User-Agent", "Titan/20")
             
-            # Tải file về dạng nguyên bản (Raw bytes) để không bị lỗi Encoding của WebClient
-            Invoke-WebRequest -Uri "$($JsonUrl)?t=$Ts" -OutFile $TempJsonFile -UseBasicParsing -ErrorAction Stop
-            
-            if (Test-Path $TempJsonFile) {
-                # Đọc file lên bằng PowerShell với chuẩn UTF8
-                $RawJson = Get-Content -Path $TempJsonFile -Encoding UTF8 -Raw
-                $Global:JsonData = $RawJson | ConvertFrom-Json
-                Remove-Item -Path $TempJsonFile -Force -ErrorAction SilentlyContinue
-            }
+            # Tải chuỗi JSON trực tiếp bằng UTF-8
+            $RawJson = $wc.DownloadString("$($JsonUrl)?t=$Ts")
+            $Global:JsonData = $RawJson | ConvertFrom-Json
         } catch { Write-Host "[TITAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
     }
 }
@@ -136,19 +133,35 @@ function Show-Level2Pass ($TitleMsg) {
     $OForm.AcceptButton = $BtnOk; $OForm.ShowDialog() | Out-Null; $Res = if ($OForm.DialogResult -eq "OK") { $TxtPass.Text.Trim() } else { "CANCEL" }; $OForm.Dispose(); return $Res
 }
 
+function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
+    $SafeEmail = $Email -replace "\s", ""; $Content = "$Prefix $SafeEmail"; $UrlContent = [uri]::EscapeDataString($Content)
+    $QrUrl = "https://img.vietqr.io/image/970436-1055835227-qr_only.png?accountName=DANG%20LAM%20TAN%20PHAT&addInfo=$UrlContent"; if ($Amount -gt 0) { $QrUrl += "&amount=$Amount" }
+    $Q = New-Object System.Windows.Forms.Form; $Q.Size = "750, 480"; $Q.StartPosition = "CenterScreen"; $Q.Text = "TITAN SECURE PAY - $TitleMsg"; $Q.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 250); $Q.FormBorderStyle = "FixedToolWindow"
+    $LblTop = New-Object System.Windows.Forms.Label; $LblTop.Text = "CỔNG THANH TOÁN TỰ ĐỘNG"; $LblTop.Dock = "Top"; $LblTop.TextAlign = "MiddleCenter"; $LblTop.Font = $FontTitle; $LblTop.ForeColor = [System.Drawing.Color]::White; $LblTop.BackColor = [System.Drawing.Color]::FromArgb(0, 102, 204); $LblTop.Height = 60; $Q.Controls.Add($LblTop)
+    $PnlQR = New-Object System.Windows.Forms.Panel; $PnlQR.Location = "20, 80"; $PnlQR.Size = "320, 320"; $PnlQR.BackColor = [System.Drawing.Color]::White; $PnlQR.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlQR)
+    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Location = "10,10"; $Pic.Size = "300, 300"; $Pic.SizeMode = "Zoom"; try { $Pic.Load($QrUrl) } catch { }; $PnlQR.Controls.Add($Pic)
+    $PnlInfo = New-Object System.Windows.Forms.Panel; $PnlInfo.Location = "360, 80"; $PnlInfo.Size = "350, 320"; $PnlInfo.BackColor = [System.Drawing.Color]::White; $PnlInfo.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlInfo)
+    $BankName = New-Object System.Windows.Forms.Label; $BankName.Text = "VIETCOMBANK"; $BankName.Location = "20,20"; $BankName.AutoSize=$true; $BankName.Font = $FontHeader; $BankName.ForeColor=[System.Drawing.Color]::Green; $PnlInfo.Controls.Add($BankName)
+    $L2 = New-Object System.Windows.Forms.Label; $L2.Text = "Số tài khoản: 1055835227"; $L2.Location = "20, 70"; $L2.AutoSize=$true; $L2.Font = $FontBtn; $PnlInfo.Controls.Add($L2)
+    $L3 = New-Object System.Windows.Forms.Label; $L3.Text = "Số tiền: " + (if($Amount -gt 0){"{0:N0} VNĐ" -f $Amount}else{"TÙY TÂM"}); $L3.Location = "20, 110"; $L3.AutoSize=$true; $L3.Font = $FontHeader; $L3.ForeColor="Red"; $PnlInfo.Controls.Add($L3)
+    $L4 = New-Object System.Windows.Forms.Label; $L4.Text = "Nội dung: $Content"; $L4.Location = "20, 160"; $L4.AutoSize=$true; $L4.Font = $FontBtn; $L4.ForeColor="Blue"; $PnlInfo.Controls.Add($L4)
+    $Warn = New-Object System.Windows.Forms.Label; $Warn.Text = "⚠️ Vui lòng ghi ĐÚNG NỘI DUNG để Server tự duyệt."; $Warn.Location = "20, 250"; $Warn.Size="300,40"; $Warn.Font = $FontText; $Warn.ForeColor="OrangeRed"; $PnlInfo.Controls.Add($Warn)
+    $Q.ShowDialog() | Out-Null; $Q.Dispose()
+}
+
 function Show-Store {
     $S = New-Object System.Windows.Forms.Form; $S.Size="450, 400"; $S.StartPosition="CenterParent"; $S.Text="NÂNG CẤP GÓI VIP"; $S.BackColor=[System.Drawing.Color]::FromArgb(20,20,25); $S.FormBorderStyle="FixedToolWindow"
     $L = New-Object System.Windows.Forms.Label; $L.Text="🛒 CHỌN GÓI CƯỚC"; $L.Font = $FontHeader; $L.ForeColor="White"; $L.Location="110,15"; $L.AutoSize=$true; $S.Controls.Add($L)
     $BTrial = New-Object System.Windows.Forms.Button; $BTrial.Text="🎁 LẤY / GIA HẠN KEY 7 NGÀY (Cần Donate)"; $BTrial.Location="20,60"; $BTrial.Size="390,40"; $BTrial.BackColor="DarkMagenta"; $BTrial.ForeColor="White"; $BTrial.FlatStyle="Flat"; $BTrial.Font=$FontBtnSmall; $S.Controls.Add($BTrial)
     $BTrial.Add_Click({ $E = Show-Level2Pass "Nhập Email của bạn:"; if ($E -ne "CANCEL" -and $E -ne "") { $S.Cursor="WaitCursor"; $R = Call-API "request_trial" @{ email=$E }; [System.Windows.Forms.MessageBox]::Show($R.message, "Thông báo"); $S.Cursor="Default" } })
     $B1M = New-Object System.Windows.Forms.Button; $B1M.Text="🥉 VIP 1 THÁNG (29.000đ)"; $B1M.Location="20,110"; $B1M.Size="190,50"; $B1M.BackColor="MediumSeaGreen"; $B1M.ForeColor="White"; $B1M.FlatStyle="Flat"; $B1M.Font=$FontBtnSmall; $S.Controls.Add($B1M)
-    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=29000&email=$E" } })
+    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 29000 "MUA KEY 1M" $E "VIP 1 THÁNG" } })
     $B6M = New-Object System.Windows.Forms.Button; $B6M.Text="🥈 VIP 6 THÁNG (149.000đ)"; $B6M.Location="220,110"; $B6M.Size="190,50"; $B6M.BackColor="DodgerBlue"; $B6M.ForeColor="White"; $B6M.FlatStyle="Flat"; $B6M.Font=$FontBtnSmall; $S.Controls.Add($B6M)
-    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=149000&email=$E" } })
+    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 149000 "MUA KEY 6M" $E "VIP 6 THÁNG" } })
     $BFull = New-Object System.Windows.Forms.Button; $BFull.Text="💎 VIP VĨNH VIỄN (200.000đ)"; $BFull.Location="20,170"; $BFull.Size="190,50"; $BFull.BackColor="Gold"; $BFull.ForeColor="Black"; $BFull.FlatStyle="Flat"; $BFull.Font=$FontBtnSmall; $S.Controls.Add($BFull)
-    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=200000&email=$E" } })
+    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 200000 "MUA KEY VIP" $E "VIP VĨNH VIỄN" } })
     $BFam = New-Object System.Windows.Forms.Button; $BFam.Text="👑 ĐẠI LÝ (800.000đ - 25 PC)"; $BFam.Location="220,170"; $BFam.Size="190,50"; $BFam.BackColor="DarkOrange"; $BFam.ForeColor="Black"; $BFam.FlatStyle="Flat"; $BFam.Font=$FontBtnSmall; $S.Controls.Add($BFam)
-    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=800000&email=$E" } })
+    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 800000 "MUA KEY MULTI" $E "GÓI ĐẠI LÝ" } })
     $S.ShowDialog() | Out-Null; $S.Dispose()
 }
 
@@ -270,7 +283,7 @@ function Show-ProfileForm {
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.12.1 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.12.2 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -399,7 +412,7 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
 }
 
 # ==============================================================================
-# GIAO DIỆN WPF - ĐÃ THÊM TAB TỪ JSON (FIXED XML PARSING)
+# GIAO DIỆN WPF
 # ==============================================================================
 $Global:IsWpfMode = $true 
 
@@ -407,15 +420,12 @@ function Load-WPF {
     try {
         Add-Type -AssemblyName PresentationFramework -ErrorAction Stop; Add-Type -AssemblyName PresentationCore; Add-Type -AssemblyName WindowsBase
         
-        # 1. TẠO CÁC TAB TỪ JSON VÀ FIX KÝ TỰ ĐẶC BIỆT CỦA XML
         $JsonTabsXaml = ""
         if ($Global:JsonData) {
             $JsonTabs = $Global:JsonData | Select-Object -ExpandProperty tab -Unique
             foreach ($T in $JsonTabs) {
-                # MÃ HÓA LUÔN CẢ KÝ TỰ TIẾNG VIỆT VÀ KÝ TỰ ĐẶC BIỆT ĐỂ XML KHÔNG BÁO LỖI
                 $SafeHeader = [Security.SecurityElement]::Escape($T.ToUpper())
                 $PanelName = "wpTab_" + ($T -replace '[^a-zA-Z0-9]', '')
-                
                 $JsonTabsXaml += @"
                     <TabItem Header=" $SafeHeader ">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -426,12 +436,11 @@ function Load-WPF {
             }
         }
 
-        # KHAI BÁO <?xml ... ?> LÊN ĐẦU FILE ĐỂ ÉP ENCODING
         [xml]$WpfXaml = @"
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.12.1 TITANIUM | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.12.2 TITANIUM | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -508,7 +517,6 @@ function Load-WPF {
         $Reader = (New-Object System.Xml.XmlNodeReader $WpfXaml); $WpfForm = [System.Windows.Markup.XamlReader]::Load($Reader)
         $Global:LogBox = $WpfForm.FindName("txtLog")
         
-        # 2. HÀM TẠO NÚT CHO DASHBOARD
         function Add-WpfBtn ($PanelName, $Text, $Cmd, $ColorHex, $IsVip = $false) {
             $Btn = New-Object System.Windows.Controls.Button; $Btn.Content = $Text; $Btn.Width = 165; $Btn.Height = 45; $Btn.Margin = "5"; $Btn.BorderThickness = 0; $Btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $Btn.FontWeight = [System.Windows.FontWeights]::Bold; $Btn.Foreground = [System.Windows.Media.Brushes]::White
@@ -523,7 +531,6 @@ function Load-WPF {
             $WpfForm.FindName($PanelName).Children.Add($Btn)
         }
 
-        # ĐẮP NÚT
         Add-WpfBtn "wpSystem" "ℹ CẤU HÌNH" "SystemInfo.ps1" "#00BEFF"
         Add-WpfBtn "wpSystem" "♻ DỌN RÁC" "SystemCleaner.ps1" "#00BEFF"
         Add-WpfBtn "wpSystem" "💾 QUẢN LÝ ĐĨA" "DiskManager.ps1" "#00BEFF"
@@ -554,7 +561,6 @@ function Load-WPF {
         Add-WpfBtn "wpInstall" "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" "#32E682" $true
         Add-WpfBtn "wpInstall" "🖧 CÀI DRIVER" "AutoDriver.ps1" "#32E682"
 
-        # 3. ĐẮP CHECKBOX ỨNG DỤNG TỪ JSON VÀO CÁC TAB CHUẨN XÁC
         $Global:WpfAppCheckBoxes = @()
         if ($Global:JsonData) {
             foreach ($App in $Global:JsonData) {
@@ -573,7 +579,6 @@ function Load-WPF {
             }
         }
 
-        # SỰ KIỆN CÀI ĐẶT ỨNG DỤNG (WPF)
         $WpfForm.FindName("BtnInstallAppsWpf").Add_Click({
             $ListToInstall = @()
             foreach ($Chk in $Global:WpfAppCheckBoxes) { if ($Chk.IsChecked) { $ListToInstall += $Chk.Tag; $Chk.IsChecked = $false } }
@@ -605,10 +610,10 @@ function Load-WPF {
 }
 
 # ==============================================================================
-# GIAO DIỆN WINFORMS - ĐỒNG BỘ
+# GIAO DIỆN WINFORMS
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.12.1 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.12.2 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
@@ -722,4 +727,3 @@ while ($true) {
 Write-Host "[TITAN-CORE] Đã đóng Form, dọn dẹp hệ thống..." -ForegroundColor Green
 [System.GC]::Collect()
 Stop-Process -Id $PID -Force
-
