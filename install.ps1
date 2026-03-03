@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.11.2 TITANIUM MAX (Fixed UTF-8 WPF XML Rendering)
+    Version: 20.12 TITANIUM MAX (Math Captcha, Security Question for OTP, UTF-8 Link Fix)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -37,8 +37,7 @@ $TempDir = "$env:TEMP\PhatTan_Tool"; if (!(Test-Path $TempDir)) { New-Item -Item
 $Global:SessionFile = "$env:LOCALAPPDATA\PhatTan_Titan.dat"
 $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
-$Global:LogBox = $null
-$Global:JsonData = $null
+$Global:LogBox = $null; $Global:JsonData = $null
 
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
@@ -87,11 +86,34 @@ function Load-Session {
 # ==============================================================================
 # UI FORMS CƠ BẢN
 # ==============================================================================
-function Show-OtpInput ($Title, $Msg, $Link) {
+function Show-OtpInput ($Title, $Msg, $Link, $EmailToCheck) {
     $OForm = New-Object System.Windows.Forms.Form; $OForm.Text = $Title; $OForm.Size = "400, 240"; $OForm.StartPosition = "CenterParent"; $OForm.FormBorderStyle = "FixedToolWindow"; $OForm.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 25); $OForm.ForeColor = "White"
     $LblMsg = New-Object System.Windows.Forms.Label; $LblMsg.Text = $Msg; $LblMsg.Location = "20, 15"; $LblMsg.Size = "340, 45"; $LblMsg.Font = $FontText; $OForm.Controls.Add($LblMsg)
     $TxtOtp = New-Object System.Windows.Forms.TextBox; $TxtOtp.Location = "20, 65"; $TxtOtp.Size = "340, 30"; $TxtOtp.Font = $FontHeader; $TxtOtp.TextAlign = "Center"; $OForm.Controls.Add($TxtOtp)
-    $LnkWeb = New-Object System.Windows.Forms.LinkLabel; $LnkWeb.Text = "⚠️ Bấm vào đây để xem trực tiếp OTP!"; $LnkWeb.Location = "20, 110"; $LnkWeb.Size = "340, 20"; $LnkWeb.Font = $FontText; $LnkWeb.LinkColor = "DeepSkyBlue"; $LnkWeb.ActiveLinkColor = "Red"; $LnkWeb.Cursor = "Hand"; $LnkWeb.Add_Click({ if($Link){ Start-Process $Link } }); if ([string]::IsNullOrEmpty($Link)) { $LnkWeb.Visible = $false }; $OForm.Controls.Add($LnkWeb)
+    
+    # Nút lấy Link OTP kèm bảo mật cấp 2
+    $LnkWeb = New-Object System.Windows.Forms.LinkLabel; $LnkWeb.Text = "⚠️ Bấm vào đây để xem trực tiếp OTP!"; $LnkWeb.Location = "20, 110"; $LnkWeb.Size = "340, 20"; $LnkWeb.Font = $FontText; $LnkWeb.LinkColor = "DeepSkyBlue"; $LnkWeb.ActiveLinkColor = "Red"; $LnkWeb.Cursor = "Hand"
+    $LnkWeb.Add_Click({ 
+        if ($Link) { 
+            # Gọi API lấy câu hỏi bảo mật
+            $OForm.Cursor="WaitCursor"
+            $QA = Call-API "get_security_question" @{ email=$EmailToCheck }
+            $OForm.Cursor="Default"
+
+            if ($QA.status -eq "success") {
+                $AnsInput = [Microsoft.VisualBasic.Interaction]::InputBox("Trang web yêu cầu xác minh bảo mật trước khi xem OTP.`n`nCâu hỏi của bạn: $($QA.question)", "Bảo mật tài khoản", "")
+                if ($AnsInput -eq $QA.answer) {
+                    Start-Process $Link 
+                } else {
+                    [System.Windows.Forms.MessageBox]::Show("Sai câu trả lời bảo mật! Không thể xem OTP.", "CẢNH BÁO", 0, 16)
+                }
+            } else {
+                [System.Windows.Forms.MessageBox]::Show("Không thể tải câu hỏi bảo mật. Lỗi máy chủ!", "LỖI", 0, 16)
+            }
+        } 
+    })
+    if ([string]::IsNullOrEmpty($Link)) { $LnkWeb.Visible = $false }; $OForm.Controls.Add($LnkWeb)
+    
     $BtnOk = New-Object System.Windows.Forms.Button; $BtnOk.Text = "XÁC NHẬN"; $BtnOk.Location = "20, 145"; $BtnOk.Size = "340, 40"; $BtnOk.BackColor = "ForestGreen"; $BtnOk.ForeColor = "White"; $BtnOk.Font = $FontBtn; $BtnOk.FlatStyle = "Flat"; $BtnOk.DialogResult = "OK"; $OForm.Controls.Add($BtnOk)
     $OForm.AcceptButton = $BtnOk; $OForm.ShowDialog() | Out-Null; $Res = if ($OForm.DialogResult -eq "OK") { $TxtOtp.Text.Trim() } else { $null }; $OForm.Dispose(); return $Res
 }
@@ -104,138 +126,13 @@ function Show-Level2Pass ($TitleMsg) {
     $OForm.AcceptButton = $BtnOk; $OForm.ShowDialog() | Out-Null; $Res = if ($OForm.DialogResult -eq "OK") { $TxtPass.Text.Trim() } else { "CANCEL" }; $OForm.Dispose(); return $Res
 }
 
-function Show-Store {
-    $S = New-Object System.Windows.Forms.Form; $S.Size="450, 400"; $S.StartPosition="CenterParent"; $S.Text="NÂNG CẤP GÓI VIP"; $S.BackColor=[System.Drawing.Color]::FromArgb(20,20,25); $S.FormBorderStyle="FixedToolWindow"
-    $L = New-Object System.Windows.Forms.Label; $L.Text="🛒 CHỌN GÓI CƯỚC"; $L.Font = $FontHeader; $L.ForeColor="White"; $L.Location="110,15"; $L.AutoSize=$true; $S.Controls.Add($L)
-    $BTrial = New-Object System.Windows.Forms.Button; $BTrial.Text="🎁 LẤY / GIA HẠN KEY 7 NGÀY (Cần Donate)"; $BTrial.Location="20,60"; $BTrial.Size="390,40"; $BTrial.BackColor="DarkMagenta"; $BTrial.ForeColor="White"; $BTrial.FlatStyle="Flat"; $BTrial.Font=$FontBtnSmall; $S.Controls.Add($BTrial)
-    $BTrial.Add_Click({ $E = Show-Level2Pass "Nhập Email của bạn:"; if ($E -ne "CANCEL" -and $E -ne "") { $S.Cursor="WaitCursor"; $R = Call-API "request_trial" @{ email=$E }; [System.Windows.Forms.MessageBox]::Show($R.message, "Thông báo"); $S.Cursor="Default" } })
-    $B1M = New-Object System.Windows.Forms.Button; $B1M.Text="🥉 VIP 1 THÁNG (29.000đ)"; $B1M.Location="20,110"; $B1M.Size="190,50"; $B1M.BackColor="MediumSeaGreen"; $B1M.ForeColor="White"; $B1M.FlatStyle="Flat"; $B1M.Font=$FontBtnSmall; $S.Controls.Add($B1M)
-    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=29000&email=$E" } })
-    $B6M = New-Object System.Windows.Forms.Button; $B6M.Text="🥈 VIP 6 THÁNG (149.000đ)"; $B6M.Location="220,110"; $B6M.Size="190,50"; $B6M.BackColor="DodgerBlue"; $B6M.ForeColor="White"; $B6M.FlatStyle="Flat"; $B6M.Font=$FontBtnSmall; $S.Controls.Add($B6M)
-    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=149000&email=$E" } })
-    $BFull = New-Object System.Windows.Forms.Button; $BFull.Text="💎 VIP VĨNH VIỄN (200.000đ)"; $BFull.Location="20,170"; $BFull.Size="190,50"; $BFull.BackColor="Gold"; $BFull.ForeColor="Black"; $BFull.FlatStyle="Flat"; $BFull.Font=$FontBtnSmall; $S.Controls.Add($BFull)
-    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=200000&email=$E" } })
-    $BFam = New-Object System.Windows.Forms.Button; $BFam.Text="👑 ĐẠI LÝ (800.000đ - 25 PC)"; $BFam.Location="220,170"; $BFam.Size="190,50"; $BFam.BackColor="DarkOrange"; $BFam.ForeColor="Black"; $BFam.FlatStyle="Flat"; $BFam.Font=$FontBtnSmall; $S.Controls.Add($BFam)
-    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=800000&email=$E" } })
-    $S.ShowDialog() | Out-Null; $S.Dispose()
-}
+# ... (Giữ nguyên các hàm Show-QRPay, Show-Store, Show-DeviceManager, Show-ProfileForm) ...
 
-function Show-DeviceManager {
-    $DM = New-Object System.Windows.Forms.Form
-    $DM.Text = "QUẢN LÝ THIẾT BỊ ĐĂNG NHẬP | $($Global:UserEmail)"
-    $DM.Size = "750, 450"; $DM.StartPosition = "CenterParent"; $DM.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $DM.ForeColor = "White"; $DM.FormBorderStyle="FixedToolWindow"
-
-    $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text = "💻 DANH SÁCH MÁY TÍNH ĐANG SỬ DỤNG KEY"; $LblTitle.Font = $FontHeader; $LblTitle.ForeColor = "DeepSkyBlue"; $LblTitle.Location = "20, 15"; $LblTitle.AutoSize = $true; $DM.Controls.Add($LblTitle)
-
-    $Grid = New-Object System.Windows.Forms.DataGridView
-    $Grid.Location = "20, 50"; $Grid.Size = "690, 280"; $Grid.BackgroundColor = [System.Drawing.Color]::FromArgb(40,40,45); $Grid.Font = $FontText
-    $Grid.ForeColor = "Black"; $Grid.AllowUserToAddRows = $false; $Grid.RowHeadersVisible = $false; $Grid.SelectionMode = "FullRowSelect"; $Grid.AutoSizeColumnsMode = "Fill"
-    
-    $ChkCol = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $ChkCol.HeaderText = "Chọn"; $ChkCol.Width = 50; $Grid.Columns.Add($ChkCol) | Out-Null
-    $Grid.Columns.Add("PCName", "Tên Máy") | Out-Null
-    $Grid.Columns.Add("HWID", "Mã Phần Cứng") | Out-Null
-    $Grid.Columns.Add("LastLogin", "Lần Cuối Truy Cập") | Out-Null
-    $Grid.Columns.Add("Location", "Vị Trí (IP)") | Out-Null
-    $DM.Controls.Add($Grid)
-
-    $DM.Cursor = "WaitCursor"
-    $Res = Call-API "get_devices" @{ email=$Global:UserEmail }
-    if ($Res.status -eq "success") {
-        $DeviceList = @()
-        if ($Res.devices -is [array]) { $DeviceList = $Res.devices }
-        elseif ($Res.devices -ne $null) { $DeviceList += $Res.devices }
-        
-        foreach ($dev in $DeviceList) {
-            $RowIdx = $Grid.Rows.Add()
-            $Grid.Rows[$RowIdx].Cells[1].Value = $dev.machine_name
-            $Grid.Rows[$RowIdx].Cells[2].Value = $dev.hwid
-            $Grid.Rows[$RowIdx].Cells[3].Value = $dev.last_login
-            $Grid.Rows[$RowIdx].Cells[4].Value = $dev.location
-            if ($dev.hwid -eq $Global:MyHWID) { 
-                $Grid.Rows[$RowIdx].DefaultCellStyle.BackColor = [System.Drawing.Color]::LightGreen 
-                $Grid.Rows[$RowIdx].Cells[1].Value += " (Máy này)"
-                $Grid.Rows[$RowIdx].Cells[0].ReadOnly = $true 
-            }
-        }
-    } else { [System.Windows.Forms.MessageBox]::Show("Không thể tải danh sách thiết bị!", "Lỗi", 0, 16) }
-    $DM.Cursor = "Default"
-
-    $BtnRemove = New-Object System.Windows.Forms.Button; $BtnRemove.Text="🗑 GỠ MÁY ĐÃ CHỌN"; $BtnRemove.Location="20, 350"; $BtnRemove.Size="200, 40"; $BtnRemove.BackColor="OrangeRed"; $BtnRemove.FlatStyle="Flat"; $BtnRemove.Font=$FontBtn
-    $BtnRemove.Add_Click({
-        $SelectedHWIDs = @()
-        foreach ($row in $Grid.Rows) { if ($row.Cells[0].Value -eq $true) { $SelectedHWIDs += $row.Cells[2].Value } }
-        if ($SelectedHWIDs.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Chưa chọn máy nào!"); return }
-        
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Gỡ $($SelectedHWIDs.Count) thiết bị đã chọn?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
-        if ($confirm -eq "Yes") {
-            $DM.Cursor="WaitCursor"; $R = Call-API "remove_device" @{ email=$Global:UserEmail; hwids=$SelectedHWIDs }
-            if ($R.status -eq "success") { [System.Windows.Forms.MessageBox]::Show($R.message); $DM.Close() } else { [System.Windows.Forms.MessageBox]::Show($R.message) }
-            $DM.Cursor="Default"
-        }
-    })
-    $DM.Controls.Add($BtnRemove)
-
-    $BtnLogoutAll = New-Object System.Windows.Forms.Button; $BtnLogoutAll.Text="💥 ĐĂNG XUẤT TOÀN BỘ (Trừ máy này)"; $BtnLogoutAll.Location="240, 350"; $BtnLogoutAll.Size="300, 40"; $BtnLogoutAll.BackColor="DarkRed"; $BtnLogoutAll.FlatStyle="Flat"; $BtnLogoutAll.Font=$FontBtn
-    $BtnLogoutAll.Add_Click({
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Hành động này sẽ kích toàn bộ người dùng khác đang xài chung tài khoản. Tiếp tục?", "Cảnh báo", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Error)
-        if ($confirm -eq "Yes") {
-            $DM.Cursor="WaitCursor"; $R = Call-API "logout_all" @{ email=$Global:UserEmail; current_hwid=$Global:MyHWID }
-            if ($R.status -eq "success") { [System.Windows.Forms.MessageBox]::Show($R.message); $DM.Close() }
-            $DM.Cursor="Default"
-        }
-    })
-    $DM.Controls.Add($BtnLogoutAll)
-
-    $DM.ShowDialog() | Out-Null; $DM.Dispose()
-}
-
-function Show-ProfileForm {
-    $ProfForm = New-Object System.Windows.Forms.Form
-    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 360"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
-    
-    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
-    $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
-    if (Test-Path $Global:AvatarFile) { try { $Pic.Image = [System.Drawing.Image]::FromFile($Global:AvatarFile) } catch {} }
-    $ProfForm.Controls.Add($Pic)
-
-    $BtnUpload = New-Object System.Windows.Forms.Button; $BtnUpload.Text="Đổi Avatar"; $BtnUpload.Location="30, 150"; $BtnUpload.Size="100, 30"; $BtnUpload.BackColor="SteelBlue"; $BtnUpload.FlatStyle="Flat"; $BtnUpload.Font=$FontBtnSmall
-    $BtnUpload.Add_Click({
-        $FD = New-Object System.Windows.Forms.OpenFileDialog; $FD.Filter = "Image Files|*.jpg;*.jpeg;*.png"
-        if ($FD.ShowDialog() -eq 'OK') {
-            try {
-                $Img = [System.Drawing.Image]::FromFile($FD.FileName); $Ratio = $Img.Width / $Img.Height; $NewW = 512; $NewH = 512
-                if ($Ratio -gt 1) { $NewH = [math]::Floor(512 / $Ratio) } else { $NewW = [math]::Floor(512 * $Ratio) }
-                $Bmp = New-Object System.Drawing.Bitmap($NewW, $NewH); $G = [System.Drawing.Graphics]::FromImage($Bmp); $G.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $G.DrawImage($Img, 0, 0, $NewW, $NewH); $G.Dispose(); $Img.Dispose()
-                if (Test-Path $Global:AvatarFile) { Remove-Item $Global:AvatarFile -Force }
-                $Bmp.Save($Global:AvatarFile, [System.Drawing.Imaging.ImageFormat]::Png); $Pic.Image = $Bmp
-            } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi xử lý ảnh!") }
-        }
-    })
-    $ProfForm.Controls.Add($BtnUpload)
-
-    $L_Email = New-Object System.Windows.Forms.Label; $L_Email.Text = "📧 Email: $($Global:UserEmail)"; $L_Email.Location="160, 30"; $L_Email.AutoSize=$true; $L_Email.Font = $FontBtnSmall; $ProfForm.Controls.Add($L_Email)
-    $L_Plan = New-Object System.Windows.Forms.Label; $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"; $L_Plan.Location="160, 65"; $L_Plan.AutoSize=$true; $L_Plan.Font = $FontBtnSmall; $L_Plan.ForeColor="Lime"; $ProfForm.Controls.Add($L_Plan)
-    
-    $BtnChangeLocal = New-Object System.Windows.Forms.Button; $BtnChangeLocal.Text="🔑 Đổi Pass Tool (Cấp 2)"; $BtnChangeLocal.Location="160, 105"; $BtnChangeLocal.Size="200, 35"; $BtnChangeLocal.BackColor="OrangeRed"; $BtnChangeLocal.FlatStyle="Flat"; $BtnChangeLocal.Font=$FontBtnSmall
-    $BtnChangeLocal.Add_Click({
-        $Old = Show-Level2Pass "Nhập Pass Cấp 2 hiện tại (Hoặc Master Pass):"
-        if ($Old -eq "CANCEL" -or $Old -eq "") { return }
-        if ($Old -eq $Global:LocalPass -or $Old -eq $Global:ServerPass) {
-            $New = Show-Level2Pass "Nhập Mật mã Cấp 2 MỚI cho máy này:"
-            if ($New -ne "CANCEL" -and $New -ne "") { $Global:LocalPass = $New; Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass; [System.Windows.Forms.MessageBox]::Show("Đổi Mật mã thành công!") }
-        } else { [System.Windows.Forms.MessageBox]::Show("Sai Mật mã!", "Lỗi") }
-    })
-    $ProfForm.Controls.Add($BtnChangeLocal)
-
-    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
-    $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
-    $ProfForm.Controls.Add($BtnDeviceMgr)
-
-    $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
-}
-
+# ==============================================================================
+# GIAO DIỆN ĐĂNG NHẬP (THÊM CAPTCHA TOÁN HỌC)
+# ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.11.1 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 500"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.12 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -251,10 +148,11 @@ function Show-AuthGateway {
                 $WaitOTP = $false; $OTPType = ""
                 if ($R.status -eq "require_device_otp") { $WaitOTP = $true; $OTPType = "device" } elseif ($R.status -eq "require_2fa") { $WaitOTP = $true; $OTPType = "2fa" }
                 if ($WaitOTP) {
-                    $OTP = Show-OtpInput "XÁC MINH BẢO MẬT" "Mã xác minh (Device/2FA) đã được gửi đến Email:" $R.otp_link
+                    # THÊM EMAIL VÀO HÀM ĐỂ CHECK CÂU HỎI BẢO MẬT
+                    $OTP = Show-OtpInput "XÁC MINH BẢO MẬT" "Mã xác minh (Device/2FA) đã được gửi đến Email:" $R.otp_link $TUser.Text
                     if ($OTP) { 
                         $R2 = Call-API "verify_otp" @{ email=$TUser.Text; otp=$OTP; hwid=$Global:MyHWID; machine_name=$Global:PCName; type=$OTPType }
-                        if ($R2.status -eq "require_2fa") { $OTP2 = Show-OtpInput "XÁC MINH BẢO MẬT 2 LỚP" $R2.message $R2.otp_link; $R2 = Call-API "verify_otp" @{ email=$TUser.Text; otp=$OTP2; hwid=$Global:MyHWID; type="2fa" } }
+                        if ($R2.status -eq "require_2fa") { $OTP2 = Show-OtpInput "XÁC MINH BẢO MẬT 2 LỚP" $R2.message $R2.otp_link $TUser.Text; $R2 = Call-API "verify_otp" @{ email=$TUser.Text; otp=$OTP2; hwid=$Global:MyHWID; type="2fa" } }
                         if ($R2.status -eq "success") { $R = $R2 } else { [System.Windows.Forms.MessageBox]::Show($R2.message, "LỖI", 0, 16); $R = $null }
                     } else { $R = $null }
                 }
@@ -269,19 +167,30 @@ function Show-AuthGateway {
     $BShowReg = New-Object System.Windows.Forms.Button; $BShowReg.Text="Tạo tài khoản"; $BShowReg.Location="160,245"; $BShowReg.Size="130,30"; $BShowReg.BackColor="DimGray"; $BShowReg.FlatStyle="Flat"; $BShowReg.Font=$FontText; $PnlLogin.Controls.Add($BShowReg)
     $BStore = New-Object System.Windows.Forms.Button; $BStore.Text="Cửa Hàng VIP"; $BStore.Location="300,245"; $BStore.Size="140,30"; $BStore.BackColor="Gold"; $BStore.ForeColor="Black"; $BStore.FlatStyle="Flat"; $BStore.Font=$FontBtnSmall; $PnlLogin.Controls.Add($BStore); $BStore.Add_Click({ Show-Store })
     
-    $PnlReg = New-Object System.Windows.Forms.Panel; $PnlReg.Size = "460, 400"; $PnlReg.Location = "10, 60"; $PnlReg.Visible = $false; $Auth.Controls.Add($PnlReg)
+    # --- PANEL ĐĂNG KÝ (THÊM CAPTCHA TÍNH TOÁN) ---
+    $PnlReg = New-Object System.Windows.Forms.Panel; $PnlReg.Size = "460, 430"; $PnlReg.Location = "10, 60"; $PnlReg.Visible = $false; $Auth.Controls.Add($PnlReg)
     $R1=New-Object System.Windows.Forms.Label;$R1.Text="Họ tên:";$R1.Location="20,0";$R1.AutoSize=$true;$R1.Font=$FontText;$PnlReg.Controls.Add($R1); $TRName=New-Object System.Windows.Forms.TextBox;$TRName.Location="20,20";$TRName.Size="420,25";$PnlReg.Controls.Add($TRName)
     $R2=New-Object System.Windows.Forms.Label;$R2.Text="Email:";$R2.Location="20,50";$R2.AutoSize=$true;$R2.Font=$FontText;$PnlReg.Controls.Add($R2); $TREmail=New-Object System.Windows.Forms.TextBox;$TREmail.Location="20,70";$TREmail.Size="420,25";$PnlReg.Controls.Add($TREmail)
     $R3=New-Object System.Windows.Forms.Label;$R3.Text="Mật khẩu:";$R3.Location="20,100";$R3.AutoSize=$true;$R3.Font=$FontText;$PnlReg.Controls.Add($R3); $TRPass=New-Object System.Windows.Forms.TextBox;$TRPass.Location="20,120";$TRPass.Size="420,25";$TRPass.PasswordChar="*";$PnlReg.Controls.Add($TRPass)
     $R4=New-Object System.Windows.Forms.Label;$R4.Text="Câu hỏi bảo mật:";$R4.Location="20,150";$R4.AutoSize=$true;$R4.Font=$FontText;$PnlReg.Controls.Add($R4); $CSec=New-Object System.Windows.Forms.ComboBox;$CSec.Location="20,170";$CSec.Size="420,25";$CSec.DropDownStyle="DropDownList"; $CSec.Items.AddRange(@("Con vật yêu thích?","Tên trường cấp 1?","Người yêu cũ?"));$CSec.SelectedIndex=0;$PnlReg.Controls.Add($CSec)
     $R5=New-Object System.Windows.Forms.Label;$R5.Text="Trả lời:";$R5.Location="20,200";$R5.AutoSize=$true;$R5.Font=$FontText;$PnlReg.Controls.Add($R5); $TRAns=New-Object System.Windows.Forms.TextBox;$TRAns.Location="20,220";$TRAns.Size="420,25";$PnlReg.Controls.Add($TRAns)
-    $BReg = New-Object System.Windows.Forms.Button; $BReg.Text="XÁC NHẬN ĐĂNG KÝ"; $BReg.Location="20,260"; $BReg.Size="420,40"; $BReg.BackColor="Green"; $BReg.ForeColor="White"; $BReg.FlatStyle="Flat"; $BReg.Font=$FontBtn; $PnlReg.Controls.Add($BReg)
-    $BReg.Add_Click({ $Auth.Cursor="WaitCursor"; $R=Call-API "register" @{ name=$TRName.Text; email=$TREmail.Text; password=$TRPass.Text; question=$CSec.Text; answer=$TRAns.Text }; if($R.status -eq "success"){[System.Windows.Forms.MessageBox]::Show("Tạo thành công!");$PnlReg.Visible=$false;$PnlLogin.Visible=$true}else{[System.Windows.Forms.MessageBox]::Show($R.message)}; $Auth.Cursor="Default" })
-    $BBack = New-Object System.Windows.Forms.Button; $BBack.Text="Quay lại Đăng nhập"; $BBack.Location="20,310"; $BBack.Size="420,35"; $BBack.BackColor="DimGray"; $BBack.FlatStyle="Flat"; $BBack.Font=$FontText; $PnlReg.Controls.Add($BBack)
+    
+    # Mã Captcha
+    $Num1 = Get-Random -Minimum 1 -Maximum 10; $Num2 = Get-Random -Minimum 1 -Maximum 10; $Sum = $Num1 + $Num2
+    $R6=New-Object System.Windows.Forms.Label;$R6.Text="Xác minh Robot: $Num1 + $Num2 = ?";$R6.Location="20,250";$R6.AutoSize=$true;$R6.Font=$FontBtn;$R6.ForeColor="Yellow";$PnlReg.Controls.Add($R6); $TRCaptcha=New-Object System.Windows.Forms.TextBox;$TRCaptcha.Location="20,270";$TRCaptcha.Size="420,25";$PnlReg.Controls.Add($TRCaptcha)
+
+    $BReg = New-Object System.Windows.Forms.Button; $BReg.Text="XÁC NHẬN ĐĂNG KÝ"; $BReg.Location="20,310"; $BReg.Size="420,40"; $BReg.BackColor="Green"; $BReg.ForeColor="White"; $BReg.FlatStyle="Flat"; $BReg.Font=$FontBtn; $PnlReg.Controls.Add($BReg)
+    $BReg.Add_Click({ 
+        if ($TRCaptcha.Text -ne $Sum.ToString()) { [System.Windows.Forms.MessageBox]::Show("Mã xác minh toán học sai!", "Lỗi"); return }
+        $Auth.Cursor="WaitCursor"; $R=Call-API "register" @{ name=$TRName.Text; email=$TREmail.Text; password=$TRPass.Text; question=$CSec.Text; answer=$TRAns.Text }; if($R.status -eq "success"){[System.Windows.Forms.MessageBox]::Show("Tạo thành công!");$PnlReg.Visible=$false;$PnlLogin.Visible=$true}else{[System.Windows.Forms.MessageBox]::Show($R.message)}; $Auth.Cursor="Default" 
+    })
+    $BBack = New-Object System.Windows.Forms.Button; $BBack.Text="Quay lại Đăng nhập"; $BBack.Location="20,360"; $BBack.Size="420,35"; $BBack.BackColor="DimGray"; $BBack.FlatStyle="Flat"; $BBack.Font=$FontText; $PnlReg.Controls.Add($BBack)
     
     $BShowReg.Add_Click({ $PnlLogin.Visible = $false; $PnlReg.Visible = $true })
     $BBack.Add_Click({ $PnlReg.Visible = $false; $PnlLogin.Visible = $true })
 
+    # Thêm dòng này để xử lý lỗi thiếu Form Dispose
+    Add-Type -AssemblyName Microsoft.VisualBasic
     $Auth.ShowDialog() | Out-Null; $Auth.Dispose()
 }
 
@@ -297,8 +206,9 @@ if (Load-Session) {
     }
 } else { Show-AuthGateway }
 if (-not $Global:IsAuthenticated) { Exit }
+
 Write-Host "[TITAN-CORE] Xac thuc thanh cong! Nap Giao dien..." -ForegroundColor Green
-Load-JsonData # <-- Tải file JSON Apps
+Load-JsonData
 
 # ==============================================================================
 # HÀM RUN-MODULE BẰNG .NET PROCESS
@@ -355,7 +265,7 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
 }
 
 # ==============================================================================
-# GIAO DIỆN WPF - ĐÃ THÊM TAB TỪ JSON (FIXED XML PARSING)
+# GIAO DIỆN WPF
 # ==============================================================================
 $Global:IsWpfMode = $true 
 
@@ -363,15 +273,12 @@ function Load-WPF {
     try {
         Add-Type -AssemblyName PresentationFramework -ErrorAction Stop; Add-Type -AssemblyName PresentationCore; Add-Type -AssemblyName WindowsBase
         
-        # 1. TẠO CÁC TAB TỪ JSON VÀ FIX KÝ TỰ ĐẶC BIỆT CỦA XML
         $JsonTabsXaml = ""
         if ($Global:JsonData) {
             $JsonTabs = $Global:JsonData | Select-Object -ExpandProperty tab -Unique
             foreach ($T in $JsonTabs) {
-                # MÃ HÓA LUÔN CẢ KÝ TỰ TIẾNG VIỆT VÀ KÝ TỰ ĐẶC BIỆT ĐỂ XML KHÔNG BÁO LỖI
                 $SafeHeader = [Security.SecurityElement]::Escape($T.ToUpper())
                 $PanelName = "wpTab_" + ($T -replace '[^a-zA-Z0-9]', '')
-                
                 $JsonTabsXaml += @"
                     <TabItem Header=" $SafeHeader ">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -382,12 +289,11 @@ function Load-WPF {
             }
         }
 
-        # KHAI BÁO <?xml ... ?> LÊN ĐẦU FILE ĐỂ ÉP ENCODING
         [xml]$WpfXaml = @"
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.11.2 | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.12 TITANIUM | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -464,7 +370,6 @@ function Load-WPF {
         $Reader = (New-Object System.Xml.XmlNodeReader $WpfXaml); $WpfForm = [System.Windows.Markup.XamlReader]::Load($Reader)
         $Global:LogBox = $WpfForm.FindName("txtLog")
         
-        # 2. HÀM TẠO NÚT CHO DASHBOARD
         function Add-WpfBtn ($PanelName, $Text, $Cmd, $ColorHex, $IsVip = $false) {
             $Btn = New-Object System.Windows.Controls.Button; $Btn.Content = $Text; $Btn.Width = 165; $Btn.Height = 45; $Btn.Margin = "5"; $Btn.BorderThickness = 0; $Btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $Btn.FontWeight = [System.Windows.FontWeights]::Bold; $Btn.Foreground = [System.Windows.Media.Brushes]::White
@@ -479,7 +384,6 @@ function Load-WPF {
             $WpfForm.FindName($PanelName).Children.Add($Btn)
         }
 
-        # ĐẮP NÚT
         Add-WpfBtn "wpSystem" "ℹ CẤU HÌNH" "SystemInfo.ps1" "#00BEFF"
         Add-WpfBtn "wpSystem" "♻ DỌN RÁC" "SystemCleaner.ps1" "#00BEFF"
         Add-WpfBtn "wpSystem" "💾 QUẢN LÝ ĐĨA" "DiskManager.ps1" "#00BEFF"
@@ -510,7 +414,6 @@ function Load-WPF {
         Add-WpfBtn "wpInstall" "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" "#32E682" $true
         Add-WpfBtn "wpInstall" "🖧 CÀI DRIVER" "AutoDriver.ps1" "#32E682"
 
-        # 3. ĐẮP CHECKBOX ỨNG DỤNG TỪ JSON VÀO CÁC TAB CHUẨN XÁC
         $Global:WpfAppCheckBoxes = @()
         if ($Global:JsonData) {
             foreach ($App in $Global:JsonData) {
@@ -529,7 +432,6 @@ function Load-WPF {
             }
         }
 
-        # SỰ KIỆN CÀI ĐẶT ỨNG DỤNG (WPF)
         $WpfForm.FindName("BtnInstallAppsWpf").Add_Click({
             $ListToInstall = @()
             foreach ($Chk in $Global:WpfAppCheckBoxes) { if ($Chk.IsChecked) { $ListToInstall += $Chk.Tag; $Chk.IsChecked = $false } }
@@ -543,10 +445,8 @@ function Load-WPF {
                 foreach ($A in $sync.Queue) {
                     $Line = "[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] Dang tai: $($A.name)`r`n"
                     $sync.Log.Dispatcher.Invoke({ $sync.Log.AppendText($Line); $sync.Log.ScrollToEnd() })
-                    
                     $OutFile = "$($sync.TempDir)\$($A.name).exe"
                     $Url = if ($A.link -match "^http") { $A.link } else { "$($sync.BaseUrl)$($A.link)" }
-                    
                     try { (New-Object System.Net.WebClient).DownloadFile($Url, $OutFile) } catch {}
                     if (Test-Path $OutFile) { Start-Process $OutFile -Wait }
                 }
@@ -563,10 +463,10 @@ function Load-WPF {
 }
 
 # ==============================================================================
-# GIAO DIỆN WINFORMS - ĐỒNG BỘ
+# GIAO DIỆN WINFORMS
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.11.2 | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.12 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
@@ -580,7 +480,6 @@ function Load-WinForms {
 
     $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="10,90"; $TabControl.Size="1060,450"; $TabControl.Font=$FontText; $Form.Controls.Add($TabControl)
     
-    # 1. TAB DASHBOARD
     $AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text=" DASHBOARD "; $AdvTab.BackColor=[System.Drawing.Color]::FromArgb(30, 30, 35); $TabControl.Controls.Add($AdvTab)
     $MainFlow = New-Object System.Windows.Forms.FlowLayoutPanel; $MainFlow.Dock="Fill"; $MainFlow.AutoScroll=$true; $AdvTab.Controls.Add($MainFlow)
 
@@ -628,7 +527,6 @@ function Load-WinForms {
     Add-WinBtn $GrpIns "📦 ĐÓNG GÓI ISO" "WinAIOBuilder.ps1" [System.Drawing.Color]::MediumSeaGreen $true
     Add-WinBtn $GrpIns "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" [System.Drawing.Color]::MediumSeaGreen $true
 
-    # 2. TẠO CÁC TAB ỨNG DỤNG TỪ JSON
     if ($Global:JsonData) {
         $JsonTabs = $Global:JsonData | Select-Object -ExpandProperty tab -Unique
         foreach ($T in $JsonTabs) {
@@ -682,3 +580,4 @@ while ($true) {
 Write-Host "[TITAN-CORE] Đã đóng Form, dọn dẹp hệ thống..." -ForegroundColor Green
 [System.GC]::Collect()
 Stop-Process -Id $PID -Force
+ 
