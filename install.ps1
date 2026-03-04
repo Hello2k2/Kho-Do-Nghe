@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.13 TITANIUM MAX (Added GiftCode / Redeem Key System)
+    Version: 20.14 TITANIUM MAX (Fixed UI Toggling Crash, Added Secure Logout)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -31,6 +31,7 @@ $Global:MyHWID = Get-HWID; $Global:PCName = $env:COMPUTERNAME
 $encApi = "aHR0cHM6Ly9hcGkucGhhdHRhbi5pZC52bi9hcGkucGhw"; $Global:ApiServer = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encApi))
 $encBaseUrl = "aHR0cHM6Ly9naXRodWIuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjAv"; $BaseUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encBaseUrl))
 $encRawUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sLw=="; $RawUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encRawUrl))
+
 $encJsonUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sL2FwcHMuanNvbg=="; $JsonUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encJsonUrl))
 
 $TempDir = "$env:TEMP\PhatTan_Tool"; if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
@@ -122,35 +123,19 @@ function Show-Level2Pass ($TitleMsg) {
     $OForm.AcceptButton = $BtnOk; $OForm.ShowDialog() | Out-Null; $Res = if ($OForm.DialogResult -eq "OK") { $TxtPass.Text.Trim() } else { "CANCEL" }; $OForm.Dispose(); return $Res
 }
 
-function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
-    $SafeEmail = $Email -replace "\s", ""; $Content = "$Prefix $SafeEmail"; $UrlContent = [uri]::EscapeDataString($Content)
-    $QrUrl = "https://img.vietqr.io/image/970436-1055835227-qr_only.png?accountName=DANG%20LAM%20TAN%20PHAT&addInfo=$UrlContent"; if ($Amount -gt 0) { $QrUrl += "&amount=$Amount" }
-    $Q = New-Object System.Windows.Forms.Form; $Q.Size = "750, 480"; $Q.StartPosition = "CenterScreen"; $Q.Text = "TITAN SECURE PAY - $TitleMsg"; $Q.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 250); $Q.FormBorderStyle = "FixedToolWindow"
-    $LblTop = New-Object System.Windows.Forms.Label; $LblTop.Text = "CỔNG THANH TOÁN TỰ ĐỘNG"; $LblTop.Dock = "Top"; $LblTop.TextAlign = "MiddleCenter"; $LblTop.Font = $FontTitle; $LblTop.ForeColor = [System.Drawing.Color]::White; $LblTop.BackColor = [System.Drawing.Color]::FromArgb(0, 102, 204); $LblTop.Height = 60; $Q.Controls.Add($LblTop)
-    $PnlQR = New-Object System.Windows.Forms.Panel; $PnlQR.Location = "20, 80"; $PnlQR.Size = "320, 320"; $PnlQR.BackColor = [System.Drawing.Color]::White; $PnlQR.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlQR)
-    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Location = "10,10"; $Pic.Size = "300, 300"; $Pic.SizeMode = "Zoom"; try { $Pic.Load($QrUrl) } catch { }; $PnlQR.Controls.Add($Pic)
-    $PnlInfo = New-Object System.Windows.Forms.Panel; $PnlInfo.Location = "360, 80"; $PnlInfo.Size = "350, 320"; $PnlInfo.BackColor = [System.Drawing.Color]::White; $PnlInfo.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlInfo)
-    $BankName = New-Object System.Windows.Forms.Label; $BankName.Text = "VIETCOMBANK"; $BankName.Location = "20,20"; $BankName.AutoSize=$true; $BankName.Font = $FontHeader; $BankName.ForeColor=[System.Drawing.Color]::Green; $PnlInfo.Controls.Add($BankName)
-    $L2 = New-Object System.Windows.Forms.Label; $L2.Text = "Số tài khoản: 1055835227"; $L2.Location = "20, 70"; $L2.AutoSize=$true; $L2.Font = $FontBtn; $PnlInfo.Controls.Add($L2)
-    $L3 = New-Object System.Windows.Forms.Label; $L3.Text = "Số tiền: " + (if($Amount -gt 0){"{0:N0} VNĐ" -f $Amount}else{"TÙY TÂM"}); $L3.Location = "20, 110"; $L3.AutoSize=$true; $L3.Font = $FontHeader; $L3.ForeColor="Red"; $PnlInfo.Controls.Add($L3)
-    $L4 = New-Object System.Windows.Forms.Label; $L4.Text = "Nội dung: $Content"; $L4.Location = "20, 160"; $L4.AutoSize=$true; $L4.Font = $FontBtn; $L4.ForeColor="Blue"; $PnlInfo.Controls.Add($L4)
-    $Warn = New-Object System.Windows.Forms.Label; $Warn.Text = "⚠️ Vui lòng ghi ĐÚNG NỘI DUNG để Server tự duyệt."; $Warn.Location = "20, 250"; $Warn.Size="300,40"; $Warn.Font = $FontText; $Warn.ForeColor="OrangeRed"; $PnlInfo.Controls.Add($Warn)
-    $Q.ShowDialog() | Out-Null; $Q.Dispose()
-}
-
 function Show-Store {
     $S = New-Object System.Windows.Forms.Form; $S.Size="450, 400"; $S.StartPosition="CenterParent"; $S.Text="NÂNG CẤP GÓI VIP"; $S.BackColor=[System.Drawing.Color]::FromArgb(20,20,25); $S.FormBorderStyle="FixedToolWindow"
     $L = New-Object System.Windows.Forms.Label; $L.Text="🛒 CHỌN GÓI CƯỚC"; $L.Font = $FontHeader; $L.ForeColor="White"; $L.Location="110,15"; $L.AutoSize=$true; $S.Controls.Add($L)
     $BTrial = New-Object System.Windows.Forms.Button; $BTrial.Text="🎁 LẤY / GIA HẠN KEY 7 NGÀY (Cần Donate)"; $BTrial.Location="20,60"; $BTrial.Size="390,40"; $BTrial.BackColor="DarkMagenta"; $BTrial.ForeColor="White"; $BTrial.FlatStyle="Flat"; $BTrial.Font=$FontBtnSmall; $S.Controls.Add($BTrial)
     $BTrial.Add_Click({ $E = Show-Level2Pass "Nhập Email của bạn:"; if ($E -ne "CANCEL" -and $E -ne "") { $S.Cursor="WaitCursor"; $R = Call-API "request_trial" @{ email=$E }; [System.Windows.Forms.MessageBox]::Show($R.message, "Thông báo"); $S.Cursor="Default" } })
     $B1M = New-Object System.Windows.Forms.Button; $B1M.Text="🥉 VIP 1 THÁNG (29.000đ)"; $B1M.Location="20,110"; $B1M.Size="190,50"; $B1M.BackColor="MediumSeaGreen"; $B1M.ForeColor="White"; $B1M.FlatStyle="Flat"; $B1M.Font=$FontBtnSmall; $S.Controls.Add($B1M)
-    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 29000 "MUA KEY 1M" $E "VIP 1 THÁNG" } })
+    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=29000&email=$E" } })
     $B6M = New-Object System.Windows.Forms.Button; $B6M.Text="🥈 VIP 6 THÁNG (149.000đ)"; $B6M.Location="220,110"; $B6M.Size="190,50"; $B6M.BackColor="DodgerBlue"; $B6M.ForeColor="White"; $B6M.FlatStyle="Flat"; $B6M.Font=$FontBtnSmall; $S.Controls.Add($B6M)
-    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 149000 "MUA KEY 6M" $E "VIP 6 THÁNG" } })
+    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=149000&email=$E" } })
     $BFull = New-Object System.Windows.Forms.Button; $BFull.Text="💎 VIP VĨNH VIỄN (200.000đ)"; $BFull.Location="20,170"; $BFull.Size="190,50"; $BFull.BackColor="Gold"; $BFull.ForeColor="Black"; $BFull.FlatStyle="Flat"; $BFull.Font=$FontBtnSmall; $S.Controls.Add($BFull)
-    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 200000 "MUA KEY VIP" $E "VIP VĨNH VIỄN" } })
+    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=200000&email=$E" } })
     $BFam = New-Object System.Windows.Forms.Button; $BFam.Text="👑 ĐẠI LÝ (800.000đ - 25 PC)"; $BFam.Location="220,170"; $BFam.Size="190,50"; $BFam.BackColor="DarkOrange"; $BFam.ForeColor="Black"; $BFam.FlatStyle="Flat"; $BFam.Font=$FontBtnSmall; $S.Controls.Add($BFam)
-    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 800000 "MUA KEY MULTI" $E "GÓI ĐẠI LÝ" } })
+    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=800000&email=$E" } })
     $S.ShowDialog() | Out-Null; $S.Dispose()
 }
 
@@ -225,7 +210,7 @@ function Show-DeviceManager {
 
 function Show-ProfileForm {
     $ProfForm = New-Object System.Windows.Forms.Form
-    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 420"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
+    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 470"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
     
     $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
     $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
@@ -261,7 +246,7 @@ function Show-ProfileForm {
     })
     $ProfForm.Controls.Add($BtnChangeLocal)
 
-    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
+    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
     $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
     $ProfForm.Controls.Add($BtnDeviceMgr)
 
@@ -287,6 +272,19 @@ function Show-ProfileForm {
     })
     $ProfForm.Controls.Add($BtnKey)
 
+    # --- NÚT ĐĂNG XUẤT ---
+    $BtnLogout = New-Object System.Windows.Forms.Button; $BtnLogout.Text="🚪 ĐĂNG XUẤT TÀI KHOẢN"; $BtnLogout.Location="160, 280"; $BtnLogout.Size="200, 40"; $BtnLogout.BackColor="Maroon"; $BtnLogout.ForeColor="White"; $BtnLogout.FlatStyle="Flat"; $BtnLogout.Font=$FontBtnSmall
+    $BtnLogout.Add_Click({
+        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc chắn muốn đăng xuất?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+        if ($confirm -eq "Yes") {
+            if (Test-Path $Global:RegPath) { Remove-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue }
+            if (Test-Path $Global:SessionFile) { Remove-Item $Global:SessionFile -Force -ErrorAction SilentlyContinue }
+            [System.Windows.Forms.MessageBox]::Show("Đã đăng xuất thành công! Tool sẽ tự động đóng lại.", "Thông báo")
+            [Environment]::Exit(0)
+        }
+    })
+    $ProfForm.Controls.Add($BtnLogout)
+
     $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
 }
 
@@ -294,7 +292,7 @@ function Show-ProfileForm {
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.13 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.14 VIP | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -451,7 +449,7 @@ function Load-WPF {
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.13 TITANIUM | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.14 VIP | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -613,9 +611,17 @@ function Load-WPF {
         })
 
         $WpfForm.FindName("BtnBuyKeyWpf").Add_Click({ Show-Store })
-        $WpfForm.FindName("BtnToggleUI").Add_Click({ $Global:IsWpfMode = $false; $WpfForm.Close() })
+        
+        # --- FIX LỖI VĂNG KHI CHUYỂN GIAO DIỆN ---
+        $Global:SwitchingUI = $false
+        $WpfForm.FindName("BtnToggleUI").Add_Click({ 
+            $Global:IsWpfMode = $false; 
+            $Global:SwitchingUI = $true; 
+            $WpfForm.Close() 
+        })
         $WpfForm.FindName("BtnProfileWpf").Add_Click({ Show-ProfileForm })
 
+        $WpfForm.add_Closed({ if (-not $Global:SwitchingUI) { $Global:ExitApp = $true } })
         $WpfForm.ShowDialog() | Out-Null; return $true
     } catch { Write-Host "DEBUG: Loi WPF: $($_.Exception.Message)" -ForegroundColor Red; return $false }
 }
@@ -624,7 +630,7 @@ function Load-WPF {
 # GIAO DIỆN WINFORMS
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.13 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.14 VIP | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
@@ -632,8 +638,14 @@ function Load-WinForms {
     $BtnProfile.Add_Click({ Show-ProfileForm })
     $PnlHeader.Controls.Add($BtnProfile)
 
+    # --- FIX LỖI VĂNG KHI CHUYỂN GIAO DIỆN ---
+    $Global:SwitchingUI = $false
     $BtnToggleUI = New-Object System.Windows.Forms.Button; $BtnToggleUI.Location="570, 25"; $BtnToggleUI.Size="160, 35"; $BtnToggleUI.FlatStyle="Flat"; $BtnToggleUI.Font=$FontBtnSmall; $BtnToggleUI.Cursor="Hand"; $BtnToggleUI.Text="✨ DÙNG GIAO DIỆN WPF"; $BtnToggleUI.BackColor=[System.Drawing.Color]::BlueViolet; $BtnToggleUI.ForeColor="White"
-    $BtnToggleUI.Add_Click({ $Global:IsWpfMode = $true; $Form.Close() })
+    $BtnToggleUI.Add_Click({ 
+        $Global:IsWpfMode = $true; 
+        $Global:SwitchingUI = $true; 
+        $Form.Close() 
+    })
     $PnlHeader.Controls.Add($BtnToggleUI)
 
     $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="10,90"; $TabControl.Size="1060,450"; $TabControl.Font=$FontText; $Form.Controls.Add($TabControl)
@@ -724,17 +736,22 @@ function Load-WinForms {
 
     $BtnBuyKey = New-Object System.Windows.Forms.Button; $BtnBuyKey.Text="💎 CỬA HÀNG VIP"; $BtnBuyKey.Location="870, 730"; $BtnBuyKey.Size="200,45"; $BtnBuyKey.BackColor="Gold"; $BtnBuyKey.ForeColor="Black"; $BtnBuyKey.FlatStyle="Flat"; $BtnBuyKey.Font=$FontBtn; $BtnBuyKey.Add_Click({ Show-Store }); $Form.Controls.Add($BtnBuyKey)
 
+    $Form.add_FormClosed({ if (-not $Global:SwitchingUI) { $Global:ExitApp = $true } })
     $Form.ShowDialog() | Out-Null; $Form.Dispose()
 }
 
 Write-Host "[TITAN-CORE] Bắt đầu nạp giao diện chính..." -ForegroundColor Yellow
-while ($true) {
+
+$Global:ExitApp = $false
+while (-not $Global:ExitApp) {
+    $Global:SwitchingUI = $false
     if ($Global:IsWpfMode) { 
-        if (-not (Load-WPF)) { Write-Host "[TITAN-CORE] Fallback sang WinForms" -ForegroundColor Cyan; $Global:IsWpfMode = $false } 
-    } else { Load-WinForms }
-    if ([System.Windows.Forms.Application]::OpenForms.Count -eq 0) { break }
+        if (-not (Load-WPF)) { $Global:IsWpfMode = $false } 
+    } else { 
+        Load-WinForms 
+    }
 }
 
 Write-Host "[TITAN-CORE] Đã đóng Form, dọn dẹp hệ thống..." -ForegroundColor Green
 [System.GC]::Collect()
-Stop-Process -Id $PID -Force
+[Environment]::Exit(0)
