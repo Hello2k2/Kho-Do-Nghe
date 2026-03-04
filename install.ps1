@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.12.4 MAX (Ultimate UTF-8 JSON Fix via Byte Stream)
+    Version: 20.15 TITANIUM MAX (Ultimate JSON TLS Fix via Curl, Version Synced)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -32,8 +32,6 @@ $Global:MyHWID = Get-HWID; $Global:PCName = $env:COMPUTERNAME
 $encApi = "aHR0cHM6Ly9hcGkucGhhdHRhbi5pZC52bi9hcGkucGhw"; $Global:ApiServer = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encApi))
 $encBaseUrl = "aHR0cHM6Ly9naXRodWIuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjAv"; $BaseUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encBaseUrl))
 $encRawUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sLw=="; $RawUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encRawUrl))
-
-# MÃ HÓA LINK JSON
 $encJsonUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sL2FwcHMuanNvbg=="; $JsonUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encJsonUrl))
 
 $TempDir = "$env:TEMP\PhatTan_Tool"; if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
@@ -42,21 +40,33 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
-# --- HÀM TẢI JSON (FIX CHUẨN MẠNG & UTF-8 BẰNG BYTE STREAM) ---
+# --- HÀM TẢI JSON BẰNG CURL ĐỂ TRÁNH LỖI TLS CỦA .NET ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
         Write-Host "[PHATTAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
         try { 
             $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
             $UrlWithTs = "$($JsonUrl)?t=$Ts"
+            $TempJsonFile = "$TempDir\temp_apps.json"
             
-            # Sử dụng Invoke-WebRequest nhưng tải dưới dạng mảng Byte để bỏ qua lỗi Encoding mặc định
-            $Response = Invoke-WebRequest -Uri $UrlWithTs -UseBasicParsing -ErrorAction Stop
+            # CÁCH 1: Dùng Curl (Sát thủ vượt lỗi mạng & TLS)
+            if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) {
+                Start-Process "curl.exe" "-sL -o `"$TempJsonFile`" `"$UrlWithTs`"" -Wait -NoNewWindow
+                if (Test-Path $TempJsonFile) {
+                    $RawJson = [System.IO.File]::ReadAllText($TempJsonFile, [System.Text.Encoding]::UTF8)
+                    $Global:JsonData = $RawJson | ConvertFrom-Json
+                    Remove-Item $TempJsonFile -Force -ErrorAction SilentlyContinue
+                    return
+                }
+            }
             
-            # Ép mảng Byte thành chuỗi UTF-8 chuẩn xác
-            $RawJson = [System.Text.Encoding]::UTF8.GetString($Response.Content)
-            
+            # CÁCH 2: Fallback lại WebClient nếu máy không có curl (Fake User-Agent thật)
+            $wc = New-Object System.Net.WebClient
+            $wc.Encoding = [System.Text.Encoding]::UTF8
+            $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            $RawJson = $wc.DownloadString($UrlWithTs)
             $Global:JsonData = $RawJson | ConvertFrom-Json
+            
         } catch { Write-Host "[PHATTAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
     }
 }
@@ -315,7 +325,7 @@ function Show-ProfileForm {
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "PHATTAN_PC ENGINE V20.15 VIP | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "PHATTAN_PC ENGINE V20.15 TITANIUM MAX | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "PHATTAN_PC TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -479,7 +489,7 @@ function Load-WPF {
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.15 TITANIUM | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.15 TITANIUM MAX | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -670,7 +680,7 @@ function Load-WPF {
 # GIAO DIỆN WINFORMS
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.15 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.15 TITANIUM MAX | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
