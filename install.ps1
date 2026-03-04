@@ -1,13 +1,12 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.12.2 TITANIUM MAX (Fixed TLS WebClient JSON Download)
+    Version: 20.13 TITANIUM MAX (Added GiftCode / Redeem Key System)
 #>
 
 if ($host.Name -match "ISE") { Exit }
 if ($MyInvocation.MyCommand.Path) { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show("Truy cập trái phép! Vui lòng dùng lệnh tải từ Server.", "BẢO VỆ", 0, 16); Exit }
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://script.phattan.id.vn/tool/install.ps1 | iex`"" -Verb RunAs; Exit }
 
-# BẮT BUỘC: Ép chuẩn mạng bảo mật cao nhất để tải file không bị lỗi
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 [System.Net.ServicePointManager]::Expect100Continue = $true; [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
@@ -32,8 +31,6 @@ $Global:MyHWID = Get-HWID; $Global:PCName = $env:COMPUTERNAME
 $encApi = "aHR0cHM6Ly9hcGkucGhhdHRhbi5pZC52bi9hcGkucGhw"; $Global:ApiServer = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encApi))
 $encBaseUrl = "aHR0cHM6Ly9naXRodWIuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjAv"; $BaseUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encBaseUrl))
 $encRawUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sLw=="; $RawUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encRawUrl))
-
-# MÃ HÓA LINK JSON
 $encJsonUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sL2FwcHMuanNvbg=="; $JsonUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encJsonUrl))
 
 $TempDir = "$env:TEMP\PhatTan_Tool"; if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
@@ -42,7 +39,6 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
-# --- HÀM TẢI JSON (DÙNG WEBCLIENT + UTF8 ĐỂ VƯỢT LỖI MẠNG) ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
         Write-Host "[TITAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
@@ -51,8 +47,6 @@ function Load-JsonData {
             $wc = New-Object System.Net.WebClient
             $wc.Encoding = [System.Text.Encoding]::UTF8
             $wc.Headers.Add("User-Agent", "Titan/20")
-            
-            # Tải chuỗi JSON trực tiếp bằng UTF-8
             $RawJson = $wc.DownloadString("$($JsonUrl)?t=$Ts")
             $Global:JsonData = $RawJson | ConvertFrom-Json
         } catch { Write-Host "[TITAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
@@ -109,14 +103,9 @@ function Show-OtpInput ($Title, $Msg, $Link, $EmailToCheck) {
 
             if ($QA.status -eq "success") {
                 $AnsInput = [Microsoft.VisualBasic.Interaction]::InputBox("Trang web yêu cầu xác minh bảo mật trước khi xem OTP.`n`nCâu hỏi của bạn: $($QA.question)", "Bảo mật tài khoản", "")
-                if ($AnsInput -eq $QA.answer) {
-                    Start-Process $Link 
-                } else {
-                    [System.Windows.Forms.MessageBox]::Show("Sai câu trả lời bảo mật! Không thể xem OTP.", "CẢNH BÁO", 0, 16)
-                }
-            } else {
-                [System.Windows.Forms.MessageBox]::Show("Không thể tải câu hỏi bảo mật. Lỗi máy chủ!", "LỖI", 0, 16)
-            }
+                if ($AnsInput -eq $QA.answer) { Start-Process $Link } 
+                else { [System.Windows.Forms.MessageBox]::Show("Sai câu trả lời bảo mật! Không thể xem OTP.", "CẢNH BÁO", 0, 16) }
+            } else { [System.Windows.Forms.MessageBox]::Show("Không thể tải câu hỏi bảo mật. Lỗi máy chủ!", "LỖI", 0, 16) }
         } 
     })
     if ([string]::IsNullOrEmpty($Link)) { $LnkWeb.Visible = $false }; $OForm.Controls.Add($LnkWeb)
@@ -236,7 +225,7 @@ function Show-DeviceManager {
 
 function Show-ProfileForm {
     $ProfForm = New-Object System.Windows.Forms.Form
-    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 360"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
+    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 420"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
     
     $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
     $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
@@ -276,6 +265,28 @@ function Show-ProfileForm {
     $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
     $ProfForm.Controls.Add($BtnDeviceMgr)
 
+    # --- KHU VỰC NHẬP KEY (GIFT CODE) ---
+    $LblKey = New-Object System.Windows.Forms.Label; $LblKey.Text = "🎁 Kích hoạt mã Key VIP:"; $LblKey.Location="160, 200"; $LblKey.AutoSize=$true; $LblKey.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblKey)
+    $TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="160, 225"; $TxtKey.Size="130, 25"; $TxtKey.Font = $FontText; $ProfForm.Controls.Add($TxtKey)
+    $BtnKey = New-Object System.Windows.Forms.Button; $BtnKey.Text="NHẬP"; $BtnKey.Location="300, 224"; $BtnKey.Size="60, 27"; $BtnKey.BackColor="MediumSeaGreen"; $BtnKey.ForeColor="White"; $BtnKey.FlatStyle="Flat"; $BtnKey.Font=$FontBtnSmall
+    $BtnKey.Add_Click({
+        $K = $TxtKey.Text.Trim()
+        if (!$K) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập mã Key!", "Lỗi"); return }
+        $ProfForm.Cursor = "WaitCursor"
+        $R = Call-API "redeem_key" @{ email=$Global:UserEmail; key_code=$K }
+        $ProfForm.Cursor = "Default"
+        if ($R.status -eq "success") {
+            [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công")
+            $Global:LicenseType = $R.new_package
+            $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"
+            Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass
+            $TxtKey.Text = ""
+        } else {
+            [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
+        }
+    })
+    $ProfForm.Controls.Add($BtnKey)
+
     $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
 }
 
@@ -283,7 +294,7 @@ function Show-ProfileForm {
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.12.2 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.13 | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -440,7 +451,7 @@ function Load-WPF {
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.12.2 TITANIUM | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.13 TITANIUM | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -613,7 +624,7 @@ function Load-WPF {
 # GIAO DIỆN WINFORMS
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.12.2 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.13 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
