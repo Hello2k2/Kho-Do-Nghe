@@ -1,6 +1,11 @@
 {
   "Rescue_PE": [
     {
+      "Name": "Hiren boot (Khuyên dùng)",
+      "FileName": "boot.zip",
+      "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/boot.zip"
+    },
+    {
       "Name": "Nasiboot Windows 11 x64 (Khuyên dùng)",
       "FileName": "w11x64.zip",
       "Url": "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/pe/w11x64.zip"
