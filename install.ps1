@@ -1,12 +1,13 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.14 TITANIUM MAX (Fixed UI Toggling Crash, Added Secure Logout)
+    Version: 20.12.3 MAX (PhatTan PC Branding, UTF-8 JSON Fix)
 #>
 
 if ($host.Name -match "ISE") { Exit }
 if ($MyInvocation.MyCommand.Path) { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show("Truy cập trái phép! Vui lòng dùng lệnh tải từ Server.", "BẢO VỆ", 0, 16); Exit }
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://script.phattan.id.vn/tool/install.ps1 | iex`"" -Verb RunAs; Exit }
 
+# BẮT BUỘC: Ép chuẩn mạng bảo mật cao nhất để tải file không bị lỗi
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 [System.Net.ServicePointManager]::Expect100Continue = $true; [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
@@ -32,30 +33,34 @@ $encApi = "aHR0cHM6Ly9hcGkucGhhdHRhbi5pZC52bi9hcGkucGhw"; $Global:ApiServer = [S
 $encBaseUrl = "aHR0cHM6Ly9naXRodWIuY29tL0hlbGxvMmsyL0toby1Eby1OZ2hlL3JlbGVhc2VzL2Rvd25sb2FkL3YxLjAv"; $BaseUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encBaseUrl))
 $encRawUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sLw=="; $RawUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encRawUrl))
 
+# MÃ HÓA LINK JSON
 $encJsonUrl = "aHR0cHM6Ly9zY3JpcHQucGhhdHRhbi5pZC52bi90b29sL2FwcHMuanNvbg=="; $JsonUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encJsonUrl))
 
 $TempDir = "$env:TEMP\PhatTan_Tool"; if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
-$Global:SessionFile = "$env:LOCALAPPDATA\PhatTan_Titan.dat"
+$Global:SessionFile = "$env:LOCALAPPDATA\PhatTan_PC.dat"
 $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
+# --- HÀM TẢI JSON (DÙNG WEBCLIENT + UTF8 ĐỂ VƯỢT LỖI MẠNG) ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
-        Write-Host "[TITAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
+        Write-Host "[PHATTAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
         try { 
             $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-            $wc = New-Object System.Net.WebClient
-            $wc.Encoding = [System.Text.Encoding]::UTF8
-            $wc.Headers.Add("User-Agent", "Titan/20")
-            $RawJson = $wc.DownloadString("$($JsonUrl)?t=$Ts")
-            $Global:JsonData = $RawJson | ConvertFrom-Json
-        } catch { Write-Host "[TITAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
+            $TempJsonFile = "$TempDir\temp_apps.json"
+            Invoke-WebRequest -Uri "$($JsonUrl)?t=$Ts" -OutFile $TempJsonFile -UseBasicParsing -ErrorAction Stop
+            if (Test-Path $TempJsonFile) {
+                $RawJson = Get-Content -Path $TempJsonFile -Encoding UTF8 -Raw
+                $Global:JsonData = $RawJson | ConvertFrom-Json
+                Remove-Item -Path $TempJsonFile -Force -ErrorAction SilentlyContinue
+            }
+        } catch { Write-Host "[PHATTAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
     }
 }
 
 function Write-GuiLog ($Msg) {
-    $Time = Get-Date -Format "HH:mm:ss"; $FullMsg = "[$Time] $Msg`n"; Write-Host "[TITAN-CORE] $Msg" -ForegroundColor Cyan
+    $Time = Get-Date -Format "HH:mm:ss"; $FullMsg = "[$Time] $Msg`n"; Write-Host "[PHATTAN-CORE] $Msg" -ForegroundColor Cyan
     if ($Global:IsWpfMode -and $Global:LogBox) { $Global:LogBox.Dispatcher.Invoke({ $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToEnd() }) } 
     elseif (-not $Global:IsWpfMode -and $Global:LogBox) { $Global:LogBox.AppendText($FullMsg); $Global:LogBox.ScrollToCaret() }
 }
@@ -65,7 +70,7 @@ function Call-API ($Action, $Payload) { try { $Payload.Add("action", $Action); $
 # ==============================================================================
 # LƯU SESSION REGISTRY
 # ==============================================================================
-$Global:RegPath = "HKCU:\Software\TitanPC"
+$Global:RegPath = "HKCU:\Software\PhatTan_PC"
 function Save-Session ($E, $T, $H, $LP, $SP) { 
     $R = "$E|PT|$T|PC|$H|LP|$LP|SP|$SP"; $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($R))
     if (-not (Test-Path $Global:RegPath)) { New-Item -Path $Global:RegPath -Force | Out-Null }
@@ -73,7 +78,7 @@ function Save-Session ($E, $T, $H, $LP, $SP) {
     try { [System.IO.File]::WriteAllText($Global:SessionFile, $Encoded) } catch {}
 }
 function Load-Session { 
-    $Global:RegPath = "HKCU:\Software\TitanPC"; $Encoded = $null
+    $Global:RegPath = "HKCU:\Software\PhatTan_PC"; $Encoded = $null
     if (Test-Path $Global:RegPath) { $RegVal = Get-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue; if ($RegVal) { $Encoded = $RegVal.SessionData } }
     if ([string]::IsNullOrEmpty($Encoded) -and [System.IO.File]::Exists($Global:SessionFile)) { try { $Encoded = [System.IO.File]::ReadAllText($Global:SessionFile).Trim() } catch {} }
     if ($Encoded) {
@@ -121,6 +126,22 @@ function Show-Level2Pass ($TitleMsg) {
     $TxtPass = New-Object System.Windows.Forms.TextBox; $TxtPass.Location = "20, 55"; $TxtPass.Size = "340, 30"; $TxtPass.Font = $FontHeader; $TxtPass.PasswordChar = "*"; $TxtPass.TextAlign = "Center"; $OForm.Controls.Add($TxtPass)
     $BtnOk = New-Object System.Windows.Forms.Button; $BtnOk.Text = "MỞ KHÓA TOOL"; $BtnOk.Location = "20, 100"; $BtnOk.Size = "340, 40"; $BtnOk.BackColor = "OrangeRed"; $BtnOk.ForeColor = "White"; $BtnOk.Font = $FontBtn; $BtnOk.FlatStyle = "Flat"; $BtnOk.DialogResult = "OK"; $OForm.Controls.Add($BtnOk)
     $OForm.AcceptButton = $BtnOk; $OForm.ShowDialog() | Out-Null; $Res = if ($OForm.DialogResult -eq "OK") { $TxtPass.Text.Trim() } else { "CANCEL" }; $OForm.Dispose(); return $Res
+}
+
+function Show-QRPay ($Amount, $Prefix, $Email, $TitleMsg) {
+    $SafeEmail = $Email -replace "\s", ""; $Content = "$Prefix $SafeEmail"; $UrlContent = [uri]::EscapeDataString($Content)
+    $QrUrl = "https://img.vietqr.io/image/970436-1055835227-qr_only.png?accountName=DANG%20LAM%20TAN%20PHAT&addInfo=$UrlContent"; if ($Amount -gt 0) { $QrUrl += "&amount=$Amount" }
+    $Q = New-Object System.Windows.Forms.Form; $Q.Size = "750, 480"; $Q.StartPosition = "CenterScreen"; $Q.Text = "PHATTAN PC SECURE PAY - $TitleMsg"; $Q.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 250); $Q.FormBorderStyle = "FixedToolWindow"
+    $LblTop = New-Object System.Windows.Forms.Label; $LblTop.Text = "CỔNG THANH TOÁN TỰ ĐỘNG"; $LblTop.Dock = "Top"; $LblTop.TextAlign = "MiddleCenter"; $LblTop.Font = $FontTitle; $LblTop.ForeColor = [System.Drawing.Color]::White; $LblTop.BackColor = [System.Drawing.Color]::FromArgb(0, 102, 204); $LblTop.Height = 60; $Q.Controls.Add($LblTop)
+    $PnlQR = New-Object System.Windows.Forms.Panel; $PnlQR.Location = "20, 80"; $PnlQR.Size = "320, 320"; $PnlQR.BackColor = [System.Drawing.Color]::White; $PnlQR.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlQR)
+    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Location = "10,10"; $Pic.Size = "300, 300"; $Pic.SizeMode = "Zoom"; try { $Pic.Load($QrUrl) } catch { }; $PnlQR.Controls.Add($Pic)
+    $PnlInfo = New-Object System.Windows.Forms.Panel; $PnlInfo.Location = "360, 80"; $PnlInfo.Size = "350, 320"; $PnlInfo.BackColor = [System.Drawing.Color]::White; $PnlInfo.BorderStyle = "FixedSingle"; $Q.Controls.Add($PnlInfo)
+    $BankName = New-Object System.Windows.Forms.Label; $BankName.Text = "VIETCOMBANK"; $BankName.Location = "20,20"; $BankName.AutoSize=$true; $BankName.Font = $FontHeader; $BankName.ForeColor=[System.Drawing.Color]::Green; $PnlInfo.Controls.Add($BankName)
+    $L2 = New-Object System.Windows.Forms.Label; $L2.Text = "Số tài khoản: 1055835227"; $L2.Location = "20, 70"; $L2.AutoSize=$true; $L2.Font = $FontBtn; $PnlInfo.Controls.Add($L2)
+    $L3 = New-Object System.Windows.Forms.Label; $L3.Text = "Số tiền: " + (if($Amount -gt 0){"{0:N0} VNĐ" -f $Amount}else{"TÙY TÂM"}); $L3.Location = "20, 110"; $L3.AutoSize=$true; $L3.Font = $FontHeader; $L3.ForeColor="Red"; $PnlInfo.Controls.Add($L3)
+    $L4 = New-Object System.Windows.Forms.Label; $L4.Text = "Nội dung: $Content"; $L4.Location = "20, 160"; $L4.AutoSize=$true; $L4.Font = $FontBtn; $L4.ForeColor="Blue"; $PnlInfo.Controls.Add($L4)
+    $Warn = New-Object System.Windows.Forms.Label; $Warn.Text = "⚠️ Vui lòng ghi ĐÚNG NỘI DUNG để Server tự duyệt."; $Warn.Location = "20, 250"; $Warn.Size="300,40"; $Warn.Font = $FontText; $Warn.ForeColor="OrangeRed"; $PnlInfo.Controls.Add($Warn)
+    $Q.ShowDialog() | Out-Null; $Q.Dispose()
 }
 
 function Show-Store {
@@ -210,7 +231,7 @@ function Show-DeviceManager {
 
 function Show-ProfileForm {
     $ProfForm = New-Object System.Windows.Forms.Form
-    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 470"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
+    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 420"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
     
     $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
     $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
@@ -246,7 +267,7 @@ function Show-ProfileForm {
     })
     $ProfForm.Controls.Add($BtnChangeLocal)
 
-    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
+    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
     $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
     $ProfForm.Controls.Add($BtnDeviceMgr)
 
@@ -292,8 +313,8 @@ function Show-ProfileForm {
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "TITAN ENGINE V20.14 VIP | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
-    $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "TITAN TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "PHATTAN_PC ENGINE V20.15 VIP | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "PHATTAN_PC TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
     $L1=New-Object System.Windows.Forms.Label;$L1.Text="Email đăng nhập:";$L1.Location="20,10";$L1.AutoSize=$true;$L1.Font=$FontText;$PnlLogin.Controls.Add($L1); $TUser=New-Object System.Windows.Forms.TextBox;$TUser.Location="20,30";$TUser.Size="420,30";$TUser.Font=$FontText;$PnlLogin.Controls.Add($TUser)
@@ -350,12 +371,12 @@ function Show-AuthGateway {
     $Auth.ShowDialog() | Out-Null; $Auth.Dispose()
 }
 
-Write-Host "[TITAN-CORE] Dang kiem tra Session..." -ForegroundColor Yellow
+Write-Host "[PHATTAN-CORE] Dang kiem tra Session..." -ForegroundColor Yellow
 if (Load-Session) { 
     $RetryPass = $true
     while ($RetryPass) {
         $InputAES = Show-Level2Pass "Nhập Mật mã Cấp 2 (Hoặc Master Pass từ Server):"
-        if ($InputAES -eq "CANCEL") { Write-Host "[TITAN-CORE] Huy dang nhap." -ForegroundColor Red; Exit }
+        if ($InputAES -eq "CANCEL") { Write-Host "[PHATTAN-CORE] Huy dang nhap." -ForegroundColor Red; Exit }
         if ($InputAES -eq $Global:LocalPass -or $InputAES -eq $Global:ServerPass) { 
             $Global:IsAuthenticated = $true; $RetryPass = $false
         } else { [System.Windows.Forms.MessageBox]::Show("Sai Mật mã Cấp 2! Vui lòng thử lại.", "BẢO MẬT", 0, 16) }
@@ -363,8 +384,12 @@ if (Load-Session) {
 } else { Show-AuthGateway }
 if (-not $Global:IsAuthenticated) { Exit }
 
-Write-Host "[TITAN-CORE] Xac thuc thanh cong! Nap Giao dien..." -ForegroundColor Green
-Load-JsonData
+Write-Host "[PHATTAN-CORE] Xac thuc thanh cong! Nap Giao dien..." -ForegroundColor Green
+
+# CHỈ LOAD JSON VÀ HIỆN TAB ỨNG DỤNG NẾU TÀI KHOẢN LÀ VIP TRỞ LÊN
+if ($Global:LicenseType -notmatch "FREE") {
+    Load-JsonData
+}
 
 # ==============================================================================
 # HÀM RUN-MODULE BẰNG .NET PROCESS
@@ -388,12 +413,15 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     }
     
     $TargetUrl = "$($RawUrl)$($ModulePath)?t=$(Get-Date -UFormat %s)"
-    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'Titan/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }; [System.GC]::Collect(); [Environment]::Exit(0)"
+    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'PhatTanPC/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }; [System.GC]::Collect(); [Environment]::Exit(0)"
     $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
     
     $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
     $ProcInfo.FileName = "powershell.exe"
-    if ($ModulePath -match "WinModder.ps1|AppStore.ps1") {
+    
+    $GuiModules = "WinModder.ps1|AppStore.ps1|GeminiAI.ps1|BitLockerMgr.ps1|WinUpdatePro.ps1|DefenderMgr.ps1|SystemInfo.ps1|SystemRepair.ps1|ContextMenuManager.ps1|fixprinter_errors.ps1"
+    
+    if ($ModulePath -match $GuiModules) {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
     } else {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
@@ -449,7 +477,7 @@ function Load-WPF {
 <?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.14 VIP | USER: $($Global:UserEmail)" 
+                Title="PHAT TAN PC V20.15 TITANIUM | USER: $($Global:UserEmail)" 
                 Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
             <Window.Resources>
                 <Style TargetType="Button">
@@ -513,7 +541,7 @@ function Load-WPF {
                 </TabControl>
                 
                 <Border Grid.Row="2" Background="#0A0A0C" BorderBrush="#333" BorderThickness="0,1,0,0">
-                    <TextBox Name="txtLog" Background="Transparent" Foreground="Lime" FontFamily="Consolas" FontSize="12" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Text="[+] TITAN ENGINE KERNEL INITIALIZED...&#x0a;"/>
+                    <TextBox Name="txtLog" Background="Transparent" Foreground="Lime" FontFamily="Consolas" FontSize="12" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Text="[+] PHATTAN_PC ENGINE KERNEL INITIALIZED...&#x0a;"/>
                 </Border>
                 
                 <Grid Grid.Row="3" Background="#232328">
@@ -582,43 +610,53 @@ function Load-WPF {
                     $Chk.Margin = "10"
                     $Chk.FontSize = 14
                     $Chk.Foreground = [System.Windows.Media.Brushes]::White
+                    
+                    $Chk.Add_Checked({
+                        $A = $this.Tag
+                        Write-GuiLog "--> Chọn App: $($A.name) | Nguồn: $($A.source)"
+                    })
+                    $Chk.Add_Unchecked({
+                        $A = $this.Tag
+                        Write-GuiLog "--> Bỏ chọn: $($A.name)"
+                    })
+
                     $WrapPanel.Children.Add($Chk)
                     $Global:WpfAppCheckBoxes += $Chk
                 }
             }
         }
 
-        $WpfForm.FindName("BtnInstallAppsWpf").Add_Click({
-            $ListToInstall = @()
-            foreach ($Chk in $Global:WpfAppCheckBoxes) { if ($Chk.IsChecked) { $ListToInstall += $Chk.Tag; $Chk.IsChecked = $false } }
-            if ($ListToInstall.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn ít nhất 1 phần mềm để cài!"); return }
-            
-            Write-GuiLog "Bắt đầu tải và cài đặt $($ListToInstall.Count) ứng dụng ngầm..."
-            $SyncHash_Wpf = [hashtable]::Synchronized(@{ Queue=$ListToInstall; BaseUrl=$BaseUrl; TempDir=$TempDir; Log=$Global:LogBox })
-            $Runspace_Wpf = [runspacefactory]::CreateRunspace(); $Runspace_Wpf.Open(); $Runspace_Wpf.SessionStateProxy.SetVariable("sync", $SyncHash_Wpf)
-            $Pipe_Wpf = $Runspace_Wpf.CreatePipeline()
-            $Pipe_Wpf.Commands.AddScript({
-                foreach ($A in $sync.Queue) {
-                    $Line = "[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] Dang tai: $($A.name)`r`n"
-                    $sync.Log.Dispatcher.Invoke({ $sync.Log.AppendText($Line); $sync.Log.ScrollToEnd() })
-                    $OutFile = "$($sync.TempDir)\$($A.name).exe"
-                    $Url = if ($A.link -match "^http") { $A.link } else { "$($sync.BaseUrl)$($A.link)" }
-                    try { (New-Object System.Net.WebClient).DownloadFile($Url, $OutFile) } catch {}
-                    if (Test-Path $OutFile) { Start-Process $OutFile -Wait }
-                }
-                $sync.Log.Dispatcher.Invoke({ $sync.Log.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] HOAN TAT CAI DAT TAT CA APP!`r`n"); $sync.Log.ScrollToEnd() })
-            }) | Out-Null; $Pipe_Wpf.InvokeAsync()
-        })
+        if ($Global:LicenseType -match "FREE") {
+            $WpfForm.FindName("BtnInstallAppsWpf").Visibility = "Hidden"
+        } else {
+            $WpfForm.FindName("BtnInstallAppsWpf").Add_Click({
+                $ListToInstall = @()
+                foreach ($Chk in $Global:WpfAppCheckBoxes) { if ($Chk.IsChecked) { $ListToInstall += $Chk.Tag; $Chk.IsChecked = $false } }
+                if ($ListToInstall.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn ít nhất 1 phần mềm để cài!"); return }
+                
+                Write-GuiLog "Bắt đầu tải và cài đặt $($ListToInstall.Count) ứng dụng ngầm..."
+                $SyncHash_Wpf = [hashtable]::Synchronized(@{ Queue=$ListToInstall; BaseUrl=$BaseUrl; TempDir=$TempDir; Log=$Global:LogBox; MainUI=$WpfForm })
+                $Runspace_Wpf = [runspacefactory]::CreateRunspace(); $Runspace_Wpf.Open(); $Runspace_Wpf.SessionStateProxy.SetVariable("sync", $SyncHash_Wpf)
+                $Pipe_Wpf = $Runspace_Wpf.CreatePipeline()
+                $Pipe_Wpf.Commands.AddScript({
+                    foreach ($A in $sync.Queue) {
+                        $Line = "[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] Dang tai: $($A.name)`r`n"
+                        $sync.Log.Dispatcher.Invoke({ $sync.Log.AppendText($Line); $sync.Log.ScrollToEnd() })
+                        $OutFile = "$($sync.TempDir)\$($A.name).exe"
+                        $Url = if ($A.link -match "^http") { $A.link } else { "$($sync.BaseUrl)$($A.link)" }
+                        try { (New-Object System.Net.WebClient).DownloadFile($Url, $OutFile) } catch {}
+                        if (Test-Path $OutFile) { Start-Process $OutFile -Wait }
+                    }
+                    $sync.Log.Dispatcher.Invoke({ $sync.Log.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] HOAN TAT CAI DAT TAT CA APP!`r`n"); $sync.Log.ScrollToEnd() })
+                    $sync.MainUI.Dispatcher.Invoke({ [System.Windows.Forms.MessageBox]::Show("Đã cài đặt hoàn tất các ứng dụng được chọn!", "Thành công", 0, 64) })
+                }) | Out-Null; $Pipe_Wpf.InvokeAsync()
+            })
+        }
 
         $WpfForm.FindName("BtnBuyKeyWpf").Add_Click({ Show-Store })
         
-        # --- FIX LỖI VĂNG KHI CHUYỂN GIAO DIỆN ---
         $Global:SwitchingUI = $false
-        $WpfForm.FindName("BtnToggleUI").Add_Click({ 
-            $Global:IsWpfMode = $false; 
-            $Global:SwitchingUI = $true; 
-            $WpfForm.Close() 
-        })
+        $WpfForm.FindName("BtnToggleUI").Add_Click({ $Global:IsWpfMode = $false; $Global:SwitchingUI = $true; $WpfForm.Close() })
         $WpfForm.FindName("BtnProfileWpf").Add_Click({ Show-ProfileForm })
 
         $WpfForm.add_Closed({ if (-not $Global:SwitchingUI) { $Global:ExitApp = $true } })
@@ -630,7 +668,7 @@ function Load-WPF {
 # GIAO DIỆN WINFORMS
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.14 VIP | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.15 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
@@ -638,14 +676,9 @@ function Load-WinForms {
     $BtnProfile.Add_Click({ Show-ProfileForm })
     $PnlHeader.Controls.Add($BtnProfile)
 
-    # --- FIX LỖI VĂNG KHI CHUYỂN GIAO DIỆN ---
     $Global:SwitchingUI = $false
     $BtnToggleUI = New-Object System.Windows.Forms.Button; $BtnToggleUI.Location="570, 25"; $BtnToggleUI.Size="160, 35"; $BtnToggleUI.FlatStyle="Flat"; $BtnToggleUI.Font=$FontBtnSmall; $BtnToggleUI.Cursor="Hand"; $BtnToggleUI.Text="✨ DÙNG GIAO DIỆN WPF"; $BtnToggleUI.BackColor=[System.Drawing.Color]::BlueViolet; $BtnToggleUI.ForeColor="White"
-    $BtnToggleUI.Add_Click({ 
-        $Global:IsWpfMode = $true; 
-        $Global:SwitchingUI = $true; 
-        $Form.Close() 
-    })
+    $BtnToggleUI.Add_Click({ $Global:IsWpfMode = $true; $Global:SwitchingUI = $true; $Form.Close() })
     $PnlHeader.Controls.Add($BtnToggleUI)
 
     $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="10,90"; $TabControl.Size="1060,450"; $TabControl.Font=$FontText; $Form.Controls.Add($TabControl)
@@ -703,36 +736,47 @@ function Load-WinForms {
             $Page = New-Object System.Windows.Forms.TabPage; $Page.Text=" " + $T.ToUpper() + " "; $Page.BackColor=[System.Drawing.Color]::FromArgb(30, 30, 35); $TabControl.Controls.Add($Page)
             $Flow = New-Object System.Windows.Forms.FlowLayoutPanel; $Flow.Dock="Fill"; $Flow.AutoScroll=$true; $Flow.Padding="20,20,20,20"; $Page.Controls.Add($Flow)
             $Apps = $Global:JsonData | Where-Object {$_.tab -eq $T}
-            foreach ($A in $Apps) { $Chk = New-Object System.Windows.Forms.CheckBox; $Chk.Text=$A.name; $Chk.Tag=$A; $Chk.AutoSize=$true; $Chk.Margin="10,10,20,10"; $Chk.Font=$FontText; $Chk.ForeColor="White"; $Flow.Controls.Add($Chk) }
+            foreach ($A in $Apps) { 
+                $Chk = New-Object System.Windows.Forms.CheckBox; $Chk.Text=$A.name; $Chk.Tag=$A; $Chk.AutoSize=$true; $Chk.Margin="10,10,20,10"; $Chk.Font=$FontText; $Chk.ForeColor="White"
+                $Chk.Add_CheckedChanged({
+                    $appInfo = $this.Tag
+                    if ($this.Checked) { Write-GuiLog "--> Chọn App: $($appInfo.name) | Nguồn: $($appInfo.source)" }
+                    else { Write-GuiLog "--> Bỏ chọn: $($appInfo.name)" }
+                })
+                $Flow.Controls.Add($Chk) 
+            }
         }
     }
 
     $Global:LogBox = New-Object System.Windows.Forms.TextBox
     $Global:LogBox.Location="10, 560"; $Global:LogBox.Size="1060, 150"; $Global:LogBox.Multiline=$true; $Global:LogBox.ReadOnly=$true; $Global:LogBox.BackColor=[System.Drawing.Color]::Black; $Global:LogBox.ForeColor=[System.Drawing.Color]::Lime; $Global:LogBox.Font=$FontConsole; $Form.Controls.Add($Global:LogBox)
 
-    $BtnInstallApps = New-Object System.Windows.Forms.Button; $BtnInstallApps.Text="📦 CÀI ĐẶT ỨNG DỤNG ĐÃ CHỌN"; $BtnInstallApps.Location="10, 730"; $BtnInstallApps.Size="300,45"; $BtnInstallApps.BackColor="ForestGreen"; $BtnInstallApps.ForeColor="White"; $BtnInstallApps.FlatStyle="Flat"; $BtnInstallApps.Font=$FontBtn; 
-    $BtnInstallApps.Add_Click({
-        $ListToInstall = @()
-        foreach ($Page in $TabControl.TabPages) { if ($Page.Text -notmatch "DASHBOARD") { foreach ($Flow in $Page.Controls) { foreach ($Chk in $Flow.Controls) { if ($Chk -is [System.Windows.Forms.CheckBox] -and $Chk.Checked) { $ListToInstall += $Chk.Tag; $Chk.Checked = $false } } } } }
-        if ($ListToInstall.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn ít nhất 1 phần mềm!"); return }
-        
-        Write-GuiLog "Bắt đầu tải và cài đặt $($ListToInstall.Count) ứng dụng ngầm..."
-        $SyncHash_Win = [hashtable]::Synchronized(@{ Queue=$ListToInstall; BaseUrl=$BaseUrl; TempDir=$TempDir; Log=$Global:LogBox })
-        $Runspace_Win = [runspacefactory]::CreateRunspace(); $Runspace_Win.Open(); $Runspace_Win.SessionStateProxy.SetVariable("sync", $SyncHash_Win)
-        $Pipe_Win = $Runspace_Win.CreatePipeline()
-        $Pipe_Win.Commands.AddScript({
-            foreach ($A in $sync.Queue) {
-                $Line = "[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] Dang tai: $($A.name)`r`n"
-                $sync.Log.Invoke([action]{ $sync.Log.AppendText($Line); $sync.Log.ScrollToCaret() })
-                $OutFile = "$($sync.TempDir)\$($A.name).exe"
-                $Url = if ($A.link -match "^http") { $A.link } else { "$($sync.BaseUrl)$($A.link)" }
-                try { (New-Object System.Net.WebClient).DownloadFile($Url, $OutFile) } catch {}
-                if (Test-Path $OutFile) { Start-Process $OutFile -Wait }
-            }
-            $sync.Log.Invoke([action]{ $sync.Log.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] HOAN TAT CAI DAT TAT CA APP!`r`n"); $sync.Log.ScrollToCaret() })
-        }) | Out-Null; $Pipe_Win.InvokeAsync()
-    })
-    $Form.Controls.Add($BtnInstallApps)
+    if ($Global:LicenseType -notmatch "FREE") {
+        $BtnInstallApps = New-Object System.Windows.Forms.Button; $BtnInstallApps.Text="📦 CÀI ĐẶT ỨNG DỤNG ĐÃ CHỌN"; $BtnInstallApps.Location="10, 730"; $BtnInstallApps.Size="300,45"; $BtnInstallApps.BackColor="ForestGreen"; $BtnInstallApps.ForeColor="White"; $BtnInstallApps.FlatStyle="Flat"; $BtnInstallApps.Font=$FontBtn; 
+        $BtnInstallApps.Add_Click({
+            $ListToInstall = @()
+            foreach ($Page in $TabControl.TabPages) { if ($Page.Text -notmatch "DASHBOARD") { foreach ($Flow in $Page.Controls) { foreach ($Chk in $Flow.Controls) { if ($Chk -is [System.Windows.Forms.CheckBox] -and $Chk.Checked) { $ListToInstall += $Chk.Tag; $Chk.Checked = $false } } } } }
+            if ($ListToInstall.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn ít nhất 1 phần mềm!"); return }
+            
+            Write-GuiLog "Bắt đầu tải và cài đặt $($ListToInstall.Count) ứng dụng ngầm..."
+            $SyncHash_Win = [hashtable]::Synchronized(@{ Queue=$ListToInstall; BaseUrl=$BaseUrl; TempDir=$TempDir; Log=$Global:LogBox; MainUI=$Form })
+            $Runspace_Win = [runspacefactory]::CreateRunspace(); $Runspace_Win.Open(); $Runspace_Win.SessionStateProxy.SetVariable("sync", $SyncHash_Win)
+            $Pipe_Win = $Runspace_Win.CreatePipeline()
+            $Pipe_Win.Commands.AddScript({
+                foreach ($A in $sync.Queue) {
+                    $Line = "[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] Dang tai: $($A.name)`r`n"
+                    $sync.Log.Invoke([action]{ $sync.Log.AppendText($Line); $sync.Log.ScrollToCaret() })
+                    $OutFile = "$($sync.TempDir)\$($A.name).exe"
+                    $Url = if ($A.link -match "^http") { $A.link } else { "$($sync.BaseUrl)$($A.link)" }
+                    try { (New-Object System.Net.WebClient).DownloadFile($Url, $OutFile) } catch {}
+                    if (Test-Path $OutFile) { Start-Process $OutFile -Wait }
+                }
+                $sync.Log.Invoke([action]{ $sync.Log.AppendText("[$([DateTime]::Now.ToString('HH:mm:ss'))] [INSTALL] HOAN TAT CAI DAT TAT CA APP!`r`n"); $sync.Log.ScrollToCaret() })
+                $sync.MainUI.Invoke([action]{ [System.Windows.Forms.MessageBox]::Show("Đã cài đặt hoàn tất các ứng dụng được chọn!", "Thành công", 0, 64) })
+            }) | Out-Null; $Pipe_Win.InvokeAsync()
+        })
+        $Form.Controls.Add($BtnInstallApps)
+    }
 
     $BtnBuyKey = New-Object System.Windows.Forms.Button; $BtnBuyKey.Text="💎 CỬA HÀNG VIP"; $BtnBuyKey.Location="870, 730"; $BtnBuyKey.Size="200,45"; $BtnBuyKey.BackColor="Gold"; $BtnBuyKey.ForeColor="Black"; $BtnBuyKey.FlatStyle="Flat"; $BtnBuyKey.Font=$FontBtn; $BtnBuyKey.Add_Click({ Show-Store }); $Form.Controls.Add($BtnBuyKey)
 
@@ -740,7 +784,7 @@ function Load-WinForms {
     $Form.ShowDialog() | Out-Null; $Form.Dispose()
 }
 
-Write-Host "[TITAN-CORE] Bắt đầu nạp giao diện chính..." -ForegroundColor Yellow
+Write-Host "[PHATTAN-CORE] Bắt đầu nạp giao diện chính..." -ForegroundColor Yellow
 
 $Global:ExitApp = $false
 while (-not $Global:ExitApp) {
@@ -752,6 +796,6 @@ while (-not $Global:ExitApp) {
     }
 }
 
-Write-Host "[TITAN-CORE] Đã đóng Form, dọn dẹp hệ thống..." -ForegroundColor Green
+Write-Host "[PHATTAN-CORE] Đã đóng Form, dọn dẹp hệ thống..." -ForegroundColor Green
 [System.GC]::Collect()
 [Environment]::Exit(0)
