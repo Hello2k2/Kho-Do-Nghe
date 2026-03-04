@@ -1,6 +1,6 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.12.3 MAX (PhatTan PC Branding, UTF-8 JSON Fix)
+    Version: 20.12.4 MAX (Ultimate UTF-8 JSON Fix via Byte Stream)
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -42,19 +42,21 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
-# --- HÀM TẢI JSON (DÙNG WEBCLIENT + UTF8 ĐỂ VƯỢT LỖI MẠNG) ---
+# --- HÀM TẢI JSON (FIX CHUẨN MẠNG & UTF-8 BẰNG BYTE STREAM) ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
         Write-Host "[PHATTAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
         try { 
             $Ts = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-            $TempJsonFile = "$TempDir\temp_apps.json"
-            Invoke-WebRequest -Uri "$($JsonUrl)?t=$Ts" -OutFile $TempJsonFile -UseBasicParsing -ErrorAction Stop
-            if (Test-Path $TempJsonFile) {
-                $RawJson = Get-Content -Path $TempJsonFile -Encoding UTF8 -Raw
-                $Global:JsonData = $RawJson | ConvertFrom-Json
-                Remove-Item -Path $TempJsonFile -Force -ErrorAction SilentlyContinue
-            }
+            $UrlWithTs = "$($JsonUrl)?t=$Ts"
+            
+            # Sử dụng Invoke-WebRequest nhưng tải dưới dạng mảng Byte để bỏ qua lỗi Encoding mặc định
+            $Response = Invoke-WebRequest -Uri $UrlWithTs -UseBasicParsing -ErrorAction Stop
+            
+            # Ép mảng Byte thành chuỗi UTF-8 chuẩn xác
+            $RawJson = [System.Text.Encoding]::UTF8.GetString($Response.Content)
+            
+            $Global:JsonData = $RawJson | ConvertFrom-Json
         } catch { Write-Host "[PHATTAN-CORE] Lỗi tải JSON: $($_.Exception.Message)" -ForegroundColor Red }
     }
 }
@@ -150,13 +152,13 @@ function Show-Store {
     $BTrial = New-Object System.Windows.Forms.Button; $BTrial.Text="🎁 LẤY / GIA HẠN KEY 7 NGÀY (Cần Donate)"; $BTrial.Location="20,60"; $BTrial.Size="390,40"; $BTrial.BackColor="DarkMagenta"; $BTrial.ForeColor="White"; $BTrial.FlatStyle="Flat"; $BTrial.Font=$FontBtnSmall; $S.Controls.Add($BTrial)
     $BTrial.Add_Click({ $E = Show-Level2Pass "Nhập Email của bạn:"; if ($E -ne "CANCEL" -and $E -ne "") { $S.Cursor="WaitCursor"; $R = Call-API "request_trial" @{ email=$E }; [System.Windows.Forms.MessageBox]::Show($R.message, "Thông báo"); $S.Cursor="Default" } })
     $B1M = New-Object System.Windows.Forms.Button; $B1M.Text="🥉 VIP 1 THÁNG (29.000đ)"; $B1M.Location="20,110"; $B1M.Size="190,50"; $B1M.BackColor="MediumSeaGreen"; $B1M.ForeColor="White"; $B1M.FlatStyle="Flat"; $B1M.Font=$FontBtnSmall; $S.Controls.Add($B1M)
-    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=29000&email=$E" } })
+    $B1M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 1 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 29000 "MUA KEY 1M" $E "VIP 1 THÁNG" } })
     $B6M = New-Object System.Windows.Forms.Button; $B6M.Text="🥈 VIP 6 THÁNG (149.000đ)"; $B6M.Location="220,110"; $B6M.Size="190,50"; $B6M.BackColor="DodgerBlue"; $B6M.ForeColor="White"; $B6M.FlatStyle="Flat"; $B6M.Font=$FontBtnSmall; $S.Controls.Add($B6M)
-    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=149000&email=$E" } })
+    $B6M.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP 6 THÁNG:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 149000 "MUA KEY 6M" $E "VIP 6 THÁNG" } })
     $BFull = New-Object System.Windows.Forms.Button; $BFull.Text="💎 VIP VĨNH VIỄN (200.000đ)"; $BFull.Location="20,170"; $BFull.Size="190,50"; $BFull.BackColor="Gold"; $BFull.ForeColor="Black"; $BFull.FlatStyle="Flat"; $BFull.Font=$FontBtnSmall; $S.Controls.Add($BFull)
-    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=200000&email=$E" } })
+    $BFull.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp VIP VĨNH VIỄN:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 200000 "MUA KEY VIP" $E "VIP VĨNH VIỄN" } })
     $BFam = New-Object System.Windows.Forms.Button; $BFam.Text="👑 ĐẠI LÝ (800.000đ - 25 PC)"; $BFam.Location="220,170"; $BFam.Size="190,50"; $BFam.BackColor="DarkOrange"; $BFam.ForeColor="Black"; $BFam.FlatStyle="Flat"; $BFam.Font=$FontBtnSmall; $S.Controls.Add($BFam)
-    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Start-Process "https://phattan.id.vn/pay?amount=800000&email=$E" } })
+    $BFam.Add_Click({ $E = Show-Level2Pass "Nhập Email nâng cấp GÓI ĐẠI LÝ:"; if ($E -ne "CANCEL" -and $E -ne "") { Show-QRPay 800000 "MUA KEY MULTI" $E "GÓI ĐẠI LÝ" } })
     $S.ShowDialog() | Out-Null; $S.Dispose()
 }
 
