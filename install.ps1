@@ -411,6 +411,65 @@ function Invoke-SmartDownload ($Url, $OutFile) {
     if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { $p = Start-Process "curl" "-L -o `"$OutFile`" `"$Url`" -s --retry 3 -k" -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode -eq 0 -and (Test-Path $OutFile)) { return $true } }
     try { $w = New-Object System.Net.WebClient; $w.DownloadFile($Url, $OutFile); return $true } catch { return $false }
 }
+function Install-DiskGeniusAuto {
+    # Đường dẫn tải và đường dẫn lưu file tạm
+    $ZipUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/DiskGeniusProfessional.zip"
+    $ZipPath = "$TempDir\DiskGenius.zip"
+    $ExtractPath = "$TempDir\DiskGenius_Extracted"
+    
+    try {
+        Write-GuiLog "Đang tải DiskGenius Professional..."
+        # Đảm bảo thư mục tạm tồn tại
+        if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+        
+        # Tải file ZIP
+        $null = Invoke-SmartDownload $ZipUrl $ZipPath
+
+        Write-GuiLog "Đang giải nén file..."
+        if (Test-Path $ExtractPath) { Remove-Item -Path $ExtractPath -Recurse -Force | Out-Null }
+        Expand-Archive -Path $ZipPath -DestinationPath $ExtractPath -Force
+
+        # Cấu trúc giải nén của bạn có folder bọc ngoài là DiskGeniusProfessional
+        $BaseFolder = "$ExtractPath\DiskGeniusProfessional"
+        
+        Write-GuiLog "Đang cài đặt DiskGenius (Chế độ ngầm)..."
+        $InstallerPath = "$BaseFolder\DGEngSetup6011645.exe"
+        
+        if (Test-Path $InstallerPath) {
+            # Chạy file cài đặt với tham số Silent (Không hiện bảng hỏi, không restart)
+            Start-Process -FilePath $InstallerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+        } else {
+            Write-GuiLog "Lỗi: Không tìm thấy file cài đặt trong file Zip."
+            return
+        }
+
+        Write-GuiLog "Đang kiểm tra cấu trúc máy & chép file cấu hình..."
+        # Kiểm tra Windows/WinPE là 64-bit hay 32-bit
+        $is64Bit = [Environment]::Is64BitOperatingSystem
+
+        # Xác định thư mục lấy file x64 hay x86
+        $SourceArchFolder = if ($is64Bit) { "$BaseFolder\x64" } else { "$BaseFolder\x86" }
+
+        # Xác định thư mục cài đặt gốc của DiskGenius (Thường cài ở Program Files)
+        $InstallDir = if ($is64Bit) { "$env:ProgramW6432\DiskGenius" } else { "$env:ProgramFiles\DiskGenius" }
+        
+        # Fallback trong trường hợp cài vào x86 trên Win 64-bit
+        if (-not (Test-Path $InstallDir)) {
+            $InstallDir = "${env:ProgramFiles(x86)}\DiskGenius"
+        }
+
+        # Thực hiện chép đè file (msimg32.dll và Options.ini)
+        if (Test-Path $InstallDir) {
+            Copy-Item -Path "$SourceArchFolder\*" -Destination $InstallDir -Force -Recurse
+            Write-GuiLog "Cài đặt và kích hoạt DiskGenius thành công!"
+        } else {
+            Write-GuiLog "Lỗi: Không định vị được thư mục cài đặt của DiskGenius."
+        }
+        
+    } catch {
+        Write-GuiLog "Lỗi quá trình cài DiskGenius: $($_.Exception.Message)"
+    }
+}
 function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }; if ($L -notmatch "^http") { $L = "$BaseUrl$L" }; $D = "$TempDir\$N"; if (Invoke-SmartDownload $L $D) { if ($T -eq "Msi") { Start-Process "msiexec.exe" "/i `"$D`" /quiet /norestart" -Wait } else { Start-Process $D -Wait } } }
 
 function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
@@ -574,9 +633,9 @@ function Load-WPF {
                 $Btn.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này yêu cầu VIP!", "KHÓA", 0, 16) })
             } else {
                 $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($ColorHex); $Btn.Tag = $ColorHex
-                if ($Cmd -eq "DISK_GENIUS") { $Btn.Add_Click({ Write-GuiLog "Tai Cuu du lieu..."; Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }) }
+                if ($Cmd -eq "DISK_GENIUS") { $Btn.Add_Click({ Write-GuiLog "Tai va cai DiskGenius..."; Install-DiskGeniusAuto }) } 
                 else { $action = [scriptblock]::Create("Run-ModuleAsync `$this `"$Cmd`" `$true"); $Btn.Add_Click($action) }
-            }
+                }
             $WpfForm.FindName($PanelName).Children.Add($Btn)
         }
 
