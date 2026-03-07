@@ -8,6 +8,10 @@
       "M365 Education (Giáo dục)": "O365EduCloudRetail",
       "M365 Family / Personal": "O365HomePremRetail"
     },
+    "Office 2024 (Mới Nhất)": {
+      "Pro Plus 2024 (Volume)": "ProPlus2024Volume",
+      "Standard 2024 (Volume)": "Standard2024Volume"
+    },
     "Office 2021 (Mua 1 Lần)": {
       "Pro Plus 2021 (Volume - Khuyên dùng)": "ProPlus2021Volume",
       "Pro Plus 2021 (Retail - Key Online)": "ProPlus2021Retail",
@@ -21,6 +25,10 @@
     "Office 2016": {
       "Pro Plus 2016 (Volume)": "ProPlusVolume",
       "Standard 2016 (Volume)": "StandardVolume"
+    },
+    "Office 2013 (Tải ISO Offline)": {
+      "Pro Plus 2013 (ISO - Bản Full)": "ISO_2013_ProPlus",
+      "Standard 2013 (ISO)": "ISO_2013_Standard"
     }
   },
   "Extras": {
