@@ -242,85 +242,111 @@ function Show-DeviceManager {
 }
 
 function Show-ProfileForm {
-    $ProfForm = New-Object System.Windows.Forms.Form
-    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 420"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
-    
-    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
-    $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
-    if (Test-Path $Global:AvatarFile) { try { $Pic.Image = [System.Drawing.Image]::FromFile($Global:AvatarFile) } catch {} }
-    $ProfForm.Controls.Add($Pic)
+    $ProfForm = New-Object System.Windows.Forms.Form
+    # Kéo dài Form xuống 480 để nhét vừa khu vực Family
+    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 480"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
+    
+    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
+    $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
+    if (Test-Path $Global:AvatarFile) { try { $Pic.Image = [System.Drawing.Image]::FromFile($Global:AvatarFile) } catch {} }
+    $ProfForm.Controls.Add($Pic)
 
-    $BtnUpload = New-Object System.Windows.Forms.Button; $BtnUpload.Text="Đổi Avatar"; $BtnUpload.Location="30, 150"; $BtnUpload.Size="100, 30"; $BtnUpload.BackColor="SteelBlue"; $BtnUpload.FlatStyle="Flat"; $BtnUpload.Font=$FontBtnSmall
-    $BtnUpload.Add_Click({
-        $FD = New-Object System.Windows.Forms.OpenFileDialog; $FD.Filter = "Image Files|*.jpg;*.jpeg;*.png"
-        if ($FD.ShowDialog() -eq 'OK') {
-            try {
-                $Img = [System.Drawing.Image]::FromFile($FD.FileName); $Ratio = $Img.Width / $Img.Height; $NewW = 512; $NewH = 512
-                if ($Ratio -gt 1) { $NewH = [math]::Floor(512 / $Ratio) } else { $NewW = [math]::Floor(512 * $Ratio) }
-                $Bmp = New-Object System.Drawing.Bitmap($NewW, $NewH); $G = [System.Drawing.Graphics]::FromImage($Bmp); $G.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $G.DrawImage($Img, 0, 0, $NewW, $NewH); $G.Dispose(); $Img.Dispose()
-                if (Test-Path $Global:AvatarFile) { Remove-Item $Global:AvatarFile -Force }
-                $Bmp.Save($Global:AvatarFile, [System.Drawing.Imaging.ImageFormat]::Png); $Pic.Image = $Bmp
-            } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi xử lý ảnh!") }
-        }
-    })
-    $ProfForm.Controls.Add($BtnUpload)
+    $BtnUpload = New-Object System.Windows.Forms.Button; $BtnUpload.Text="Đổi Avatar"; $BtnUpload.Location="30, 150"; $BtnUpload.Size="100, 30"; $BtnUpload.BackColor="SteelBlue"; $BtnUpload.FlatStyle="Flat"; $BtnUpload.Font=$FontBtnSmall
+    $BtnUpload.Add_Click({
+        $FD = New-Object System.Windows.Forms.OpenFileDialog; $FD.Filter = "Image Files|*.jpg;*.jpeg;*.png"
+        if ($FD.ShowDialog() -eq 'OK') {
+            try {
+                $Img = [System.Drawing.Image]::FromFile($FD.FileName); $Ratio = $Img.Width / $Img.Height; $NewW = 512; $NewH = 512
+                if ($Ratio -gt 1) { $NewH = [math]::Floor(512 / $Ratio) } else { $NewW = [math]::Floor(512 * $Ratio) }
+                $Bmp = New-Object System.Drawing.Bitmap($NewW, $NewH); $G = [System.Drawing.Graphics]::FromImage($Bmp); $G.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $G.DrawImage($Img, 0, 0, $NewW, $NewH); $G.Dispose(); $Img.Dispose()
+                if (Test-Path $Global:AvatarFile) { Remove-Item $Global:AvatarFile -Force }
+                $Bmp.Save($Global:AvatarFile, [System.Drawing.Imaging.ImageFormat]::Png); $Pic.Image = $Bmp
+            } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi xử lý ảnh!") }
+        }
+    })
+    $ProfForm.Controls.Add($BtnUpload)
 
-    $L_Email = New-Object System.Windows.Forms.Label; $L_Email.Text = "📧 Email: $($Global:UserEmail)"; $L_Email.Location="160, 30"; $L_Email.AutoSize=$true; $L_Email.Font = $FontBtnSmall; $ProfForm.Controls.Add($L_Email)
-    $L_Plan = New-Object System.Windows.Forms.Label; $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"; $L_Plan.Location="160, 65"; $L_Plan.AutoSize=$true; $L_Plan.Font = $FontBtnSmall; $L_Plan.ForeColor="Lime"; $ProfForm.Controls.Add($L_Plan)
-    
-    $BtnChangeLocal = New-Object System.Windows.Forms.Button; $BtnChangeLocal.Text="🔑 Đổi Pass Tool (Cấp 2)"; $BtnChangeLocal.Location="160, 105"; $BtnChangeLocal.Size="200, 35"; $BtnChangeLocal.BackColor="OrangeRed"; $BtnChangeLocal.FlatStyle="Flat"; $BtnChangeLocal.Font=$FontBtnSmall
-    $BtnChangeLocal.Add_Click({
-        $Old = Show-Level2Pass "Nhập Pass Cấp 2 hiện tại (Hoặc Master Pass):"
-        if ($Old -eq "CANCEL" -or $Old -eq "") { return }
-        if ($Old -eq $Global:LocalPass -or $Old -eq $Global:ServerPass) {
-            $New = Show-Level2Pass "Nhập Mật mã Cấp 2 MỚI cho máy này:"
-            if ($New -ne "CANCEL" -and $New -ne "") { $Global:LocalPass = $New; Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass; [System.Windows.Forms.MessageBox]::Show("Đổi Mật mã thành công!") }
-        } else { [System.Windows.Forms.MessageBox]::Show("Sai Mật mã!", "Lỗi") }
-    })
-    $ProfForm.Controls.Add($BtnChangeLocal)
+    $L_Email = New-Object System.Windows.Forms.Label; $L_Email.Text = "📧 Email: $($Global:UserEmail)"; $L_Email.Location="160, 30"; $L_Email.AutoSize=$true; $L_Email.Font = $FontBtnSmall; $ProfForm.Controls.Add($L_Email)
+    $L_Plan = New-Object System.Windows.Forms.Label; $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"; $L_Plan.Location="160, 65"; $L_Plan.AutoSize=$true; $L_Plan.Font = $FontBtnSmall; $L_Plan.ForeColor="Lime"; $ProfForm.Controls.Add($L_Plan)
+    
+    $BtnChangeLocal = New-Object System.Windows.Forms.Button; $BtnChangeLocal.Text="🔑 Đổi Pass Tool (Cấp 2)"; $BtnChangeLocal.Location="160, 105"; $BtnChangeLocal.Size="200, 35"; $BtnChangeLocal.BackColor="OrangeRed"; $BtnChangeLocal.FlatStyle="Flat"; $BtnChangeLocal.Font=$FontBtnSmall
+    $BtnChangeLocal.Add_Click({
+        $Old = Show-Level2Pass "Nhập Pass Cấp 2 hiện tại (Hoặc Master Pass):"
+        if ($Old -eq "CANCEL" -or $Old -eq "") { return }
+        if ($Old -eq $Global:LocalPass -or $Old -eq $Global:ServerPass) {
+            $New = Show-Level2Pass "Nhập Mật mã Cấp 2 MỚI cho máy này:"
+            if ($New -ne "CANCEL" -and $New -ne "") { $Global:LocalPass = $New; Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass; [System.Windows.Forms.MessageBox]::Show("Đổi Mật mã thành công!") }
+        } else { [System.Windows.Forms.MessageBox]::Show("Sai Mật mã!", "Lỗi") }
+    })
+    $ProfForm.Controls.Add($BtnChangeLocal)
 
-    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
-    $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
-    $ProfForm.Controls.Add($BtnDeviceMgr)
+    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
+    $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
+    $ProfForm.Controls.Add($BtnDeviceMgr)
 
-    # --- KHU VỰC NHẬP KEY (GIFT CODE) ---
-    $LblKey = New-Object System.Windows.Forms.Label; $LblKey.Text = "🎁 Kích hoạt mã Key VIP:"; $LblKey.Location="160, 200"; $LblKey.AutoSize=$true; $LblKey.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblKey)
-    $TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="160, 225"; $TxtKey.Size="130, 25"; $TxtKey.Font = $FontText; $ProfForm.Controls.Add($TxtKey)
-    $BtnKey = New-Object System.Windows.Forms.Button; $BtnKey.Text="NHẬP"; $BtnKey.Location="300, 224"; $BtnKey.Size="60, 27"; $BtnKey.BackColor="MediumSeaGreen"; $BtnKey.ForeColor="White"; $BtnKey.FlatStyle="Flat"; $BtnKey.Font=$FontBtnSmall
-    $BtnKey.Add_Click({
-        $K = $TxtKey.Text.Trim()
-        if (!$K) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập mã Key!", "Lỗi"); return }
-        $ProfForm.Cursor = "WaitCursor"
-        $R = Call-API "redeem_key" @{ email=$Global:UserEmail; key_code=$K }
-        $ProfForm.Cursor = "Default"
-        if ($R.status -eq "success") {
-            [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công")
-            $Global:LicenseType = $R.new_package
-            $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"
-            Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass
-            $TxtKey.Text = ""
-        } else {
-            [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
-        }
-    })
-    $ProfForm.Controls.Add($BtnKey)
+    # --- KHU VỰC NHẬP KEY (GIFT CODE) ---
+    $LblKey = New-Object System.Windows.Forms.Label; $LblKey.Text = "🎁 Kích hoạt mã Key VIP:"; $LblKey.Location="160, 200"; $LblKey.AutoSize=$true; $LblKey.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblKey)
+    $TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="160, 225"; $TxtKey.Size="130, 25"; $TxtKey.Font = $FontText; $ProfForm.Controls.Add($TxtKey)
+    $BtnKey = New-Object System.Windows.Forms.Button; $BtnKey.Text="NHẬP"; $BtnKey.Location="300, 224"; $BtnKey.Size="60, 27"; $BtnKey.BackColor="MediumSeaGreen"; $BtnKey.ForeColor="White"; $BtnKey.FlatStyle="Flat"; $BtnKey.Font=$FontBtnSmall
+    $BtnKey.Add_Click({
+        $K = $TxtKey.Text.Trim()
+        if (!$K) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập mã Key!", "Lỗi"); return }
+        $ProfForm.Cursor = "WaitCursor"
+        $R = Call-API "redeem_key" @{ email=$Global:UserEmail; key_code=$K }
+        $ProfForm.Cursor = "Default"
+        if ($R.status -eq "success") {
+            [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công")
+            $Global:LicenseType = $R.new_package
+            $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"
+            Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass
+            $TxtKey.Text = ""
+        } else {
+            [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
+        }
+    })
+    $ProfForm.Controls.Add($BtnKey)
 
-    # --- NÚT ĐĂNG XUẤT ---
-    $BtnLogout = New-Object System.Windows.Forms.Button; $BtnLogout.Text="🚪 ĐĂNG XUẤT TÀI KHOẢN"; $BtnLogout.Location="160, 280"; $BtnLogout.Size="200, 40"; $BtnLogout.BackColor="Maroon"; $BtnLogout.ForeColor="White"; $BtnLogout.FlatStyle="Flat"; $BtnLogout.Font=$FontBtnSmall
-    $BtnLogout.Add_Click({
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc chắn muốn đăng xuất?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
-        if ($confirm -eq "Yes") {
-            if (Test-Path $Global:RegPath) { Remove-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue }
-            if (Test-Path $Global:SessionFile) { Remove-Item $Global:SessionFile -Force -ErrorAction SilentlyContinue }
-            [System.Windows.Forms.MessageBox]::Show("Đã đăng xuất thành công! Tool sẽ tự động đóng lại.", "Thông báo")
-            [Environment]::Exit(0)
-        }
-    })
-    $ProfForm.Controls.Add($BtnLogout)
+    # --- KHU VỰC THÊM THÀNH VIÊN FAMILY (NEW) ---
+    $LblFam = New-Object System.Windows.Forms.Label; $LblFam.Text = "👨‍👩‍👧‍👦 Thêm tài khoản con (Cần ĐẠI LÝ):"; $LblFam.Location="160, 265"; $LblFam.AutoSize=$true; $LblFam.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblFam)
+    $TxtFamEmail = New-Object System.Windows.Forms.TextBox; $TxtFamEmail.Location="160, 290"; $TxtFamEmail.Size="130, 25"; $TxtFamEmail.Font = $FontText; $ProfForm.Controls.Add($TxtFamEmail)
+    $BtnFamAdd = New-Object System.Windows.Forms.Button; $BtnFamAdd.Text="MỜI"; $BtnFamAdd.Location="300, 289"; $BtnFamAdd.Size="60, 27"; $BtnFamAdd.BackColor="DarkOrange"; $BtnFamAdd.ForeColor="Black"; $BtnFamAdd.FlatStyle="Flat"; $BtnFamAdd.Font=$FontBtnSmall
+    
+    # Kiểm tra nếu là gói ĐẠI LÝ mới cho bấm, không thì hiện cảnh báo
+    if ($Global:LicenseType -ne "MULTI") {
+        $BtnFamAdd.BackColor = "DimGray"; $BtnFamAdd.ForeColor = "Silver"
+        $BtnFamAdd.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này chỉ dành cho gói ĐẠI LÝ (MULTI). Vui lòng nâng cấp để mời bạn bè xài chung Key!", "Khóa tính năng", 0, 16) })
+    } else {
+        $BtnFamAdd.Add_Click({
+            $FamE = $TxtFamEmail.Text.Trim()
+            if (!$FamE) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập Email của người muốn mời!", "Lỗi"); return }
+            $ProfForm.Cursor = "WaitCursor"
+            $R = Call-API "add_family" @{ owner_email=$Global:UserEmail; member_email=$FamE }
+            $ProfForm.Cursor = "Default"
+            if ($R.status -eq "success") {
+                [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công", 0, 64)
+                $TxtFamEmail.Text = ""
+            } else {
+                [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
+            }
+        })
+    }
+    $ProfForm.Controls.Add($BtnFamAdd)
 
-    $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
+    # --- NÚT ĐĂNG XUẤT (Đã bị đẩy lùi xuống Y=340) ---
+    $BtnLogout = New-Object System.Windows.Forms.Button; $BtnLogout.Text="🚪 ĐĂNG XUẤT TÀI KHOẢN"; $BtnLogout.Location="160, 340"; $BtnLogout.Size="200, 40"; $BtnLogout.BackColor="Maroon"; $BtnLogout.ForeColor="White"; $BtnLogout.FlatStyle="Flat"; $BtnLogout.Font=$FontBtnSmall
+    $BtnLogout.Add_Click({
+        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc chắn muốn đăng xuất?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+        if ($confirm -eq "Yes") {
+            if (Test-Path $Global:RegPath) { Remove-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue }
+            if (Test-Path $Global:SessionFile) { Remove-Item $Global:SessionFile -Force -ErrorAction SilentlyContinue }
+            [System.Windows.Forms.MessageBox]::Show("Đã đăng xuất thành công! Tool sẽ tự động đóng lại.", "Thông báo")
+            [Environment]::Exit(0)
+        }
+    })
+    $ProfForm.Controls.Add($BtnLogout)
+
+    $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
 }
-
 # ==============================================================================
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
