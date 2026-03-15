@@ -516,7 +516,7 @@ function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
     $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
     $ProcInfo.FileName = "powershell.exe"
     
-    $GuiModules = "WinModder.ps1|AppStore.ps1|GeminiAI.ps1|BitLockerMgr.ps1|WinUpdatePro.ps1|DefenderMgr.ps1|SystemInfo.ps1|SystemRepair.ps1|ContextMenuManager.ps1|fixprinter_errors.ps1|AntiEFS.ps1"
+    $GuiModules = "WinModder.ps1|AppStore.ps1|GeminiAI.ps1|BitLockerMgr.ps1|WinUpdatePro.ps1|DefenderMgr.ps1|SystemInfo.ps1|SystemRepair.ps1|ContextMenuManager.ps1|fixprinter_errors.ps1|AntiEFS.ps1|WinActivator.ps1"
     
     if ($ModulePath -match $GuiModules) {
         $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
