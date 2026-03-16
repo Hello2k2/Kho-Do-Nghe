@@ -1,6 +1,8 @@
 <#
     TOOL CUU HO MAY TINH - PHAT TAN PC
-    Version: 20.15 TITANIUM MAX (Ultimate JSON TLS Fix via Curl, Version Synced)
+    Version: 23.2 TITANIUM ENTERPRISE (WPF Priority Fix + RGB Border Matrix)
+    - Hotfix: Ép WPF làm giao diện mặc định (Sửa lỗi load WinForms trước).
+    - Hotfix: Sửa lỗi "The handle is invalid" khi ép font Console.
 #>
 
 if ($host.Name -match "ISE") { Exit }
@@ -13,9 +15,10 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 
 Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ErrorActionPreference = "SilentlyContinue"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+$ErrorActionPreference = "SilentlyContinue"
 
-# TẠO BIẾN FONT DÙNG CHUNG
+# TẠO BIẾN FONT DÙNG CHUNG (Cho WinForms Fallback)
 $FontTitle = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
 $FontHeader = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
 $FontBtn = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
@@ -40,7 +43,10 @@ $Global:AvatarFile = "$env:LOCALAPPDATA\PhatTan_Avatar.png"
 $Global:IsAuthenticated = $false; $Global:LicenseType = "NONE"; $Global:UserEmail = ""; $Global:LocalPass = "root"; $Global:ServerPass = "root"
 $Global:LogBox = $null; $Global:JsonData = $null
 
-# --- HÀM TẢI JSON BẰNG CURL ĐỂ TRÁNH LỖI TLS CỦA .NET ---
+# FIX: KHỞI TẠO BIẾN ƯU TIÊN WPF MẶC ĐỊNH LÀ TRUE
+$Global:IsWpfMode = $true 
+
+# --- HÀM TẢI JSON BẰNG CURL HOẶC WEBCLIENT ---
 function Load-JsonData {
     if ($Global:JsonData -eq $null) {
         Write-Host "[PHATTAN-CORE] Đang tải danh sách Apps từ Server..." -ForegroundColor Yellow
@@ -49,7 +55,6 @@ function Load-JsonData {
             $UrlWithTs = "$($JsonUrl)?t=$Ts"
             $TempJsonFile = "$TempDir\temp_apps.json"
             
-            # CÁCH 1: Dùng Curl (Sát thủ vượt lỗi mạng & TLS)
             if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) {
                 Start-Process "curl.exe" "-sL -o `"$TempJsonFile`" `"$UrlWithTs`"" -Wait -NoNewWindow
                 if (Test-Path $TempJsonFile) {
@@ -60,7 +65,6 @@ function Load-JsonData {
                 }
             }
             
-            # CÁCH 2: Fallback lại WebClient nếu máy không có curl (Fake User-Agent thật)
             $wc = New-Object System.Net.WebClient
             $wc.Encoding = [System.Text.Encoding]::UTF8
             $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
@@ -105,7 +109,100 @@ function Load-Session {
 }
 
 # ==============================================================================
-# UI FORMS CƠ BẢN
+# HÀM RUN-MODULE BẰNG .NET PROCESS
+# ==============================================================================
+function Invoke-SmartDownload ($Url, $OutFile) {
+    if ($Url -match "drive\.google\.com") { $id = ""; if ($Url -match "id=([a-zA-Z0-9_-]+)") { $id = $matches[1] } elseif ($Url -match "/d/([a-zA-Z0-9_-]+)") { $id = $matches[1] }; if ($id) { $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession; $BaseDriveUrl = "https://drive.google.com/uc?id=$id&export=download"; try { $Resp1 = Invoke-WebRequest -Uri $BaseDriveUrl -WebSession $Session -UseBasicParsing -ErrorAction Stop; [System.IO.File]::WriteAllBytes($OutFile, $Resp1.Content); return $true } catch { $Html = $_.Exception.Response.GetResponseStream(); $Reader = New-Object System.IO.StreamReader($Html); $Content = $Reader.ReadToEnd(); $Reader.Close(); if ($Content -match "confirm=([a-zA-Z0-9_-]+)") { try { Invoke-WebRequest -Uri "$BaseDriveUrl&confirm=$($matches[1])" -OutFile $OutFile -WebSession $Session -UseBasicParsing; return $true } catch { return $false } } } } }
+    if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { $p = Start-Process "curl" "-L -o `"$OutFile`" `"$Url`" -s --retry 3 -k" -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode -eq 0 -and (Test-Path $OutFile)) { return $true } }
+    try { $w = New-Object System.Net.WebClient; $w.DownloadFile($Url, $OutFile); return $true } catch { return $false }
+}
+function Install-DiskGeniusAuto {
+    $ZipUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/DiskGeniusProfessional.zip"
+    $ZipPath = "$TempDir\DiskGenius.zip"
+    $ExtractPath = "$TempDir\DiskGenius_Extracted"
+    
+    try {
+        Write-GuiLog "Đang tải DiskGenius Professional..."
+        if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+        $null = Invoke-SmartDownload $ZipUrl $ZipPath
+
+        Write-GuiLog "Đang giải nén file..."
+        if (Test-Path $ExtractPath) { Remove-Item -Path $ExtractPath -Recurse -Force | Out-Null }
+        Expand-Archive -Path $ZipPath -DestinationPath $ExtractPath -Force
+
+        $BaseFolder = "$ExtractPath\DiskGeniusProfessional"
+        Write-GuiLog "Đang cài đặt DiskGenius (Chế độ ngầm)..."
+        $InstallerPath = "$BaseFolder\DGEngSetup6011645.exe"
+        
+        if (Test-Path $InstallerPath) {
+            Start-Process -FilePath $InstallerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+        } else { Write-GuiLog "Lỗi: Không tìm thấy file cài đặt trong file Zip."; return }
+
+        Write-GuiLog "Đang kiểm tra cấu trúc máy & chép file cấu hình..."
+        $is64Bit = [Environment]::Is64BitOperatingSystem
+        $SourceArchFolder = if ($is64Bit) { "$BaseFolder\x64" } else { "$BaseFolder\x86" }
+        $InstallDir = if ($is64Bit) { "$env:ProgramW6432\DiskGenius" } else { "$env:ProgramFiles\DiskGenius" }
+        if (-not (Test-Path $InstallDir)) { $InstallDir = "${env:ProgramFiles(x86)}\DiskGenius" }
+
+        if (Test-Path $InstallDir) {
+            Copy-Item -Path "$SourceArchFolder\*" -Destination $InstallDir -Force -Recurse
+            Write-GuiLog "Cài đặt và kích hoạt DiskGenius thành công!"
+        } else { Write-GuiLog "Lỗi: Không định vị được thư mục cài đặt của DiskGenius." }
+        
+    } catch { Write-GuiLog "Lỗi quá trình cài DiskGenius: $($_.Exception.Message)" }
+}
+
+function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }; if ($L -notmatch "^http") { $L = "$BaseUrl$L" }; $D = "$TempDir\$N"; if (Invoke-SmartDownload $L $D) { if ($T -eq "Msi") { Start-Process "msiexec.exe" "/i `"$D`" /quiet /norestart" -Wait } else { Start-Process $D -Wait } } }
+
+function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
+    $OriginalText = if ($IsWpfBtn) { $Btn.Content } else { $Btn.Text }
+    if ($OriginalText -match "ĐANG MỞ") { return }
+
+    Write-GuiLog "Dang nap tien trinh: $ModulePath"
+    if ($IsWpfBtn) {
+        $Btn.Content = "⏳ ĐANG MỞ..."; $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString("DimGray"); $Btn.IsEnabled = $false
+    } else {
+        $Btn.Text = "⏳ ĐANG MỞ..."; $Btn.BackColor = [System.Drawing.Color]::DimGray; $Btn.Enabled = $false
+    }
+    
+    $TargetUrl = "$($RawUrl)$($ModulePath)?t=$(Get-Date -UFormat %s)"
+    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'PhatTanPC/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }; [System.GC]::Collect(); [Environment]::Exit(0)"
+    $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
+    
+    $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $ProcInfo.FileName = "powershell.exe"
+    
+    $GuiModules = "WinModder.ps1|AppStore.ps1|GeminiAI.ps1|BitLockerMgr.ps1|WinUpdatePro.ps1|DefenderMgr.ps1|SystemInfo.ps1|SystemRepair.ps1|ContextMenuManager.ps1|fixprinter_errors.ps1|AntiEFS.ps1|WinActivator.ps1"
+    
+    if ($ModulePath -match $GuiModules) {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
+    } else {
+        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
+    }
+    $ProcInfo.UseShellExecute = $false
+    $Proc = [System.Diagnostics.Process]::Start($ProcInfo)
+    Write-GuiLog "Tien trinh doc lap [PID: $($Proc.Id)] da tao..."
+
+    $TimerState = New-Object PSObject -Property @{ Button = $Btn; OrigText = $OriginalText; OrigColor = $Btn.Tag; IsWpf = $IsWpfBtn; Timer = $null; Pid = $Proc.Id }
+    $CheckTimer = New-Object System.Windows.Forms.Timer; $CheckTimer.Interval = 1000; $CheckTimer.Tag = $TimerState 
+    $Global:Counter = 0
+    $CheckTimer.Add_Tick({
+        $State = $this.Tag; $Global:Counter++
+        if ($Global:Counter -ge 3) {
+            if ($State.IsWpf) { $State.Button.Content = $State.OrigText; $State.Button.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($State.OrigColor); $State.Button.IsEnabled = $true } 
+            else { $State.Button.Text = $State.OrigText; $State.Button.BackColor = $State.OrigColor; $State.Button.Enabled = $true }
+        }
+        $ProcStatus = Get-Process -Id $State.Pid -ErrorAction SilentlyContinue
+        if ($null -eq $ProcStatus) {
+            Write-GuiLog "=> [PID: $($State.Pid)] Da dong va don rac!"
+            $State.Timer.Stop(); $State.Timer.Dispose()
+        }
+    })
+    $TimerState.Timer = $CheckTimer; $CheckTimer.Start()
+}
+
+# ==============================================================================
+# UI FORMS CƠ BẢN (POPUP MỞ RỘNG)
 # ==============================================================================
 function Show-OtpInput ($Title, $Msg, $Link, $EmailToCheck) {
     $OForm = New-Object System.Windows.Forms.Form; $OForm.Text = $Title; $OForm.Size = "400, 240"; $OForm.StartPosition = "CenterParent"; $OForm.FormBorderStyle = "FixedToolWindow"; $OForm.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 25); $OForm.ForeColor = "White"
@@ -242,116 +339,110 @@ function Show-DeviceManager {
 }
 
 function Show-ProfileForm {
-    $ProfForm = New-Object System.Windows.Forms.Form
-    # Kéo dài Form xuống 480 để nhét vừa khu vực Family
-    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 480"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
-    
-    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
-    $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
-    if (Test-Path $Global:AvatarFile) { try { $Pic.Image = [System.Drawing.Image]::FromFile($Global:AvatarFile) } catch {} }
-    $ProfForm.Controls.Add($Pic)
+    $ProfForm = New-Object System.Windows.Forms.Form
+    $ProfForm.Text = "Hồ Sơ Của Tôi"; $ProfForm.Size = "400, 480"; $ProfForm.StartPosition = "CenterParent"; $ProfForm.BackColor = [System.Drawing.Color]::FromArgb(25,25,30); $ProfForm.ForeColor = "White"; $ProfForm.FormBorderStyle="FixedToolWindow"
+    
+    $Pic = New-Object System.Windows.Forms.PictureBox; $Pic.Size = "120,120"; $Pic.Location = "20,20"; $Pic.SizeMode = "StretchImage"; $Pic.BackColor = "Gray"
+    $Path = New-Object System.Drawing.Drawing2D.GraphicsPath; $Path.AddEllipse(0, 0, 120, 120); $Pic.Region = New-Object System.Drawing.Region($Path)
+    if (Test-Path $Global:AvatarFile) { try { $Pic.Image = [System.Drawing.Image]::FromFile($Global:AvatarFile) } catch {} }
+    $ProfForm.Controls.Add($Pic)
 
-    $BtnUpload = New-Object System.Windows.Forms.Button; $BtnUpload.Text="Đổi Avatar"; $BtnUpload.Location="30, 150"; $BtnUpload.Size="100, 30"; $BtnUpload.BackColor="SteelBlue"; $BtnUpload.FlatStyle="Flat"; $BtnUpload.Font=$FontBtnSmall
-    $BtnUpload.Add_Click({
-        $FD = New-Object System.Windows.Forms.OpenFileDialog; $FD.Filter = "Image Files|*.jpg;*.jpeg;*.png"
-        if ($FD.ShowDialog() -eq 'OK') {
-            try {
-                $Img = [System.Drawing.Image]::FromFile($FD.FileName); $Ratio = $Img.Width / $Img.Height; $NewW = 512; $NewH = 512
-                if ($Ratio -gt 1) { $NewH = [math]::Floor(512 / $Ratio) } else { $NewW = [math]::Floor(512 * $Ratio) }
-                $Bmp = New-Object System.Drawing.Bitmap($NewW, $NewH); $G = [System.Drawing.Graphics]::FromImage($Bmp); $G.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $G.DrawImage($Img, 0, 0, $NewW, $NewH); $G.Dispose(); $Img.Dispose()
-                if (Test-Path $Global:AvatarFile) { Remove-Item $Global:AvatarFile -Force }
-                $Bmp.Save($Global:AvatarFile, [System.Drawing.Imaging.ImageFormat]::Png); $Pic.Image = $Bmp
-            } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi xử lý ảnh!") }
-        }
-    })
-    $ProfForm.Controls.Add($BtnUpload)
+    $BtnUpload = New-Object System.Windows.Forms.Button; $BtnUpload.Text="Đổi Avatar"; $BtnUpload.Location="30, 150"; $BtnUpload.Size="100, 30"; $BtnUpload.BackColor="SteelBlue"; $BtnUpload.FlatStyle="Flat"; $BtnUpload.Font=$FontBtnSmall
+    $BtnUpload.Add_Click({
+        $FD = New-Object System.Windows.Forms.OpenFileDialog; $FD.Filter = "Image Files|*.jpg;*.jpeg;*.png"
+        if ($FD.ShowDialog() -eq 'OK') {
+            try {
+                $Img = [System.Drawing.Image]::FromFile($FD.FileName); $Ratio = $Img.Width / $Img.Height; $NewW = 512; $NewH = 512
+                if ($Ratio -gt 1) { $NewH = [math]::Floor(512 / $Ratio) } else { $NewW = [math]::Floor(512 * $Ratio) }
+                $Bmp = New-Object System.Drawing.Bitmap($NewW, $NewH); $G = [System.Drawing.Graphics]::FromImage($Bmp); $G.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $G.DrawImage($Img, 0, 0, $NewW, $NewH); $G.Dispose(); $Img.Dispose()
+                if (Test-Path $Global:AvatarFile) { Remove-Item $Global:AvatarFile -Force }
+                $Bmp.Save($Global:AvatarFile, [System.Drawing.Imaging.ImageFormat]::Png); $Pic.Image = $Bmp
+            } catch { [System.Windows.Forms.MessageBox]::Show("Lỗi xử lý ảnh!") }
+        }
+    })
+    $ProfForm.Controls.Add($BtnUpload)
 
-    $L_Email = New-Object System.Windows.Forms.Label; $L_Email.Text = "📧 Email: $($Global:UserEmail)"; $L_Email.Location="160, 30"; $L_Email.AutoSize=$true; $L_Email.Font = $FontBtnSmall; $ProfForm.Controls.Add($L_Email)
-    $L_Plan = New-Object System.Windows.Forms.Label; $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"; $L_Plan.Location="160, 65"; $L_Plan.AutoSize=$true; $L_Plan.Font = $FontBtnSmall; $L_Plan.ForeColor="Lime"; $ProfForm.Controls.Add($L_Plan)
-    
-    $BtnChangeLocal = New-Object System.Windows.Forms.Button; $BtnChangeLocal.Text="🔑 Đổi Pass Tool (Cấp 2)"; $BtnChangeLocal.Location="160, 105"; $BtnChangeLocal.Size="200, 35"; $BtnChangeLocal.BackColor="OrangeRed"; $BtnChangeLocal.FlatStyle="Flat"; $BtnChangeLocal.Font=$FontBtnSmall
-    $BtnChangeLocal.Add_Click({
-        $Old = Show-Level2Pass "Nhập Pass Cấp 2 hiện tại (Hoặc Master Pass):"
-        if ($Old -eq "CANCEL" -or $Old -eq "") { return }
-        if ($Old -eq $Global:LocalPass -or $Old -eq $Global:ServerPass) {
-            $New = Show-Level2Pass "Nhập Mật mã Cấp 2 MỚI cho máy này:"
-            if ($New -ne "CANCEL" -and $New -ne "") { $Global:LocalPass = $New; Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass; [System.Windows.Forms.MessageBox]::Show("Đổi Mật mã thành công!") }
-        } else { [System.Windows.Forms.MessageBox]::Show("Sai Mật mã!", "Lỗi") }
-    })
-    $ProfForm.Controls.Add($BtnChangeLocal)
+    $L_Email = New-Object System.Windows.Forms.Label; $L_Email.Text = "📧 Email: $($Global:UserEmail)"; $L_Email.Location="160, 30"; $L_Email.AutoSize=$true; $L_Email.Font = $FontBtnSmall; $ProfForm.Controls.Add($L_Email)
+    $L_Plan = New-Object System.Windows.Forms.Label; $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"; $L_Plan.Location="160, 65"; $L_Plan.AutoSize=$true; $L_Plan.Font = $FontBtnSmall; $L_Plan.ForeColor="Lime"; $ProfForm.Controls.Add($L_Plan)
+    
+    $BtnChangeLocal = New-Object System.Windows.Forms.Button; $BtnChangeLocal.Text="🔑 Đổi Pass Tool (Cấp 2)"; $BtnChangeLocal.Location="160, 105"; $BtnChangeLocal.Size="200, 35"; $BtnChangeLocal.BackColor="OrangeRed"; $BtnChangeLocal.FlatStyle="Flat"; $BtnChangeLocal.Font=$FontBtnSmall
+    $BtnChangeLocal.Add_Click({
+        $Old = Show-Level2Pass "Nhập Pass Cấp 2 hiện tại (Hoặc Master Pass):"
+        if ($Old -eq "CANCEL" -or $Old -eq "") { return }
+        if ($Old -eq $Global:LocalPass -or $Old -eq $Global:ServerPass) {
+            $New = Show-Level2Pass "Nhập Mật mã Cấp 2 MỚI cho máy này:"
+            if ($New -ne "CANCEL" -and $New -ne "") { $Global:LocalPass = $New; Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass; [System.Windows.Forms.MessageBox]::Show("Đổi Mật mã thành công!") }
+        } else { [System.Windows.Forms.MessageBox]::Show("Sai Mật mã!", "Lỗi") }
+    })
+    $ProfForm.Controls.Add($BtnChangeLocal)
 
-    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
-    $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
-    $ProfForm.Controls.Add($BtnDeviceMgr)
+    $BtnDeviceMgr = New-Object System.Windows.Forms.Button; $BtnDeviceMgr.Text="💻 QUẢN LÝ THIẾT BỊ (Đăng xuất)"; $BtnDeviceMgr.Location="160, 150"; $BtnDeviceMgr.Size="200, 35"; $BtnDeviceMgr.BackColor="Teal"; $BtnDeviceMgr.FlatStyle="Flat"; $BtnDeviceMgr.Font=$FontBtnSmall
+    $BtnDeviceMgr.Add_Click({ Show-DeviceManager })
+    $ProfForm.Controls.Add($BtnDeviceMgr)
 
-    # --- KHU VỰC NHẬP KEY (GIFT CODE) ---
-    $LblKey = New-Object System.Windows.Forms.Label; $LblKey.Text = "🎁 Kích hoạt mã Key VIP:"; $LblKey.Location="160, 200"; $LblKey.AutoSize=$true; $LblKey.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblKey)
-    $TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="160, 225"; $TxtKey.Size="130, 25"; $TxtKey.Font = $FontText; $ProfForm.Controls.Add($TxtKey)
-    $BtnKey = New-Object System.Windows.Forms.Button; $BtnKey.Text="NHẬP"; $BtnKey.Location="300, 224"; $BtnKey.Size="60, 27"; $BtnKey.BackColor="MediumSeaGreen"; $BtnKey.ForeColor="White"; $BtnKey.FlatStyle="Flat"; $BtnKey.Font=$FontBtnSmall
-    $BtnKey.Add_Click({
-        $K = $TxtKey.Text.Trim()
-        if (!$K) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập mã Key!", "Lỗi"); return }
-        $ProfForm.Cursor = "WaitCursor"
-        $R = Call-API "redeem_key" @{ email=$Global:UserEmail; key_code=$K }
-        $ProfForm.Cursor = "Default"
-        if ($R.status -eq "success") {
-            [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công")
-            $Global:LicenseType = $R.new_package
-            $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"
-            Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass
-            $TxtKey.Text = ""
-        } else {
-            [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
-        }
-    })
-    $ProfForm.Controls.Add($BtnKey)
+    $LblKey = New-Object System.Windows.Forms.Label; $LblKey.Text = "🎁 Kích hoạt mã Key VIP:"; $LblKey.Location="160, 200"; $LblKey.AutoSize=$true; $LblKey.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblKey)
+    $TxtKey = New-Object System.Windows.Forms.TextBox; $TxtKey.Location="160, 225"; $TxtKey.Size="130, 25"; $TxtKey.Font = $FontText; $ProfForm.Controls.Add($TxtKey)
+    $BtnKey = New-Object System.Windows.Forms.Button; $BtnKey.Text="NHẬP"; $BtnKey.Location="300, 224"; $BtnKey.Size="60, 27"; $BtnKey.BackColor="MediumSeaGreen"; $BtnKey.ForeColor="White"; $BtnKey.FlatStyle="Flat"; $BtnKey.Font=$FontBtnSmall
+    $BtnKey.Add_Click({
+        $K = $TxtKey.Text.Trim()
+        if (!$K) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập mã Key!", "Lỗi"); return }
+        $ProfForm.Cursor = "WaitCursor"
+        $R = Call-API "redeem_key" @{ email=$Global:UserEmail; key_code=$K }
+        $ProfForm.Cursor = "Default"
+        if ($R.status -eq "success") {
+            [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công")
+            $Global:LicenseType = $R.new_package
+            $L_Plan.Text = "💎 Gói: $($Global:LicenseType)"
+            Save-Session $Global:UserEmail $Global:LicenseType $Global:MyHWID $Global:LocalPass $Global:ServerPass
+            $TxtKey.Text = ""
+        } else {
+            [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
+        }
+    })
+    $ProfForm.Controls.Add($BtnKey)
 
-    # --- KHU VỰC THÊM THÀNH VIÊN FAMILY (NEW) ---
-    $LblFam = New-Object System.Windows.Forms.Label; $LblFam.Text = "👨‍👩‍👧‍👦 Thêm tài khoản con (Cần ĐẠI LÝ):"; $LblFam.Location="160, 265"; $LblFam.AutoSize=$true; $LblFam.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblFam)
-    $TxtFamEmail = New-Object System.Windows.Forms.TextBox; $TxtFamEmail.Location="160, 290"; $TxtFamEmail.Size="130, 25"; $TxtFamEmail.Font = $FontText; $ProfForm.Controls.Add($TxtFamEmail)
-    $BtnFamAdd = New-Object System.Windows.Forms.Button; $BtnFamAdd.Text="MỜI"; $BtnFamAdd.Location="300, 289"; $BtnFamAdd.Size="60, 27"; $BtnFamAdd.BackColor="DarkOrange"; $BtnFamAdd.ForeColor="Black"; $BtnFamAdd.FlatStyle="Flat"; $BtnFamAdd.Font=$FontBtnSmall
-    
-    # Kiểm tra nếu là gói ĐẠI LÝ mới cho bấm, không thì hiện cảnh báo
+    $LblFam = New-Object System.Windows.Forms.Label; $LblFam.Text = "👨‍👩‍👧‍👦 Thêm tài khoản con (ĐẠI LÝ):"; $LblFam.Location="160, 265"; $LblFam.AutoSize=$true; $LblFam.Font = $FontBtnSmall; $ProfForm.Controls.Add($LblFam)
+    $TxtFamEmail = New-Object System.Windows.Forms.TextBox; $TxtFamEmail.Location="160, 290"; $TxtFamEmail.Size="130, 25"; $TxtFamEmail.Font = $FontText; $ProfForm.Controls.Add($TxtFamEmail)
+    $BtnFamAdd = New-Object System.Windows.Forms.Button; $BtnFamAdd.Text="MỜI"; $BtnFamAdd.Location="300, 289"; $BtnFamAdd.Size="60, 27"; $BtnFamAdd.BackColor="DarkOrange"; $BtnFamAdd.ForeColor="Black"; $BtnFamAdd.FlatStyle="Flat"; $BtnFamAdd.Font=$FontBtnSmall
+    
     if ($Global:LicenseType -ne "MULTI") {
-        $BtnFamAdd.BackColor = "DimGray"; $BtnFamAdd.ForeColor = "Silver"
-        $BtnFamAdd.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này chỉ dành cho gói ĐẠI LÝ (MULTI). Vui lòng nâng cấp để mời bạn bè xài chung Key!", "Khóa tính năng", 0, 16) })
-    } else {
-        $BtnFamAdd.Add_Click({
-            $FamE = $TxtFamEmail.Text.Trim()
-            if (!$FamE) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập Email của người muốn mời!", "Lỗi"); return }
-            $ProfForm.Cursor = "WaitCursor"
-            $R = Call-API "add_family" @{ owner_email=$Global:UserEmail; member_email=$FamE }
-            $ProfForm.Cursor = "Default"
-            if ($R.status -eq "success") {
-                [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công", 0, 64)
-                $TxtFamEmail.Text = ""
-            } else {
-                [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16)
-            }
-        })
-    }
-    $ProfForm.Controls.Add($BtnFamAdd)
+        $BtnFamAdd.BackColor = "DimGray"; $BtnFamAdd.ForeColor = "Silver"
+        $BtnFamAdd.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này chỉ dành cho gói ĐẠI LÝ (MULTI). Vui lòng nâng cấp để mời bạn bè xài chung Key!", "Khóa tính năng", 0, 16) })
+    } else {
+        $BtnFamAdd.Add_Click({
+            $FamE = $TxtFamEmail.Text.Trim()
+            if (!$FamE) { [System.Windows.Forms.MessageBox]::Show("Vui lòng nhập Email của người muốn mời!", "Lỗi"); return }
+            $ProfForm.Cursor = "WaitCursor"
+            $R = Call-API "add_family" @{ owner_email=$Global:UserEmail; member_email=$FamE }
+            $ProfForm.Cursor = "Default"
+            if ($R.status -eq "success") {
+                [System.Windows.Forms.MessageBox]::Show($R.message, "Thành công", 0, 64)
+                $TxtFamEmail.Text = ""
+            } else { [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16) }
+        })
+    }
+    $ProfForm.Controls.Add($BtnFamAdd)
 
-    # --- NÚT ĐĂNG XUẤT (Đã bị đẩy lùi xuống Y=340) ---
-    $BtnLogout = New-Object System.Windows.Forms.Button; $BtnLogout.Text="🚪 ĐĂNG XUẤT TÀI KHOẢN"; $BtnLogout.Location="160, 340"; $BtnLogout.Size="200, 40"; $BtnLogout.BackColor="Maroon"; $BtnLogout.ForeColor="White"; $BtnLogout.FlatStyle="Flat"; $BtnLogout.Font=$FontBtnSmall
-    $BtnLogout.Add_Click({
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc chắn muốn đăng xuất?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
-        if ($confirm -eq "Yes") {
-            if (Test-Path $Global:RegPath) { Remove-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue }
-            if (Test-Path $Global:SessionFile) { Remove-Item $Global:SessionFile -Force -ErrorAction SilentlyContinue }
-            [System.Windows.Forms.MessageBox]::Show("Đã đăng xuất thành công! Tool sẽ tự động đóng lại.", "Thông báo")
-            [Environment]::Exit(0)
-        }
-    })
-    $ProfForm.Controls.Add($BtnLogout)
+    $BtnLogout = New-Object System.Windows.Forms.Button; $BtnLogout.Text="🚪 ĐĂNG XUẤT TÀI KHOẢN"; $BtnLogout.Location="160, 340"; $BtnLogout.Size="200, 40"; $BtnLogout.BackColor="Maroon"; $BtnLogout.ForeColor="White"; $BtnLogout.FlatStyle="Flat"; $BtnLogout.Font=$FontBtnSmall
+    $BtnLogout.Add_Click({
+        $confirm = [System.Windows.Forms.MessageBox]::Show("Bạn có chắc chắn muốn đăng xuất?", "Xác nhận", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+        if ($confirm -eq "Yes") {
+            if (Test-Path $Global:RegPath) { Remove-ItemProperty -Path $Global:RegPath -Name "SessionData" -ErrorAction SilentlyContinue }
+            if (Test-Path $Global:SessionFile) { Remove-Item $Global:SessionFile -Force -ErrorAction SilentlyContinue }
+            [System.Windows.Forms.MessageBox]::Show("Đã đăng xuất thành công! Tool sẽ tự động đóng lại.", "Thông báo")
+            [Environment]::Exit(0)
+        }
+    })
+    $ProfForm.Controls.Add($BtnLogout)
 
-    $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
+    $ProfForm.ShowDialog() | Out-Null; $ProfForm.Dispose()
 }
+
 # ==============================================================================
 # GIAO DIỆN ĐĂNG NHẬP GATEWAY
 # ==============================================================================
 function Show-AuthGateway {
-    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "PHATTAN_PC ENGINE V20.15 TITANIUM MAX | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
+    $Auth = New-Object System.Windows.Forms.Form; $Auth.Text = "PHATTAN_PC ENGINE V23.2 TITANIUM | HWID: $($Global:MyHWID)"; $Auth.Size = "500, 530"; $Auth.StartPosition = "CenterScreen"; $Auth.FormBorderStyle = "FixedToolWindow"; $Auth.BackColor = [System.Drawing.Color]::FromArgb(15, 15, 18); $Auth.ForeColor = "White"
     $LTitle = New-Object System.Windows.Forms.Label; $LTitle.Text = "PHATTAN_PC TOOLKIT LOGIN"; $LTitle.Font = $FontTitle; $LTitle.ForeColor = "DeepSkyBlue"; $LTitle.AutoSize = $true; $LTitle.Location = "105, 15"; $Auth.Controls.Add($LTitle)
     
     $PnlLogin = New-Object System.Windows.Forms.Panel; $PnlLogin.Size = "460, 400"; $PnlLogin.Location = "10, 60"; $Auth.Controls.Add($PnlLogin)
@@ -360,7 +451,7 @@ function Show-AuthGateway {
     $BLog = New-Object System.Windows.Forms.Button; $BLog.Text="ĐĂNG NHẬP SERVER"; $BLog.Location="20,135"; $BLog.Size="420,45"; $BLog.BackColor="DodgerBlue"; $BLog.ForeColor="White"; $BLog.Font=$FontBtn; $BLog.FlatStyle="Flat"; $PnlLogin.Controls.Add($BLog)
     $BLog.Add_Click({
         if ($TUser.Text -and $TPass.Text) {
-            $Auth.Cursor = "WaitCursor"; $BLog.Text = "ĐANG CHECK DATABASE..."; 
+            $Auth.Cursor = "WaitCursor"; $BLog.Text = "ĐANG CHECK DATABASE..." 
             $R = Call-API "login" @{ email=$TUser.Text; password=$TPass.Text; hwid=$Global:MyHWID; machine_name=$Global:PCName }
             if ($R.status -eq "error" -or $R.status -eq "banned" -or $R.status -eq "fail") { [System.Windows.Forms.MessageBox]::Show($R.message, "Lỗi", 0, 16) }
             else {
@@ -424,276 +515,310 @@ if (-not $Global:IsAuthenticated) { Exit }
 
 Write-Host "[PHATTAN-CORE] Xac thuc thanh cong! Nap Giao dien..." -ForegroundColor Green
 
-# CHỈ LOAD JSON VÀ HIỆN TAB ỨNG DỤNG NẾU TÀI KHOẢN LÀ VIP TRỞ LÊN
 if ($Global:LicenseType -notmatch "FREE") {
     Load-JsonData
 }
 
 # ==============================================================================
-# HÀM RUN-MODULE BẰNG .NET PROCESS
+# GIAO DIỆN CHÍNH BẰNG WPF TITANIUM VỚI RGB BORDER
 # ==============================================================================
-function Invoke-SmartDownload ($Url, $OutFile) {
-    if ($Url -match "drive\.google\.com") { $id = ""; if ($Url -match "id=([a-zA-Z0-9_-]+)") { $id = $matches[1] } elseif ($Url -match "/d/([a-zA-Z0-9_-]+)") { $id = $matches[1] }; if ($id) { $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession; $BaseDriveUrl = "https://drive.google.com/uc?id=$id&export=download"; try { $Resp1 = Invoke-WebRequest -Uri $BaseDriveUrl -WebSession $Session -UseBasicParsing -ErrorAction Stop; [System.IO.File]::WriteAllBytes($OutFile, $Resp1.Content); return $true } catch { $Html = $_.Exception.Response.GetResponseStream(); $Reader = New-Object System.IO.StreamReader($Html); $Content = $Reader.ReadToEnd(); $Reader.Close(); if ($Content -match "confirm=([a-zA-Z0-9_-]+)") { try { Invoke-WebRequest -Uri "$BaseDriveUrl&confirm=$($matches[1])" -OutFile $OutFile -WebSession $Session -UseBasicParsing; return $true } catch { return $false } } } } }
-    if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { $p = Start-Process "curl" "-L -o `"$OutFile`" `"$Url`" -s --retry 3 -k" -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode -eq 0 -and (Test-Path $OutFile)) { return $true } }
-    try { $w = New-Object System.Net.WebClient; $w.DownloadFile($Url, $OutFile); return $true } catch { return $false }
-}
-function Install-DiskGeniusAuto {
-    # Đường dẫn tải và đường dẫn lưu file tạm
-    $ZipUrl = "https://github.com/Hello2k2/Kho-Do-Nghe/releases/download/v1.0/DiskGeniusProfessional.zip"
-    $ZipPath = "$TempDir\DiskGenius.zip"
-    $ExtractPath = "$TempDir\DiskGenius_Extracted"
-    
-    try {
-        Write-GuiLog "Đang tải DiskGenius Professional..."
-        # Đảm bảo thư mục tạm tồn tại
-        if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
-        
-        # Tải file ZIP
-        $null = Invoke-SmartDownload $ZipUrl $ZipPath
-
-        Write-GuiLog "Đang giải nén file..."
-        if (Test-Path $ExtractPath) { Remove-Item -Path $ExtractPath -Recurse -Force | Out-Null }
-        Expand-Archive -Path $ZipPath -DestinationPath $ExtractPath -Force
-
-        # Cấu trúc giải nén của bạn có folder bọc ngoài là DiskGeniusProfessional
-        $BaseFolder = "$ExtractPath\DiskGeniusProfessional"
-        
-        Write-GuiLog "Đang cài đặt DiskGenius (Chế độ ngầm)..."
-        $InstallerPath = "$BaseFolder\DGEngSetup6011645.exe"
-        
-        if (Test-Path $InstallerPath) {
-            # Chạy file cài đặt với tham số Silent (Không hiện bảng hỏi, không restart)
-            Start-Process -FilePath $InstallerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
-        } else {
-            Write-GuiLog "Lỗi: Không tìm thấy file cài đặt trong file Zip."
-            return
-        }
-
-        Write-GuiLog "Đang kiểm tra cấu trúc máy & chép file cấu hình..."
-        # Kiểm tra Windows/WinPE là 64-bit hay 32-bit
-        $is64Bit = [Environment]::Is64BitOperatingSystem
-
-        # Xác định thư mục lấy file x64 hay x86
-        $SourceArchFolder = if ($is64Bit) { "$BaseFolder\x64" } else { "$BaseFolder\x86" }
-
-        # Xác định thư mục cài đặt gốc của DiskGenius (Thường cài ở Program Files)
-        $InstallDir = if ($is64Bit) { "$env:ProgramW6432\DiskGenius" } else { "$env:ProgramFiles\DiskGenius" }
-        
-        # Fallback trong trường hợp cài vào x86 trên Win 64-bit
-        if (-not (Test-Path $InstallDir)) {
-            $InstallDir = "${env:ProgramFiles(x86)}\DiskGenius"
-        }
-
-        # Thực hiện chép đè file (msimg32.dll và Options.ini)
-        if (Test-Path $InstallDir) {
-            Copy-Item -Path "$SourceArchFolder\*" -Destination $InstallDir -Force -Recurse
-            Write-GuiLog "Cài đặt và kích hoạt DiskGenius thành công!"
-        } else {
-            Write-GuiLog "Lỗi: Không định vị được thư mục cài đặt của DiskGenius."
-        }
-        
-    } catch {
-        Write-GuiLog "Lỗi quá trình cài DiskGenius: $($_.Exception.Message)"
-    }
-}
-function Tai-Va-Chay { param ($L, $N, $T); if (!(Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }; if ($L -notmatch "^http") { $L = "$BaseUrl$L" }; $D = "$TempDir\$N"; if (Invoke-SmartDownload $L $D) { if ($T -eq "Msi") { Start-Process "msiexec.exe" "/i `"$D`" /quiet /norestart" -Wait } else { Start-Process $D -Wait } } }
-
-function Run-ModuleAsync ($Btn, $ModulePath, $IsWpfBtn = $false) {
-    $OriginalText = if ($IsWpfBtn) { $Btn.Content } else { $Btn.Text }
-    if ($OriginalText -match "ĐANG MỞ") { return }
-
-    Write-GuiLog "Dang nap tien trinh: $ModulePath"
-    if ($IsWpfBtn) {
-        $Btn.Content = "⏳ ĐANG MỞ..."; $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString("DimGray"); $Btn.IsEnabled = $false
-    } else {
-        $Btn.Text = "⏳ ĐANG MỞ..."; $Btn.BackColor = [System.Drawing.Color]::DimGray; $Btn.Enabled = $false
-    }
-    
-    $TargetUrl = "$($RawUrl)$($ModulePath)?t=$(Get-Date -UFormat %s)"
-    $StubCmd = "[System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 12288; `$c = `$null; try { `$w = New-Object System.Net.WebClient; `$w.Headers.Add('User-Agent', 'PhatTanPC/20'); `$w.Encoding = [System.Text.Encoding]::UTF8; `$c = `$w.DownloadString('$TargetUrl'); `$w.Dispose() } catch {}; if (`$c) { [scriptblock]::Create(`$c).Invoke() }; [System.GC]::Collect(); [Environment]::Exit(0)"
-    $Encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($StubCmd))
-    
-    $ProcInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $ProcInfo.FileName = "powershell.exe"
-    
-    $GuiModules = "WinModder.ps1|AppStore.ps1|GeminiAI.ps1|BitLockerMgr.ps1|WinUpdatePro.ps1|DefenderMgr.ps1|SystemInfo.ps1|SystemRepair.ps1|ContextMenuManager.ps1|fixprinter_errors.ps1|AntiEFS.ps1|WinActivator.ps1"
-    
-    if ($ModulePath -match $GuiModules) {
-        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -EncodedCommand $Encoded"
-    } else {
-        $ProcInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $Encoded"
-    }
-    $ProcInfo.UseShellExecute = $false
-    $Proc = [System.Diagnostics.Process]::Start($ProcInfo)
-    Write-GuiLog "Tien trinh doc lap [PID: $($Proc.Id)] da tao..."
-
-    $TimerState = New-Object PSObject -Property @{ Button = $Btn; OrigText = $OriginalText; OrigColor = $Btn.Tag; IsWpf = $IsWpfBtn; Timer = $null; Pid = $Proc.Id }
-    $CheckTimer = New-Object System.Windows.Forms.Timer; $CheckTimer.Interval = 1000; $CheckTimer.Tag = $TimerState 
-    $Global:Counter = 0
-    $CheckTimer.Add_Tick({
-        $State = $this.Tag; $Global:Counter++
-        if ($Global:Counter -ge 3) {
-            if ($State.IsWpf) { $State.Button.Content = $State.OrigText; $State.Button.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($State.OrigColor); $State.Button.IsEnabled = $true } 
-            else { $State.Button.Text = $State.OrigText; $State.Button.BackColor = $State.OrigColor; $State.Button.Enabled = $true }
-        }
-        $ProcStatus = Get-Process -Id $State.Pid -ErrorAction SilentlyContinue
-        if ($null -eq $ProcStatus) {
-            Write-GuiLog "=> [PID: $($State.Pid)] Da dong va don rac!"
-            $State.Timer.Stop(); $State.Timer.Dispose()
-        }
-    })
-    $TimerState.Timer = $CheckTimer; $CheckTimer.Start()
-}
-
-# ==============================================================================
-# GIAO DIỆN WPF
-# ==============================================================================
-$Global:IsWpfMode = $true 
-
 function Load-WPF {
     try {
         Add-Type -AssemblyName PresentationFramework -ErrorAction Stop; Add-Type -AssemblyName PresentationCore; Add-Type -AssemblyName WindowsBase
         
-        $JsonTabsXaml = ""
+        $SidebarBtnsXaml = ""
+        $TabPanelsXaml = ""
+        
+        $SidebarBtnsXaml += @"
+            <Button Name="btnTab_SystemTools" Content="DASHBOARD CÔNG CỤ" Style="{StaticResource SidebarBtn}" Background="#34495E"/>
+"@
+        $TabPanelsXaml += @"
+            <Grid Name="panel_SystemTools" Visibility="Visible">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <Border Background="#151515" CornerRadius="8" Padding="15" Margin="0,0,0,15" BorderBrush="#333" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="HỆ THỐNG (SYSTEM)" Foreground="#3498DB" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <WrapPanel Name="wpSystem"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#151515" CornerRadius="8" Padding="15" Margin="0,0,0,15" BorderBrush="#333" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="BẢO MẬT (SECURITY)" Foreground="#9B59B6" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <WrapPanel Name="wpSecurity"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#151515" CornerRadius="8" Padding="15" BorderBrush="#333" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="CÀI ĐẶT (INSTALL)" Foreground="#2ECC71" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <WrapPanel Name="wpInstall"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+"@
+
         if ($Global:JsonData) {
             $JsonTabs = $Global:JsonData | Select-Object -ExpandProperty tab -Unique
             foreach ($T in $JsonTabs) {
                 $SafeHeader = [Security.SecurityElement]::Escape($T.ToUpper())
-                $PanelName = "wpTab_" + ($T -replace '[^a-zA-Z0-9]', '')
-                $JsonTabsXaml += @"
-                    <TabItem Header=" $SafeHeader ">
+                $SafeID = ($T -replace '[^a-zA-Z0-9]', '')
+                
+                $SidebarBtnsXaml += @"
+                    <Button Name="btnTab_$SafeID" Content="$SafeHeader" Style="{StaticResource SidebarBtn}"/>
+"@
+                $TabPanelsXaml += @"
+                    <Grid Name="panel_$SafeID" Visibility="Collapsed">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <WrapPanel Name="$PanelName" Margin="20"/>
+                            <WrapPanel Name="wpTab_$SafeID" Margin="20"/>
                         </ScrollViewer>
-                    </TabItem>
+                    </Grid>
 "@
             }
         }
 
         [xml]$WpfXaml = @"
-<?xml version="1.0" encoding="utf-8"?>
         <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                Title="PHAT TAN PC V20.15 TITANIUM MAX | USER: $($Global:UserEmail)" 
-                Height="850" Width="1100" WindowStartupLocation="CenterScreen" Background="#19191E" FontFamily="Segoe UI">
+                Title="PHAT TAN PC V23.2 TITANIUM ENTERPRISE | USER: $($Global:UserEmail)" 
+                Height="850" Width="1200" WindowStartupLocation="CenterScreen" Background="#0C0C0C" FontFamily="Segoe UI"
+                WindowStyle="None" AllowsTransparency="True">
             <Window.Resources>
-                <Style TargetType="Button">
+                <Storyboard x:Key="RGBAnimation" RepeatBehavior="Forever">
+                    <ColorAnimationUsingKeyFrames Storyboard.TargetName="MainBorder" Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)" Duration="0:0:6">
+                        <LinearColorKeyFrame Value="#FF0000" KeyTime="0:0:0" />
+                        <LinearColorKeyFrame Value="#FFFF00" KeyTime="0:0:1" />
+                        <LinearColorKeyFrame Value="#00FF00" KeyTime="0:0:2" />
+                        <LinearColorKeyFrame Value="#00FFFF" KeyTime="0:0:3" />
+                        <LinearColorKeyFrame Value="#0000FF" KeyTime="0:0:4" />
+                        <LinearColorKeyFrame Value="#FF00FF" KeyTime="0:0:5" />
+                        <LinearColorKeyFrame Value="#FF0000" KeyTime="0:0:6" />
+                    </ColorAnimationUsingKeyFrames>
+                </Storyboard>
+
+                <Style TargetType="Button" x:Key="FlatBtn">
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="5">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Opacity" Value="0.8"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+                
+                <Style TargetType="Button" BasedOn="{StaticResource FlatBtn}" x:Key="ToolBtn">
                     <Setter Property="Width" Value="165"/>
                     <Setter Property="Height" Value="45"/>
                     <Setter Property="Margin" Value="5"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="FontWeight" Value="Bold"/>
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="FontSize" Value="12"/>
                 </Style>
-                <Style TargetType="TabItem">
-                    <Setter Property="Background" Value="#232328"/>
-                    <Setter Property="Foreground" Value="White"/>
+
+                <Style TargetType="Button" x:Key="SidebarBtn">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="Silver"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Height" Value="45"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                    <Setter Property="Padding" Value="20,0,0,0"/>
                     <Setter Property="FontSize" Value="14"/>
-                    <Setter Property="FontWeight" Value="Bold"/>
-                    <Setter Property="Padding" Value="10,5"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#222"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </Style.Triggers>
                 </Style>
             </Window.Resources>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="90"/> <RowDefinition Height="*"/> <RowDefinition Height="120"/> <RowDefinition Height="80"/> </Grid.RowDefinitions>
-                
-                <Grid Grid.Row="0" Background="#232328">
-                    <TextBlock Text="PHAT TAN PC TOOLKIT" Foreground="DeepSkyBlue" FontSize="26" FontWeight="Bold" Margin="20,15,0,0"/>
-                    <TextBlock Text="Enterprise Cloud Architecture - Async Multi-Thread Mode" Foreground="Lime" FontSize="13" FontStyle="Italic" Margin="25,55,0,0"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,20,0">
-                        <Button Name="BtnToggleUI" Content="🌐 DÙNG WINFORMS" Width="160" Height="35" Background="#8A2BE2" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="0,0,15,0"/>
-                        <Button Name="BtnProfileWpf" Content="👤 TRANG CÁ NHÂN" Width="150" Height="35" Background="DimGray" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
-                    </StackPanel>
+            <Window.Triggers>
+                <EventTrigger RoutedEvent="Window.Loaded">
+                    <BeginStoryboard Storyboard="{StaticResource RGBAnimation}"/>
+                </EventTrigger>
+            </Window.Triggers>
+
+            <Border Name="MainBorder" BorderThickness="3" CornerRadius="10" Background="#121212">
+                <Border.BorderBrush>
+                    <SolidColorBrush Color="#FF0000"/>
+                </Border.BorderBrush>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="35"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Name="TitleBar" Grid.Row="0" Background="#0A0A0A">
+                        <TextBlock Text="PHAT TAN PC V23.2 TITANIUM ENTERPRISE" Foreground="Silver" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <Button Name="BtnMinimize" Content="—" Width="40" Height="35" Background="Transparent" Foreground="Silver" BorderThickness="0" FontSize="14" Cursor="Hand"/>
+                            <Button Name="BtnClose" Content="✕" Width="40" Height="35" Background="Transparent" Foreground="Silver" BorderThickness="0" FontSize="14" Cursor="Hand"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="250"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <Border Grid.Column="0" Background="#1A1A1A" CornerRadius="0,0,0,8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <StackPanel Grid.Row="0" Margin="0,20,0,10">
+                                    <TextBlock Text="PHAT TAN PC" Foreground="#00FFCC" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                                    <TextBlock Text="TOOLKIT V23.2" Foreground="Silver" FontSize="13" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                                    <Border Height="1" Background="#333" Margin="15,0,15,10"/>
+                                </StackPanel>
+                                
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Name="pnlSidebarMenu">
+                                        $SidebarBtnsXaml
+                                    </StackPanel>
+                                </ScrollViewer>
+                                
+                                <StackPanel Grid.Row="2" Margin="0,10,0,20">
+                                    <Border Height="1" Background="#333" Margin="15,0,15,10"/>
+                                    <Button Name="BtnToggleUI" Content="🌐 CHUYỂN WINFORMS" Height="40" Style="{StaticResource FlatBtn}" Background="#6C3483" Margin="15,0,15,10"/>
+                                    <Button Name="BtnProfileWpf" Content="👤 HỒ SƠ CÁ NHÂN" Height="40" Style="{StaticResource FlatBtn}" Background="#2C3E50" Margin="15,0,15,10"/>
+                                    <Button Name="BtnBuyKeyWpf" Content="💎 CỬA HÀNG VIP" Height="40" Style="{StaticResource FlatBtn}" Background="#F39C12" Foreground="Black" Margin="15,0,15,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="120"/>
+                            </Grid.RowDefinitions>
+                            
+                            <Border Grid.Row="0" Background="#121212" Margin="10,10,10,10" CornerRadius="10">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    
+                                    <TextBlock Name="txtCurrentTabTitle" Grid.Row="0" Text="DASHBOARD CÔNG CỤ" FontSize="18" FontWeight="Bold" Foreground="#3498DB" Margin="10,5,0,10"/>
+                                    
+                                    <Grid Name="pnlTabContents" Grid.Row="1">
+                                        $TabPanelsXaml
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                            
+                            <Grid Grid.Row="1" Background="#0C0C0C">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBox Name="txtLog" Grid.Column="0" Background="Transparent" Foreground="#00E676" FontFamily="Consolas" FontSize="13" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Margin="10" Text="[+] PHATTAN_PC ENGINE KERNEL V23.2 INITIALIZED...&#x0a;"/>
+                                
+                                <Button Name="BtnInstallAppsWpf" Grid.Column="1" Content="🚀 CÀI ĐẶT APP ĐÃ CHỌN" Width="250" Height="50" Style="{StaticResource FlatBtn}" Background="#27AE60" Margin="10" VerticalAlignment="Bottom" Visibility="Visible"/>
+                            </Grid>
+                        </Grid>
+                    </Grid>
                 </Grid>
-                
-                <TabControl Grid.Row="1" Background="#1E1E23" BorderThickness="0">
-                    <TabItem Header=" DASHBOARD ">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="15">
-                                <Border Background="#28282D" CornerRadius="8" Padding="15" Margin="0,0,0,15">
-                                    <StackPanel>
-                                        <TextBlock Text="⚙ HỆ THỐNG (SYSTEM)" Foreground="#00BEFF" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                                        <WrapPanel Name="wpSystem"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Background="#28282D" CornerRadius="8" Padding="15" Margin="0,0,0,15">
-                                    <StackPanel>
-                                        <TextBlock Text="🛡 BẢO MẬT (SECURITY)" Foreground="#8A2BE2" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                                        <WrapPanel Name="wpSecurity"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Background="#28282D" CornerRadius="8" Padding="15">
-                                    <StackPanel>
-                                        <TextBlock Text="💿 CÀI ĐẶT (INSTALL)" Foreground="#32E682" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                                        <WrapPanel Name="wpInstall"/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-                    
-                    $JsonTabsXaml
-                    
-                </TabControl>
-                
-                <Border Grid.Row="2" Background="#0A0A0C" BorderBrush="#333" BorderThickness="0,1,0,0">
-                    <TextBox Name="txtLog" Background="Transparent" Foreground="Lime" FontFamily="Consolas" FontSize="12" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Text="[+] PHATTAN_PC ENGINE KERNEL INITIALIZED...&#x0a;"/>
-                </Border>
-                
-                <Grid Grid.Row="3" Background="#232328">
-                    <Button Name="BtnInstallAppsWpf" Content="📦 CÀI ĐẶT ỨNG DỤNG ĐÃ CHỌN" Width="300" Height="45" HorizontalAlignment="Left" Margin="20,0,0,0" Background="ForestGreen" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
-                    <Button Name="BtnBuyKeyWpf" Content="💎 CỬA HÀNG VIP" Width="200" Height="45" HorizontalAlignment="Right" Margin="0,0,20,0" Background="Gold" Foreground="Black" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
-                </Grid>
-            </Grid>
+            </Border>
         </Window>
 "@
         $Reader = (New-Object System.Xml.XmlNodeReader $WpfXaml); $WpfForm = [System.Windows.Markup.XamlReader]::Load($Reader)
         $Global:LogBox = $WpfForm.FindName("txtLog")
+        $pnlSidebarMenu = $WpfForm.FindName("pnlSidebarMenu")
+        $pnlTabContents = $WpfForm.FindName("pnlTabContents")
+        $txtCurrentTabTitle = $WpfForm.FindName("txtCurrentTabTitle")
+
+        $TitleBar = $WpfForm.FindName("TitleBar")
+        $TitleBar.Add_MouseLeftButtonDown({ $WpfForm.DragMove() })
         
+        $WpfForm.FindName("BtnMinimize").Add_Click({ $WpfForm.WindowState = [System.Windows.WindowState]::Minimized })
+        $WpfForm.FindName("BtnClose").Add_Click({ $WpfForm.Close() })
+
+        if ($pnlSidebarMenu.Children.Count -gt 0) {
+            $pnlSidebarMenu.Children[0].Background = "#222222"
+            $pnlSidebarMenu.Children[0].Foreground = "White"
+        }
+        
+        foreach ($btn in $pnlSidebarMenu.Children) {
+            if ($btn -is [System.Windows.Controls.Button]) {
+                $btn.Add_Click({
+                    $clickedBtn = $this
+                    $tabId = $clickedBtn.Name.Replace("btnTab_", "")
+                    $txtCurrentTabTitle.Text = $clickedBtn.Content
+                    
+                    foreach ($b in $pnlSidebarMenu.Children) {
+                        if ($b.Name -eq $clickedBtn.Name) { $b.Background = "#222222"; $b.Foreground = "White" }
+                        else { $b.Background = "Transparent"; $b.Foreground = "Silver" }
+                    }
+                    
+                    foreach ($panel in $pnlTabContents.Children) {
+                        if ($panel.Name -eq "panel_$tabId") { $panel.Visibility = "Visible" }
+                        else { $panel.Visibility = "Collapsed" }
+                    }
+                })
+            }
+        }
+
         function Add-WpfBtn ($PanelName, $Text, $Cmd, $ColorHex, $IsVip = $false) {
-            $Btn = New-Object System.Windows.Controls.Button; $Btn.Content = $Text; $Btn.Width = 165; $Btn.Height = 45; $Btn.Margin = "5"; $Btn.BorderThickness = 0; $Btn.Cursor = [System.Windows.Input.Cursors]::Hand
-            $Btn.FontWeight = [System.Windows.FontWeights]::Bold; $Btn.Foreground = [System.Windows.Media.Brushes]::White
+            $Btn = New-Object System.Windows.Controls.Button; $Btn.Content = $Text; $Btn.Style = $WpfForm.Resources["ToolBtn"]
+            
             if ($IsVip -and $Global:LicenseType -in @("NONE", "FREE", "FREE_30M")) {
-                $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString("#505050"); $Btn.Foreground = [System.Windows.Media.Brushes]::Silver
-                $Btn.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này yêu cầu VIP!", "KHÓA", 0, 16) })
+                $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString("#333333"); $Btn.Foreground = [System.Windows.Media.Brushes]::Gray
+                $Btn.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này yêu cầu tải khoản VIP!", "KHÓA", 0, 16) })
             } else {
                 $Btn.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFromString($ColorHex); $Btn.Tag = $ColorHex
                 if ($Cmd -eq "DISK_GENIUS") { $Btn.Add_Click({ Write-GuiLog "Tai va cai DiskGenius..."; Install-DiskGeniusAuto }) } 
                 else { $action = [scriptblock]::Create("Run-ModuleAsync `$this `"$Cmd`" `$true"); $Btn.Add_Click($action) }
-                }
+            }
             $WpfForm.FindName($PanelName).Children.Add($Btn)
         }
 
-        Add-WpfBtn "wpSystem" "ℹ CẤU HÌNH" "SystemInfo.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "♻ DỌN RÁC" "SystemCleaner.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "💾 QUẢN LÝ ĐĨA" "DiskManager.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "🔍 QUÉT WINDOWS" "SystemScan.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "⚡ TỐI ƯU RAM" "RamBooster.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "🗝 KÍCH HOẠT" "WinActivator.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "🚑 CỨU DỮ LIỆU" "DISK_GENIUS" "#00BEFF" $true
-        Add-WpfBtn "wpSystem" "🔧 SỬA LỖI HT" "SystemRepair.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "🔎 QUÉT TẬP TIN" "scanfile.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "🖱 MENU CHUỘT PHẢI" "ContextMenuManager.ps1" "#00BEFF"
-        Add-WpfBtn "wpSystem" "🖨 FIX MÁY IN" "fixprinter_errors.ps1" "#00BEFF"
+        Add-WpfBtn "wpSystem" "ℹ CẤU HÌNH" "SystemInfo.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "♻ DỌN RÁC" "SystemCleaner.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "💾 QUẢN LÝ ĐĨA" "DiskManager.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "🔍 QUÉT WINDOWS" "SystemScan.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "⚡ TỐI ƯU RAM" "RamBooster.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "🗝 KÍCH HOẠT" "WinActivator.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "🚑 CỨU DỮ LIỆU" "DISK_GENIUS" "#2980B9" $true
+        Add-WpfBtn "wpSystem" "🔧 SỬA LỖI HT" "SystemRepair.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "🔎 QUÉT TẬP TIN" "scanfile.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "🖱 MENU CHUỘT PHẢI" "ContextMenuManager.ps1" "#2980B9"
+        Add-WpfBtn "wpSystem" "🖨 FIX MÁY IN" "fixprinter_errors.ps1" "#2980B9"
         
-        Add-WpfBtn "wpSecurity" "🌐 ĐỔI DNS" "NetworkMaster.ps1" "#8A2BE2"
-        Add-WpfBtn "wpSecurity" "↻ QUẢN UPDATE" "WinUpdatePro.ps1" "#8A2BE2"
-        Add-WpfBtn "wpSecurity" "🛡 DEFENDER ON/OFF" "DefenderMgr.ps1" "#8A2BE2"
-        Add-WpfBtn "wpSecurity" "🛡 VÔ HIỆU EFSs" "AntiEFS_GUI.ps1" "#8A2BE2" $true
-        Add-WpfBtn "wpSecurity" "🔒 KHÓA BITLOCKER" "BitLockerMgr.ps1" "#8A2BE2" $true
-        Add-WpfBtn "wpSecurity" "⛔ CHẶN LỊCH SỬ WEB" "BrowserPrivacy.ps1" "#8A2BE2"
+        Add-WpfBtn "wpSecurity" "🌐 ĐỔI DNS" "NetworkMaster.ps1" "#8E44AD"
+        Add-WpfBtn "wpSecurity" "↻ QUẢN UPDATE" "WinUpdatePro.ps1" "#8E44AD"
+        Add-WpfBtn "wpSecurity" "🛡 DEFENDER ON/OFF" "DefenderMgr.ps1" "#8E44AD"
+        Add-WpfBtn "wpSecurity" "🛡 VÔ HIỆU EFSs" "AntiEFS_GUI.ps1" "#8E44AD" $true
+        Add-WpfBtn "wpSecurity" "🔒 KHÓA BITLOCKER" "BitLockerMgr.ps1" "#8E44AD" $true
+        Add-WpfBtn "wpSecurity" "⛔ CHẶN LỊCH SỬ WEB" "BrowserPrivacy.ps1" "#8E44AD"
         
-        Add-WpfBtn "wpInstall" "💿 CÀI WIN AUTO" "WinInstall.ps1" "#32E682" $true
-        Add-WpfBtn "wpInstall" "📝 CÀI OFFICE 365" "OfficeInstaller.ps1" "#32E682" $true
-        Add-WpfBtn "wpInstall" "🔧 TỐI ƯU WIN" "WinModder.ps1" "#32E682"
-        Add-WpfBtn "wpInstall" "📦 ĐÓNG GÓI ISO" "WinAIOBuilder.ps1" "#32E682" $true
-        Add-WpfBtn "wpInstall" "🤖 TRỢ LÝ AI" "GeminiAI.ps1" "#32E682"
-        Add-WpfBtn "wpInstall" "👜 CÀI STORE" "AppStore.ps1" "#32E682"
-        Add-WpfBtn "wpInstall" "📥 TẢI ISO GỐC" "ISODownloader.ps1" "#32E682"
-        Add-WpfBtn "wpInstall" "⚡ TẠO USB BOOT" "UsbBootMaker.ps1" "#32E682"
-        Add-WpfBtn "wpInstall" "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" "#32E682" $true
-        Add-WpfBtn "wpInstall" "🖧 CÀI DRIVER" "AutoDriver.ps1" "#32E682"
+        Add-WpfBtn "wpInstall" "💿 CÀI WIN AUTO" "WinInstall.ps1" "#27AE60" $true
+        Add-WpfBtn "wpInstall" "📝 CÀI OFFICE 365" "OfficeInstaller.ps1" "#27AE60" $true
+        Add-WpfBtn "wpInstall" "🔧 TỐI ƯU WIN" "WinModder.ps1" "#27AE60"
+        Add-WpfBtn "wpInstall" "📦 ĐÓNG GÓI ISO" "WinAIOBuilder.ps1" "#27AE60" $true
+        Add-WpfBtn "wpInstall" "🤖 TRỢ LÝ AI" "GeminiAI.ps1" "#27AE60"
+        Add-WpfBtn "wpInstall" "👜 CÀI STORE" "AppStore.ps1" "#27AE60"
+        Add-WpfBtn "wpInstall" "📥 TẢI ISO GỐC" "ISODownloader.ps1" "#27AE60"
+        Add-WpfBtn "wpInstall" "⚡ TẠO USB BOOT" "UsbBootMaker.ps1" "#27AE60"
+        Add-WpfBtn "wpInstall" "🍏 JAILBREAK iOS" "iOS_Jailbreak.ps1" "#27AE60" $true
+        Add-WpfBtn "wpInstall" "🖧 CÀI DRIVER" "AutoDriver.ps1" "#27AE60"
 
         $Global:WpfAppCheckBoxes = @()
         if ($Global:JsonData) {
@@ -723,10 +848,11 @@ function Load-WPF {
             }
         }
 
+        $BtnInstallAppsWpf = $WpfForm.FindName("BtnInstallAppsWpf")
         if ($Global:LicenseType -match "FREE") {
-            $WpfForm.FindName("BtnInstallAppsWpf").Visibility = "Hidden"
+            $BtnInstallAppsWpf.Visibility = "Hidden"
         } else {
-            $WpfForm.FindName("BtnInstallAppsWpf").Add_Click({
+            $BtnInstallAppsWpf.Add_Click({
                 $ListToInstall = @()
                 foreach ($Chk in $Global:WpfAppCheckBoxes) { if ($Chk.IsChecked) { $ListToInstall += $Chk.Tag; $Chk.IsChecked = $false } }
                 if ($ListToInstall.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Vui lòng chọn ít nhất 1 phần mềm để cài!"); return }
@@ -762,14 +888,14 @@ function Load-WPF {
 }
 
 # ==============================================================================
-# GIAO DIỆN WINFORMS
+# GIAO DIỆN WINFORMS (FALLBACK)
 # ==============================================================================
 function Load-WinForms {
-    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V20.15 TITANIUM MAX | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
+    $Form = New-Object System.Windows.Forms.Form; $Form.Text = "PHAT TAN PC V23.2 TITANIUM | WINFORMS MODE"; $Form.Size = "1100, 850"; $Form.StartPosition = "CenterScreen"; $Form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35); $Form.ForeColor = "White"
     $PnlHeader = New-Object System.Windows.Forms.Panel; $PnlHeader.Size="1100, 80"; $PnlHeader.Location="0,0"; $PnlHeader.BackColor = [System.Drawing.Color]::FromArgb(35,35,40); $Form.Controls.Add($PnlHeader)
     $LblTitle = New-Object System.Windows.Forms.Label; $LblTitle.Text="PHAT TAN PC TOOLKIT"; $LblTitle.Font=$FontTitle; $LblTitle.AutoSize=$true; $LblTitle.Location="20,15"; $LblTitle.ForeColor=[System.Drawing.Color]::DeepSkyBlue; $PnlHeader.Controls.Add($LblTitle)
     
-    $BtnProfile = New-Object System.Windows.Forms.Button; $BtnProfile.Location="750, 25"; $BtnProfile.Size="140, 35"; $BtnProfile.FlatStyle="Flat"; $BtnProfile.Font=$FontBtnSmall; $BtnProfile.Cursor="Hand"; $BtnProfile.Text="👤 TRANG CÁ NHÂN"; $BtnProfile.BackColor="DimGray"; $BtnProfile.ForeColor="White"
+    $BtnProfile = New-Object System.Windows.Forms.Button; $BtnProfile.Location="750, 25"; $BtnProfile.Size="140, 35"; $BtnProfile.FlatStyle="Flat"; $BtnProfile.Font=$FontBtnSmall; $BtnProfile.Cursor="Hand"; $BtnProfile.Text="👤 HỒ SƠ"; $BtnProfile.BackColor="DimGray"; $BtnProfile.ForeColor="White"
     $BtnProfile.Add_Click({ Show-ProfileForm })
     $PnlHeader.Controls.Add($BtnProfile)
 
@@ -780,7 +906,7 @@ function Load-WinForms {
 
     $TabControl = New-Object System.Windows.Forms.TabControl; $TabControl.Location="10,90"; $TabControl.Size="1060,450"; $TabControl.Font=$FontText; $Form.Controls.Add($TabControl)
     
-    $AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text=" DASHBOARD "; $AdvTab.BackColor=[System.Drawing.Color]::FromArgb(30, 30, 35); $TabControl.Controls.Add($AdvTab)
+    $AdvTab = New-Object System.Windows.Forms.TabPage; $AdvTab.Text=" DANH MỤC TOOL "; $AdvTab.BackColor=[System.Drawing.Color]::FromArgb(30, 30, 35); $TabControl.Controls.Add($AdvTab)
     $MainFlow = New-Object System.Windows.Forms.FlowLayoutPanel; $MainFlow.Dock="Fill"; $MainFlow.AutoScroll=$true; $AdvTab.Controls.Add($MainFlow)
 
     function Add-HozWinGroup ($Title, $Color) {
@@ -793,10 +919,10 @@ function Load-WinForms {
     function Add-WinBtn ($Wrap, $Text, $Cmd, $Color, $IsVip=$false) { 
         $B = New-Object System.Windows.Forms.Button; $B.Text=$Text; $B.Size="150,45"; $B.FlatStyle="Flat"; $B.Font=$FontBtnSmall; $B.Margin="5"; $B.Tag = $Color
         if ($IsVip -and $Global:LicenseType -in @("NONE", "FREE", "FREE_30M")) {
-            $B.ForeColor="Silver"; $B.BackColor=[System.Drawing.Color]::FromArgb(80,80,80); $B.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Cần VIP!") })
+            $B.ForeColor="Silver"; $B.BackColor=[System.Drawing.Color]::FromArgb(80,80,80); $B.Add_Click({ [System.Windows.Forms.MessageBox]::Show("Tính năng này yêu cầu VIP!") })
         } else {
             $B.BackColor=$Color; $B.ForeColor="White"
-            if ($Cmd -eq "DISK_GENIUS") { $B.Add_Click({ Write-GuiLog "Tải Cứu dữ liệu..."; Tai-Va-Chay "Disk.Genius.rar" "DiskGenius.rar" "Portable" }) }
+            if ($Cmd -eq "DISK_GENIUS") { $B.Add_Click({ Write-GuiLog "Tai va cai DiskGenius..."; Install-DiskGeniusAuto }) }
             else { 
                 $Action = [scriptblock]::Create("Run-ModuleAsync `$this `"$Cmd`" `$false")
                 $B.Add_Click($Action)
