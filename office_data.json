@@ -1,55 +1,35 @@
 {
   "Categories": {
-    "Microsoft 365 (Cài Online ODT)": {
-      "M365 Apps for Enterprise / Education": "O365ProPlusRetail",
-      "M365 Business Standard": "O365BusinessRetail",
-      "M365 Business Premium": "O365SmallBusPremRetail",
-      "M365 Family / Personal": "O365HomePremRetail"
+    "Microsoft 365 (Gói Thuê Bao)": {
+      "M365 Apps for Enterprise / Education": "O365ProPlusRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img",
+      "M365 Business Standard": "O365BusinessRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365BusinessRetail.img",
+      "M365 Business Premium": "O365SmallBusPremRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365BusinessRetail.img",
+      "M365 Family / Personal": "O365HomePremRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365HomePremRetail.img"
     },
-    "Office 2024 (Cài Online ODT)": {
-      "Pro Plus 2024 (Volume)": "ProPlus2024Volume",
-      "Standard 2024 (Volume)": "Standard2024Volume"
+    "Office 2024 (Mới Nhất)": {
+      "Pro Plus 2024 (Volume/Retail)": "ProPlus2024Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img",
+      "Standard / Professional 2024": "Standard2024Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2024Retail.img"
     },
-    "Office 2021 (Cài Online ODT)": {
-      "Pro Plus 2021 (Volume - Khuyên dùng)": "ProPlus2021Volume",
-      "Pro Plus 2021 (Retail - Key Online)": "ProPlus2021Retail",
-      "Standard 2021 (Volume)": "Standard2021Volume",
-      "Home & Business 2021": "HomeBusiness2021Retail"
+    "Office 2021 (Mua 1 Lần)": {
+      "Pro Plus 2021 (Volume/Retail)": "ProPlus2021Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2021Retail.img",
+      "Standard 2021 (Volume)": "Standard2021Volume|",
+      "Home & Business 2021": "HomeBusiness2021Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2021Retail.img"
     },
-    "Office 2019 (Cài Online ODT)": {
-      "Pro Plus 2019 (Volume)": "ProPlus2019Volume",
-      "Standard 2019 (Volume)": "Standard2019Volume"
+    "Office 2019": {
+      "Pro Plus 2019 (Volume/Retail)": "ProPlus2019Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2019Retail.img",
+      "Standard 2019 (Volume)": "Standard2019Volume|"
     },
-    "Office 2016 (Cài Online ODT)": {
-      "Pro Plus 2016 (Volume)": "ProPlusVolume",
-      "Standard 2016 (Volume)": "StandardVolume"
+    "Office 2016": {
+      "Pro Plus 2016 (Volume)": "ProPlusVolume|",
+      "Standard 2016 (Volume)": "StandardVolume|"
     },
-    "--- [TẢI MAX SPEED IDM] Office 2024 ---": {
-      "Pro Plus 2024 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img",
-      "Professional 2024 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2024Retail.img",
-      "Home & Business 2024 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2024Retail.img",
-      "Project Pro 2024 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProjectPro2024Retail.img",
-      "Visio Pro 2024 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2024Retail.img"
-    },
-    "--- [TẢI MAX SPEED IDM] Office 2021 ---": {
-      "Pro Plus 2021 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2021Retail.img",
-      "Home & Business 2021 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2021Retail.img",
-      "Project Pro 2021 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProjectPro2021Retail.img",
-      "Visio Pro 2021 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2021Retail.img"
-    },
-    "--- [TẢI MAX SPEED IDM] Office 2019 ---": {
-      "Pro Plus 2019 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2019Retail.img",
-      "Project Pro 2019 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProjectPro2019Retail.img",
-      "Visio Pro 2019 (File IMG)": "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2019Retail.img"
-    },
-    "--- [TẢI MAX SPEED IDM] Các Bản Khác ---": {
-      "Microsoft 365 Pro Plus (File IMG)": "http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img",
-      "Office 2013 Pro Plus (ISO - Bản Full)": "https://archive.org/download/en_office_professional_plus_2013_x86_x64_dvd_1135709_202212/en_office_professional_plus_2013_x86_x64_dvd_1135709.iso"
+    "Office 2013 (Cổ Điển)": {
+      "Pro Plus 2013 (Bản ISO Full)": "ISO_2013_ProPlus|https://archive.org/download/en_office_professional_plus_2013_x86_x64_dvd_1135709_202212/en_office_professional_plus_2013_x86_x64_dvd_1135709.iso"
     }
   },
   "Extras": {
-    "VisioRetail": "VisioProRetail",
-    "ProjectRetail": "ProjectProRetail"
+    "VisioRetail": "VisioProRetail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioProRetail.img",
+    "ProjectRetail": "ProjectProRetail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProjectProRetail.img"
   },
   "Languages": {
     "Tiếng Việt (Vietnam)": "vi-vn",
