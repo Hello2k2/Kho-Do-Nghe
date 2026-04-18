@@ -1,11 +1,9 @@
 {
   "Categories": {
     "Microsoft 365 (Gói Thuê Bao)": {
-      "M365 Apps for Enterprise (ProPlus)": "O365ProPlusRetail",
+      "M365 Apps for Enterprise / Education": "O365ProPlusRetail",
       "M365 Business Standard": "O365BusinessRetail",
-      "M365 Business Basic (Chỉ App Web)": "O365AppsBasicRetail",
       "M365 Business Premium": "O365SmallBusPremRetail",
-      "M365 Education (Giáo dục)": "O365EduCloudRetail",
       "M365 Family / Personal": "O365HomePremRetail"
     },
     "Office 2024 (Mới Nhất)": {
