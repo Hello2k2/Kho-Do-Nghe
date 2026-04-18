@@ -14,21 +14,22 @@
       "Home & Student 2024": "HomeStudent2024Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudent2024Retail.img"
     },
     "Office 2021 (Mua 1 Lần)": {
-      "Pro Plus 2021 (Volume/Retail)": "ProPlus2021Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2021Retail.img",
-      "Standard 2021 (Volume)": "Standard2021Volume|",
-      "Home & Business 2021": "HomeBusiness2021Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2021Retail.img",
-      "Home & Student 2021": "HomeStudent2021Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudent2021Retail.img"
+      "Pro Plus 2021 (Volume/Retail)": "ProPlus2021Volume|https://archive.org/download/Office-2021-Collection/Office%202021%20Professional%20Plus.iso",
+      "Professional 2021": "Professional2021Retail|https://archive.org/download/Office-2021-Collection/Office%202021%20Professional.iso",
+      "Home & Business 2021": "HomeBusiness2021Retail|https://archive.org/download/Office-2021-Collection/Office%202021%20Home%20%26%20Business.iso",
+      "Home & Student 2021": "HomeStudent2021Retail|https://archive.org/download/Office-2021-Collection/Office%202021%20Home%20%26%20Student.iso"
     },
     "Office 2019": {
-      "Pro Plus 2019 (Volume/Retail)": "ProPlus2019Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2019Retail.img",
-      "Standard 2019 (Volume)": "Standard2019Volume|",
-      "Home & Business 2019": "HomeBusiness2019Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2019Retail.img",
-      "Home & Student 2019": "HomeStudent2019Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudent2019Retail.img"
+      "Pro Plus 2019 (Volume/Retail)": "ProPlus2019Volume|https://archive.org/download/Office-2019-Collection/Office%202019%20Professional%20Plus.iso",
+      "Professional 2019": "Professional2019Retail|https://archive.org/download/Office-2019-Collection/Office%202019%20Professional.iso",
+      "Home & Business 2019": "HomeBusiness2019Retail|https://archive.org/download/Office-2019-Collection/Office%202019%20Home%20%26%20Business.iso",
+      "Home & Student 2019": "HomeStudent2019Retail|https://archive.org/download/Office-2019-Collection/Office%202019%20Home%20%26%20Student.iso"
     },
     "Office 2016": {
-      "Pro Plus 2016 (Volume)": "ProPlusVolume|",
-      "Standard 2016 (Volume)": "StandardVolume|",
-      "Home & Business 2016": "HomeBusinessRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusinessRetail.img"
+      "Pro Plus 2016 (Volume)": "ProPlusVolume|https://archive.org/download/Office-2016-Collection/Office%202016%20Professional%20Plus.iso",
+      "Professional 2016": "ProfessionalRetail|https://archive.org/download/Office-2016-Collection/Office%202016%20Professional.iso",
+      "Home & Business 2016": "HomeBusinessRetail|https://archive.org/download/Office-2016-Collection/Office%202016%20Home%20%26%20Business.iso",
+      "Home & Student 2016": "HomeStudentRetail|https://archive.org/download/Office-2016-Collection/Office%202016%20Home%20%26%20Student.iso"
     },
     "Office 2013 (Cổ Điển)": {
       "Pro Plus 2013 (Bản ISO Full)": "ISO_2013_ProPlus|https://archive.org/download/en_office_professional_plus_2013_x86_x64_dvd_1135709_202212/en_office_professional_plus_2013_x86_x64_dvd_1135709.iso"
