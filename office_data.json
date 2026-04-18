@@ -4,24 +4,31 @@
       "M365 Apps for Enterprise / Education": "O365ProPlusRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img",
       "M365 Business Standard": "O365BusinessRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365BusinessRetail.img",
       "M365 Business Premium": "O365SmallBusPremRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365BusinessRetail.img",
-      "M365 Family / Personal": "O365HomePremRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365HomePremRetail.img"
+      "M365 Family / Personal": "O365HomePremRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365HomePremRetail.img",
+      "Office Home & Student (M365)": "HomeStudentRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudentRetail.img"
     },
     "Office 2024 (Mới Nhất)": {
       "Pro Plus 2024 (Volume/Retail)": "ProPlus2024Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img",
-      "Standard / Professional 2024": "Standard2024Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2024Retail.img"
+      "Standard / Professional 2024": "Standard2024Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2024Retail.img",
+      "Home & Business 2024": "HomeBusiness2024Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2024Retail.img",
+      "Home & Student 2024": "HomeStudent2024Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudent2024Retail.img"
     },
     "Office 2021 (Mua 1 Lần)": {
       "Pro Plus 2021 (Volume/Retail)": "ProPlus2021Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Professional2021Retail.img",
       "Standard 2021 (Volume)": "Standard2021Volume|",
-      "Home & Business 2021": "HomeBusiness2021Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2021Retail.img"
+      "Home & Business 2021": "HomeBusiness2021Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2021Retail.img",
+      "Home & Student 2021": "HomeStudent2021Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudent2021Retail.img"
     },
     "Office 2019": {
       "Pro Plus 2019 (Volume/Retail)": "ProPlus2019Volume|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2019Retail.img",
-      "Standard 2019 (Volume)": "Standard2019Volume|"
+      "Standard 2019 (Volume)": "Standard2019Volume|",
+      "Home & Business 2019": "HomeBusiness2019Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusiness2019Retail.img",
+      "Home & Student 2019": "HomeStudent2019Retail|https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeStudent2019Retail.img"
     },
     "Office 2016": {
       "Pro Plus 2016 (Volume)": "ProPlusVolume|",
-      "Standard 2016 (Volume)": "StandardVolume|"
+      "Standard 2016 (Volume)": "StandardVolume|",
+      "Home & Business 2016": "HomeBusinessRetail|http://officecdn.microsoft.com/pr/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/HomeBusinessRetail.img"
     },
     "Office 2013 (Cổ Điển)": {
       "Pro Plus 2013 (Bản ISO Full)": "ISO_2013_ProPlus|https://archive.org/download/en_office_professional_plus_2013_x86_x64_dvd_1135709_202212/en_office_professional_plus_2013_x86_x64_dvd_1135709.iso"
