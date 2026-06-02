@@ -28,12 +28,15 @@
       "Home & Business 2016": "HomeBusinessRetail|HomeBusinessRetail.img",
       "Home & Student 2016": "HomeStudentRetail|HomeStudentRetail.img"
     },
-    "Office 2013 (Cho Win 7 / Máy Cổ)": {
-      "Professional Plus 2013": "ProPlusRetail|https://officecdn.microsoft.com/pr/39a68944-6440-410a-ae4d-a31c16db56f5/media/en-us/ProPlusRetail.img",
-      "Home & Business 2013": "HomeBusinessRetail|https://officecdn.microsoft.com/pr/39a68944-6440-410a-ae4d-a31c16db56f5/media/en-us/HomeBusinessRetail.img"
+    "Office 2013 (Mồi C2R - Sống 100%)": {
+      "Professional Plus 2013": "ProPlusRetail|https://c2rsetup.officeapps.live.com/c2r/download.aspx?act=1&token=&Source=O15HUP&version=O15GA&ProductreleaseID=ProPlusRetail&TaxRegion=PR",
+      "Project Standard 2013": "ProjectStdRetail|https://c2rsetup.officeapps.live.com/c2r/download.aspx?act=1&Source=O15HUP&version=O15GA&ProductreleaseID=ProjectStdRetail&TaxRegion=PR",
+      "Project Professional 2013": "ProjectProRetail|https://c2rsetup.officeapps.live.com/c2r/download.aspx?act=1&Source=O15HUP&version=O15GA&ProductreleaseID=ProjectProRetail&TaxRegion=PR",
+      "Visio Standard 2013": "VisioStdRetail|https://c2rsetup.officeapps.live.com/c2r/download.aspx?act=1&Source=O15HUP&version=O15GA&ProductreleaseID=VisioStdRetail&TaxRegion=PR",
+      "Visio Professional 2013": "VisioProRetail|https://c2rsetup.officeapps.live.com/c2r/download.aspx?act=1&Source=O15HUP&version=O15GA&ProductreleaseID=VisioProRetail&TaxRegion=PR"
     },
     "Microsoft 365 (Gói Thuê Bao)": {
-      "M365 Apps for Enterprise (O365 ProPlus)": "O365ProPlusRetail|O365ProPlusRetail.img",
+      "M365 Apps for Enterprise": "O365ProPlusRetail|O365ProPlusRetail.img",
       "M365 Apps for Business": "O365BusinessRetail|O365BusinessRetail.img",
       "M365 Home / Personal / Family": "O365HomePremRetail|O365HomePremRetail.img",
       "Office Home & Student (M365)": "HomeStudentRetail|HomeStudentRetail.img"
